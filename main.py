@@ -1,5 +1,6 @@
-from engine.ai import TacticalAI
+from engine.ai import ScoringAI
 from engine.board import BLACK, WHITE, Board
+from engine.evaluator import render_evaluation_bar
 from engine.game import (
     format_move,
     other_player,
@@ -10,17 +11,19 @@ from engine.game import (
 
 def main() -> None:
     board = Board()
-    computer = TacticalAI(player=WHITE)
+    computer = ScoringAI(player=WHITE)
     current_player = BLACK
 
-    print("Gomoku Engine V0.4")
+    print("Gomoku Engine V0.6")
     print("玩家执黑棋 X，电脑执白棋 O。")
-    print("输入棋盘坐标落子，例如 H8。")
+    print("电脑使用棋型评分选择落点。")
     print("输入 H 查看指令，U 悔棋，R 重开，Q 退出。")
 
     while True:
         print()
         print(board)
+        print()
+        print(render_evaluation_bar(board))
         print()
 
         if current_player == BLACK:
@@ -105,12 +108,16 @@ def main() -> None:
             print()
             print(board)
             print()
+            print(render_evaluation_bar(board))
+            print()
             print(f"{player_name(current_player)}获胜！")
             break
 
         if board.is_full():
             print()
             print(board)
+            print()
+            print(render_evaluation_bar(board))
             print()
             print("棋盘已满，本局平局。")
             break

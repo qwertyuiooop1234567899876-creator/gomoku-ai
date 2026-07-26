@@ -1,6 +1,10 @@
 import unittest
 
-from engine.ai import RandomAI, TacticalAI
+from engine.ai import (
+    RandomAI,
+    ScoringAI,
+    TacticalAI,
+)
 from engine.board import BLACK, WHITE, Board
 
 
@@ -111,6 +115,99 @@ class TestTacticalAI(unittest.TestCase):
             history_before,
             self.board.move_history,
         )
+
+class TestScoringAI(unittest.TestCase):
+    def setUp(self) -> None:
+        self.board = Board()
+        self.ai = ScoringAI(player=WHITE)
+
+    def test_ai_extends_open_three_in_all_directions(self) -> None:
+        """电脑应在横、竖及两种斜线方向发展自己的活三。"""
+        directions = {
+            "horizontal": (0, 1),
+            "vertical": (1, 0),
+            "downward_diagonal": (1, 1),
+            "upward_diagonal": (1, -1),
+        }
+
+        for direction_name, (
+            row_step,
+            column_step,
+        ) in directions.items():
+            with self.subTest(direction=direction_name):
+                board = Board()
+
+                center_row = 7
+                center_column = 7
+
+                for offset in (-1, 0, 1):
+                    board.place(
+                        center_row + offset * row_step,
+                        center_column + offset * column_step,
+                        WHITE,
+                    )
+
+                move = self.ai.choose_move(board)
+
+                expected_moves = {
+                    (
+                        center_row - 2 * row_step,
+                        center_column - 2 * column_step,
+                    ),
+                    (
+                        center_row + 2 * row_step,
+                        center_column + 2 * column_step,
+                    ),
+                }
+
+                self.assertIn(
+                    move,
+                    expected_moves,
+                )
+
+    def test_ai_blocks_open_three_in_all_directions(self) -> None:
+        """电脑应在横、竖及两种斜线方向限制玩家活三。"""
+        directions = {
+            "horizontal": (0, 1),
+            "vertical": (1, 0),
+            "downward_diagonal": (1, 1),
+            "upward_diagonal": (1, -1),
+        }
+
+        for direction_name, (
+            row_step,
+            column_step,
+        ) in directions.items():
+            with self.subTest(direction=direction_name):
+                board = Board()
+
+                center_row = 7
+                center_column = 7
+
+                for offset in (-1, 0, 1):
+                    board.place(
+                        center_row + offset * row_step,
+                        center_column + offset * column_step,
+                        BLACK,
+                    )
+
+                move = self.ai.choose_move(board)
+
+                expected_moves = {
+                    (
+                        center_row - 2 * row_step,
+                        center_column - 2 * column_step,
+                    ),
+                    (
+                        center_row + 2 * row_step,
+                        center_column + 2 * column_step,
+                    ),
+                }
+
+                self.assertIn(
+                    move,
+                    expected_moves,
+                )
 
 if __name__ == "__main__":
     unittest.main()
