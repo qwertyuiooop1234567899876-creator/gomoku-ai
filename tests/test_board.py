@@ -72,6 +72,22 @@ class TestBoard(unittest.TestCase):
         self.assertEqual(EMPTY, self.board.grid[7][7])
         self.assertTrue(self.board.is_empty(7, 7))
 
+    def test_full_board_detection(self) -> None:
+        """棋盘全部填满后应返回 True。"""
+        small_board = Board(size=5)
+
+        self.assertFalse(small_board.is_full())
+
+        for row in range(small_board.size):
+            for column in range(small_board.size):
+                small_board.place(
+                    row,
+                    column,
+                    BLACK,
+                )
+
+        self.assertTrue(small_board.is_full())
+
 
 if __name__ == "__main__":
     unittest.main()

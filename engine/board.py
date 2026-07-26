@@ -122,6 +122,14 @@ class Board:
 
         return row, column, player
 
+    def is_full(self) -> bool:
+        """判断棋盘是否已经没有空位。"""
+        return all(
+            cell != EMPTY
+            for row in self.grid
+            for cell in row
+        )
+
     def __str__(self) -> str:
         """生成适合在终端显示的棋盘文本。"""
         column_labels = " ".join(
