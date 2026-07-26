@@ -259,5 +259,31 @@ class TestEvaluator(unittest.TestCase):
         )
 
 
+
+    def test_single_winning_point_uses_post_block_evaluation(self) -> None:
+        """只有一个胜点时，应显示唯一应手并评价封堵后的局面。"""
+        board = Board()
+
+        # 左端已被白棋封住，黑棋只剩右端一个立即胜点。
+        board.place(7, 3, WHITE)
+        for column in range(4, 8):
+            board.place(7, column, BLACK)
+
+        grid_before = [row.copy() for row in board.grid]
+        history_before = board.move_history.copy()
+
+        result = render_evaluation_bar(
+            board,
+            current_player=WHITE,
+        )
+
+        self.assertIn("白棋唯一应手：I8", result)
+        self.assertIn("以下为封堵后评价", result)
+        self.assertNotIn("黑 X 100.0%", result)
+
+        # 评分条的临时试算不能改变真实棋盘。
+        self.assertEqual(grid_before, board.grid)
+        self.assertEqual(history_before, board.move_history)
+
 if __name__ == "__main__":
     unittest.main()

@@ -577,6 +577,13 @@ def _player_text(player: int) -> str:
     return "黑棋" if player == BLACK else "白棋"
 
 
+def _format_move(move: Move) -> str:
+    """把内部坐标转换为棋盘坐标，例如 (7, 7) -> H8。"""
+    row, column = move
+    column_text = chr(ord("A") + column)
+    return f"{column_text}{row + 1}"
+
+
 def _signed_score_for_player(player: int, magnitude: int) -> int:
     """评分条统一采用白棋为正、黑棋为负。"""
     return magnitude if player == WHITE else -magnitude
@@ -644,8 +651,24 @@ def render_evaluation_bar(
                 f"{_player_text(opponent)}双胜点，当前方无法全堵"
             )
         elif len(opponent_wins) == 1:
+            forced_block = opponent_wins[0]
+
+            # 对方只有一个立即胜点时，当前方并未必败。
+            # 先模拟唯一正确封堵，再评价封堵后的局面。
+            board.place(
+                forced_block[0],
+                forced_block[1],
+                current_player,
+            )
+
+            try:
+                score = evaluate_board(board, WHITE)
+            finally:
+                board.undo()
+
             status = (
-                f"{_player_text(current_player)}必须封堵对手胜点"
+                f"{_player_text(current_player)}唯一应手："
+                f"{_format_move(forced_block)}；以下为封堵后评价"
             )
 
     white_percentage = score_to_percentage(score)
