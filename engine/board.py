@@ -8,6 +8,13 @@ SYMBOLS = {
     WHITE: "O",
 }
 
+DIRECTIONS = (
+    (0, 1),   # 横向
+    (1, 0),   # 纵向
+    (1, 1),   # 左上到右下
+    (1, -1),  # 右上到左下
+)
+
 
 class Board:
     """表示一个五子棋棋盘。"""
@@ -47,6 +54,63 @@ class Board:
 
         self.grid[row][column] = player
         self.move_history.append((row, column, player))
+
+    def _count_direction(
+        self,
+        row: int,
+        column: int,
+        row_step: int,
+        column_step: int,
+        player: int,
+    ) -> int:
+        """从指定位置向一个方向统计连续棋子数量。"""
+        count = 0
+        current_row = row + row_step
+        current_column = column + column_step
+
+        while (
+            self.is_inside(current_row, current_column)
+            and self.grid[current_row][current_column] == player
+        ):
+            count += 1
+            current_row += row_step
+            current_column += column_step
+
+        return count
+
+    def check_win(self, row: int, column: int) -> bool:
+        """判断指定位置的棋子是否形成五连。"""
+        if not self.is_inside(row, column):
+            return False
+
+        player = self.grid[row][column]
+
+        if player == EMPTY:
+            return False
+
+        for row_step, column_step in DIRECTIONS:
+            forward = self._count_direction(
+                row,
+                column,
+                row_step,
+                column_step,
+                player,
+            )
+
+            backward = self._count_direction(
+                row,
+                column,
+                -row_step,
+                -column_step,
+                player,
+            )
+
+            total = 1 + forward + backward
+
+            if total >= 5:
+                return True
+
+        return False
 
     def undo(self) -> tuple[int, int, int] | None:
         """撤销最近一步棋。"""
