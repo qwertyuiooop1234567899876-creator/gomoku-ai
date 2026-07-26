@@ -122,6 +122,15 @@ class Board:
 
         return row, column, player
 
+    def get_legal_moves(self) -> list[tuple[int, int]]:
+        """返回棋盘上所有可以落子的位置。"""
+        return [
+            (row, column)
+            for row in range(self.size)
+            for column in range(self.size)
+            if self.grid[row][column] == EMPTY
+        ]
+
     def is_full(self) -> bool:
         """判断棋盘是否已经没有空位。"""
         return all(

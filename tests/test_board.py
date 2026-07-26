@@ -88,6 +88,20 @@ class TestBoard(unittest.TestCase):
 
         self.assertTrue(small_board.is_full())
 
+    def test_legal_moves_exclude_occupied_positions(self) -> None:
+        """合法位置列表不应包含已有棋子的位置。"""
+        self.board.place(7, 7, BLACK)
+
+        legal_moves = self.board.get_legal_moves()
+
+        self.assertNotIn(
+            (7, 7),
+            legal_moves,
+        )
+        self.assertEqual(
+            224,
+            len(legal_moves),
+        )
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,8 +1,12 @@
 import unittest
 
 from engine.board import BLACK, WHITE
-from engine.game import other_player, parse_move, player_name
-
+from engine.game import (
+    format_move,
+    other_player,
+    parse_move,
+    player_name,
+)
 
 class TestMoveParser(unittest.TestCase):
     def test_center_position(self) -> None:
@@ -47,6 +51,22 @@ class TestMoveParser(unittest.TestCase):
         """只有列字母、没有行号时应被拒绝。"""
         with self.assertRaises(ValueError):
             parse_move("H")
+
+    def test_format_center_position(self) -> None:
+        """内部坐标 (7, 7) 应显示为 H8。"""
+        self.assertEqual(
+            "H8",
+            format_move(7, 7),
+        )
+
+    def test_parse_and_format_are_reversible(self) -> None:
+        """坐标解析后再格式化，应恢复原坐标。"""
+        row, column = parse_move("O15")
+
+        self.assertEqual(
+            "O15",
+            format_move(row, column),
+        )
 
 
 class TestPlayers(unittest.TestCase):

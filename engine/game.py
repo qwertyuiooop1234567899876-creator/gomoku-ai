@@ -45,6 +45,12 @@ def parse_move(text: str, board_size: int = 15) -> tuple[int, int]:
 
     return row, column
 
+def format_move(row: int, column: int) -> str:
+    """将内部坐标转换为用户可读的棋盘坐标。"""
+    column_text = chr(ord("A") + column)
+    row_text = str(row + 1)
+
+    return f"{column_text}{row_text}"
 
 def other_player(player: int) -> int:
     """返回另一方玩家。"""
