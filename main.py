@@ -14,16 +14,16 @@ def main() -> None:
     computer = ScoringAI(player=WHITE)
     current_player = BLACK
 
-    print("Gomoku Engine V0.6")
+    print("Gomoku Engine V0.6.1")
     print("玩家执黑棋 X，电脑执白棋 O。")
-    print("电脑使用棋型评分选择落点。")
+    print("电脑使用复合威胁识别与棋型评分选择落点。")
     print("输入 H 查看指令，U 悔棋，R 重开，Q 退出。")
 
     while True:
         print()
         print(board)
         print()
-        print(render_evaluation_bar(board))
+        print(render_evaluation_bar(board, current_player))
         print()
 
         if current_player == BLACK:
@@ -108,7 +108,7 @@ def main() -> None:
             print()
             print(board)
             print()
-            print(render_evaluation_bar(board))
+            print(render_evaluation_bar(board, current_player))
             print()
             print(f"{player_name(current_player)}获胜！")
             break
@@ -117,7 +117,7 @@ def main() -> None:
             print()
             print(board)
             print()
-            print(render_evaluation_bar(board))
+            print(render_evaluation_bar(board, current_player))
             print()
             print("棋盘已满，本局平局。")
             break

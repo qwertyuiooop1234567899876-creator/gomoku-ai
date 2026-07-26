@@ -2,9 +2,12 @@ import unittest
 
 from engine.board import BLACK, WHITE, Board
 from engine.evaluator import (
+    analyze_move_threats,
     evaluate_board,
     evaluate_move,
     evaluate_player,
+    find_winning_moves,
+    render_evaluation_bar,
     score_to_percentage,
 )
 
@@ -175,6 +178,85 @@ class TestEvaluator(unittest.TestCase):
                     open_four_score,
                 )
 
+    def test_double_three_profile_counts_two_directions(self) -> None:
+        """同一落点同时形成横向和斜向活三时，应识别为双活三。"""
+        board = Board()
+
+        for move in (
+            (7, 6),
+            (7, 8),
+            (6, 6),
+            (8, 8),
+        ):
+            board.place(*move, BLACK)
+
+        profile = analyze_move_threats(
+            board,
+            7,
+            7,
+            BLACK,
+        )
+
+        self.assertTrue(profile.double_three)
+        self.assertEqual(2, profile.open_three_directions)
+        self.assertEqual("双活三", profile.label)
+
+    def test_open_four_returns_both_winning_points(self) -> None:
+        """两端开放的四连必须返回两个一步胜点。"""
+        board = Board()
+
+        for column in range(4, 8):
+            board.place(7, column, BLACK)
+
+        self.assertEqual(
+            [(7, 3), (7, 8)],
+            find_winning_moves(board, BLACK),
+        )
+
+    def test_threat_analysis_restores_board(self) -> None:
+        """复合威胁分析不得污染真实棋盘和落子历史。"""
+        board = Board()
+        board.place(7, 6, BLACK)
+        board.place(6, 6, BLACK)
+
+        grid_before = [row.copy() for row in board.grid]
+        history_before = board.move_history.copy()
+
+        analyze_move_threats(board, 7, 7, BLACK)
+
+        self.assertEqual(grid_before, board.grid)
+        self.assertEqual(history_before, board.move_history)
+
+    def test_evaluation_bar_respects_side_to_move(self) -> None:
+        """当前方存在立即胜点时，评分条应优先显示一步取胜。"""
+        board = Board()
+
+        for column in range(4, 8):
+            board.place(7, column, BLACK)
+
+        bar = render_evaluation_bar(
+            board,
+            current_player=BLACK,
+        )
+
+        self.assertIn("黑棋一步取胜", bar)
+        self.assertIn("2 个胜点", bar)
+
+    def test_mirrored_broken_patterns_score_equally(self) -> None:
+        """断点棋型及其镜像必须获得相同静态分数。"""
+        left_gap = Board()
+        right_gap = Board()
+
+        for column in (5, 6, 8):
+            left_gap.place(7, column, WHITE)
+
+        for column in (6, 8, 9):
+            right_gap.place(7, column, WHITE)
+
+        self.assertEqual(
+            evaluate_player(left_gap, WHITE),
+            evaluate_player(right_gap, WHITE),
+        )
 
 
 if __name__ == "__main__":

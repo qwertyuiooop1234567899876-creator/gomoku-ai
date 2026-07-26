@@ -209,5 +209,40 @@ class TestScoringAI(unittest.TestCase):
                     expected_moves,
                 )
 
+    def test_ai_creates_double_three_fork(self) -> None:
+        """电脑应主动走出同时形成横向和斜向活三的交叉点。"""
+        board = Board()
+
+        for move in (
+            (7, 6),
+            (7, 8),
+            (6, 6),
+            (8, 8),
+        ):
+            board.place(*move, WHITE)
+
+        self.assertEqual(
+            (7, 7),
+            self.ai.choose_move(board),
+        )
+
+    def test_ai_blocks_opponent_double_three_fork(self) -> None:
+        """玩家下一手能形成双活三时，电脑应抢占交叉点。"""
+        board = Board()
+
+        for move in (
+            (7, 6),
+            (7, 8),
+            (6, 6),
+            (8, 8),
+        ):
+            board.place(*move, BLACK)
+
+        self.assertEqual(
+            (7, 7),
+            self.ai.choose_move(board),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
