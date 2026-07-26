@@ -1,4 +1,4 @@
-from engine.ai import RandomAI
+from engine.ai import TacticalAI
 from engine.board import BLACK, WHITE, Board
 from engine.game import (
     format_move,
@@ -10,13 +10,13 @@ from engine.game import (
 
 def main() -> None:
     board = Board()
-    computer = RandomAI()
+    computer = TacticalAI(player=WHITE)
     current_player = BLACK
 
     print("Gomoku Engine V0.4")
     print("玩家执黑棋 X，电脑执白棋 O。")
     print("输入棋盘坐标落子，例如 H8。")
-    print("输入 Q 可以退出游戏。")
+    print("输入 H 查看指令，U 悔棋，R 重开，Q 退出。")
 
     while True:
         print()
@@ -28,13 +28,52 @@ def main() -> None:
                 f"{player_name(current_player)}，请输入落子位置："
             )
 
-            if raw_move.strip().upper() == "Q":
+            command = raw_move.strip().upper()
+
+            if command == "Q":
                 print("游戏已退出。")
                 break
 
+            if command == "H":
+                print("可用指令：")
+                print("  H8  在 H8 落子")
+                print("  U   悔棋")
+                print("  R   重新开局")
+                print("  Q   退出游戏")
+                continue
+
+            if command == "R":
+                board = Board()
+                current_player = BLACK
+                print("棋盘已清空，重新开局。")
+                continue
+
+            if command == "U":
+                if len(board.move_history) < 2:
+                    print("当前没有完整的一轮棋可以撤销。")
+                    continue
+
+                computer_move = board.undo()
+                player_move = board.undo()
+
+                if computer_move is None or player_move is None:
+                    print("悔棋失败：落子历史不完整。")
+                    continue
+
+                computer_row, computer_column, _ = computer_move
+                player_row, player_column, _ = player_move
+
+                print(
+                    "已悔棋：撤销玩家 "
+                    f"{format_move(player_row, player_column)}，"
+                    "以及电脑 "
+                    f"{format_move(computer_row, computer_column)}。"
+                )
+                continue
+
             try:
                 row, column = parse_move(
-                    raw_move,
+                    command,
                     board.size,
                 )
 
