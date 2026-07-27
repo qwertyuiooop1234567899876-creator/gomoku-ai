@@ -21,7 +21,7 @@ from engine.game import format_move, other_player, player_name
 from engine.records import GameRecorder, RecordPaths
 from engine.search import SearchAI
 
-ENGINE_VERSION = "0.8"
+ENGINE_VERSION = "0.8.1"
 
 
 class GomokuAI(Protocol):
@@ -47,7 +47,7 @@ ENGINE_LABELS = {
     "random": "RandomAI（随机基准）",
     "tactical": "TacticalAI（胜负与封堵）",
     "scoring": "ScoringAI（V0.6.2 评分）",
-    "search": "SearchAI（V0.8 搜索）",
+    "search": "SearchAI（V0.8.1 搜索）",
 }
 
 
@@ -286,7 +286,7 @@ def _prompt_engine(
     print("  1  RandomAI   随机落子基准")
     print("  2  TacticalAI 立即胜负、封堵、邻近落子")
     print("  3  ScoringAI  V0.6.2 棋型评分与复合威胁")
-    print("  4  SearchAI   V0.8 PVS、VCF 与 Zobrist TT")
+    print("  4  SearchAI   V0.8.1 PVS、VCF 与独立 100k TT")
 
     default_number = {
         "random": "1",
@@ -432,7 +432,7 @@ def choose_interactive_settings(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "V0.8 AI 对战台：Random/Tactical/Scoring/Search "
+            "V0.8.1 AI 对战台：Random/Tactical/Scoring/Search "
             "可任意组合。无参数运行时进入交互菜单。"
         ),
     )

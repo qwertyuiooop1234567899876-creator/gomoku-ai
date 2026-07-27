@@ -38,7 +38,7 @@ class BoundType(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class SearchConfig:
-    """V0.8 搜索参数。"""
+    """V0.8.1 搜索参数。"""
 
     max_depth: int = 3
     time_limit_seconds: float | None = 2.0
@@ -50,7 +50,7 @@ class SearchConfig:
     recent_move_count: int = 4
     threat_extension_depth: int = 2
     use_transposition_table: bool = True
-    transposition_max_entries: int = 60_000
+    transposition_max_entries: int = 100_000
     use_pvs: bool = True
     use_aspiration: bool = True
     aspiration_window: int = 100_000
@@ -127,11 +127,11 @@ class RootResult:
 
 class SearchAI(ScoringAI):
     """
-    V0.8 搜索 AI。
+    V0.8.1 搜索 AI。
 
-    在 V0.7 的 Negamax/Alpha-Beta/威胁延伸上加入统一时间管理、
-    Zobrist 置换表、Killer/History 排序、PVS、Aspiration Window
-    和共享威胁基础设施的 VCF 快速判定。
+    在 V0.8 搜索底层基础上，将每个 SearchAI 的独立置换表容量
+    固定提高到 100,000 条。黑白双方不共享置换表，避免对战
+    测试中出现跨引擎缓存复用带来的公平性争议。
     """
 
     def __init__(

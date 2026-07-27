@@ -18,7 +18,7 @@ from engine.settings import (
     save_search_settings,
 )
 
-ENGINE_VERSION = "0.8"
+ENGINE_VERSION = "0.8.1"
 
 
 def choose_human_player() -> int:
@@ -110,7 +110,7 @@ def create_computer(
     player: int,
     settings: SearchSettings | None = None,
 ) -> SearchAI:
-    """按指定颜色和搜索参数创建 V0.8 搜索 AI。"""
+    """按指定颜色和搜索参数创建 V0.8.1 搜索 AI。"""
     selected = settings or SearchSettings()
 
     return SearchAI(
