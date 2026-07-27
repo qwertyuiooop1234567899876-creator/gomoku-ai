@@ -13,11 +13,30 @@ from engine.game import (
 from engine.records import GameRecorder, RecordPaths
 from engine.search import SearchAI
 
+ENGINE_VERSION = "0.7.1"
 
-def create_computer() -> SearchAI:
-    """创建 V0.7 搜索 AI；每手最多思考约 2 秒。"""
+
+def choose_human_player() -> int:
+    """让玩家选择先后手；直接回车表示玩家执白、AI 先下。"""
+    while True:
+        choice = input(
+            "请选择执棋：B 黑棋先手，W 白棋后手，"
+            "直接回车由 AI 执黑先下："
+        ).strip().upper()
+
+        if choice in {"B", "BLACK", "X", "黑"}:
+            return BLACK
+
+        if choice in {"", "W", "WHITE", "O", "白"}:
+            return WHITE
+
+        print("输入无效：请输入 B、W，或直接回车。")
+
+
+def create_computer(player: int) -> SearchAI:
+    """创建指定执棋颜色的 V0.7.1 搜索 AI。"""
     return SearchAI(
-        player=WHITE,
+        player=player,
         max_depth=3,
         time_limit_seconds=2.0,
         root_candidate_limit=12,
@@ -28,11 +47,21 @@ def create_computer() -> SearchAI:
     )
 
 
-def create_recorder() -> GameRecorder:
+def create_recorder(human_player: int) -> GameRecorder:
+    """按实际先后手创建棋谱记录器。"""
+    if human_player == BLACK:
+        black_name = "Human"
+        white_name = "SearchAI"
+    elif human_player == WHITE:
+        black_name = "SearchAI"
+        white_name = "Human"
+    else:
+        raise ValueError("human_player 必须是 BLACK 或 WHITE。")
+
     return GameRecorder(
         mode="PVC",
-        black_name="Human",
-        white_name="SearchAI",
+        black_name=black_name,
+        white_name=white_name,
     )
 
 
@@ -49,7 +78,7 @@ def save_and_report(
         board=board,
         result=result,
         duration_seconds=time.perf_counter() - game_started,
-        prefix="pvc-v07",
+        prefix="pvc-v071",
     )
     print(f"TXT 棋谱：{paths.txt}")
     print(f"JSON 诊断：{paths.json}")
@@ -88,14 +117,22 @@ def print_search_summary(computer: SearchAI) -> None:
 
 
 def main() -> None:
+    human_player = choose_human_player()
+    computer_player = other_player(human_player)
+
     board = Board()
-    computer = create_computer()
-    recorder = create_recorder()
+    computer = create_computer(computer_player)
+    recorder = create_recorder(human_player)
     current_player = BLACK
     game_started = time.perf_counter()
 
-    print("Gomoku Engine V0.7")
-    print("玩家执黑棋 X，电脑执白棋 O。")
+    print(f"Gomoku Engine V{ENGINE_VERSION}")
+    print(
+        f"玩家执{player_name(human_player)}，"
+        f"电脑执{player_name(computer_player)}。"
+    )
+    if computer_player == BLACK:
+        print("电脑执黑棋，将自动先下。")
     print("电脑使用复合威胁、Negamax、Alpha-Beta 和威胁延伸搜索。")
     print("输入 H 查看指令，U 悔棋，R 重开，M 棋谱，Q 退出。")
 
@@ -108,7 +145,7 @@ def main() -> None:
         print(recorder.render_score_sheet(last_rounds=8))
         print()
 
-        if current_player == BLACK:
+        if current_player == human_player:
             input_started = time.perf_counter()
             raw_move = input(
                 f"{player_name(current_player)}，请输入落子位置："
@@ -131,7 +168,7 @@ def main() -> None:
                 print("可用指令：")
                 print("  H8  在 H8 落子")
                 print("  U   悔棋（撤销玩家和电脑各一手）")
-                print("  R   保存当前棋谱并重新开局")
+                print("  R   保存当前棋谱并以相同颜色重新开局")
                 print("  M   显示完整着法记录")
                 print("  Q   保存棋谱并退出游戏")
                 continue
@@ -153,11 +190,11 @@ def main() -> None:
                     print("当前对局已保存。")
 
                 board = Board()
-                computer = create_computer()
-                recorder = create_recorder()
+                computer = create_computer(computer_player)
+                recorder = create_recorder(human_player)
                 current_player = BLACK
                 game_started = time.perf_counter()
-                print("棋盘已清空，重新开局。")
+                print("棋盘已清空，以相同执棋颜色重新开局。")
                 continue
 
             if command == "U":
@@ -174,8 +211,16 @@ def main() -> None:
 
                 recorder.undo_last_moves(2)
 
-                computer_row, computer_column, _ = computer_move
-                player_row, player_column, _ = player_move
+                computer_row, computer_column, computer_stone = computer_move
+                player_row, player_column, player_stone = player_move
+
+                # 正常情况下，最近一手属于电脑、前一手属于玩家。
+                # 额外校验可尽早暴露轮次错乱。
+                if (
+                    computer_stone != computer_player
+                    or player_stone != human_player
+                ):
+                    raise RuntimeError("悔棋时检测到玩家与电脑轮次不一致。")
 
                 print(
                     "已悔棋：撤销玩家 "
@@ -195,12 +240,12 @@ def main() -> None:
                 board.place(
                     row,
                     column,
-                    current_player,
+                    human_player,
                 )
                 evaluation_after = evaluate_board(board, WHITE)
 
                 recorder.record_move(
-                    player=current_player,
+                    player=human_player,
                     row=row,
                     column=column,
                     actor="Human",
@@ -222,7 +267,7 @@ def main() -> None:
             board.place(
                 row,
                 column,
-                WHITE,
+                computer_player,
             )
             evaluation_after = evaluate_board(board, WHITE)
             analysis = (
@@ -232,7 +277,7 @@ def main() -> None:
             )
 
             recorder.record_move(
-                player=WHITE,
+                player=computer_player,
                 row=row,
                 column=column,
                 actor="SearchAI",
@@ -243,7 +288,8 @@ def main() -> None:
             )
 
             print(
-                f"电脑白棋 O 落子：{format_move(row, column)} "
+                f"电脑{player_name(computer_player)}落子："
+                f"{format_move(row, column)} "
                 f"（{think_seconds:.3f}s）"
             )
             print_search_summary(computer)
