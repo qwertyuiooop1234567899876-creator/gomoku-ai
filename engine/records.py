@@ -244,7 +244,7 @@ class GameRecorder:
         finished_at = datetime.now()
         payload = {
             "format_version": "1.0",
-            "engine_version": "0.7.2",
+            "engine_version": "0.7.3",
             "mode": self.mode,
             "black": self.black_name,
             "white": self.white_name,
@@ -266,7 +266,7 @@ class GameRecorder:
 
         txt_lines = [
             "Gomoku AI Record",
-            "Engine version: V0.7.2",
+            "Engine version: V0.7.3",
             f"Mode: {self.mode}",
             f"Black: {self.black_name}",
             f"White: {self.white_name}",

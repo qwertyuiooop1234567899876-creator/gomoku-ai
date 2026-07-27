@@ -18,7 +18,7 @@ from engine.settings import (
     save_search_settings,
 )
 
-ENGINE_VERSION = "0.7.2"
+ENGINE_VERSION = "0.7.3"
 
 
 def choose_human_player() -> int:
@@ -110,7 +110,7 @@ def create_computer(
     player: int,
     settings: SearchSettings | None = None,
 ) -> SearchAI:
-    """按指定颜色和搜索参数创建 V0.7.2 搜索 AI。"""
+    """按指定颜色和搜索参数创建 V0.7.3 搜索 AI。"""
     selected = settings or SearchSettings()
 
     return SearchAI(
@@ -156,7 +156,7 @@ def save_and_report(
         board=board,
         result=result,
         duration_seconds=time.perf_counter() - game_started,
-        prefix="pvc-v072",
+        prefix="pvc-v073",
     )
     print(f"TXT 棋谱：{paths.txt}")
     print(f"JSON 诊断：{paths.json}")

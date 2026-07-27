@@ -8,3 +8,5 @@ records/
 # Local search preferences
 search_settings.json
 search_settings.json.tmp
+arena_settings.json
+arena_settings.json.tmp
