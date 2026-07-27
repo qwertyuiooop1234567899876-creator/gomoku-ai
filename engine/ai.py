@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 import random
+from dataclasses import asdict, dataclass
+from typing import Any
 
 from engine.board import BLACK, EMPTY, WHITE, Board
 from engine.evaluator import (
@@ -7,8 +11,42 @@ from engine.evaluator import (
     evaluate_move,
     find_winning_moves,
 )
+from engine.game import format_move
 
 Move = tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateAnalysis:
+    move: Move
+    score: int
+    own_threat: str = "普通"
+    opponent_threat: str = "普通"
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["coordinate"] = format_move(*self.move)
+        return data
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionAnalysis:
+    selected_move: Move
+    reason: str
+    candidate_count: int
+    top_candidates: tuple[CandidateAnalysis, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "selected_move": list(self.selected_move),
+            "selected_coordinate": format_move(*self.selected_move),
+            "reason": self.reason,
+            "candidate_count": self.candidate_count,
+            "top_candidates": [
+                candidate.to_dict()
+                for candidate in self.top_candidates
+            ],
+        }
 
 
 class RandomAI:
@@ -150,7 +188,62 @@ class TacticalAI:
 class ScoringAI(TacticalAI):
     """结合一步战术、复合威胁和静态棋型评分选择落点。"""
 
+    def __init__(
+        self,
+        player: int = WHITE,
+        *,
+        diagnostics: bool = False,
+        top_n: int = 5,
+    ) -> None:
+        super().__init__(player=player)
+
+        if top_n < 1:
+            raise ValueError("top_n 必须大于 0。")
+
+        self.diagnostics = diagnostics
+        self.top_n = top_n
+        self.last_analysis: DecisionAnalysis | None = None
+
+    def _save_analysis(
+        self,
+        *,
+        selected_move: Move,
+        reason: str,
+        candidate_count: int,
+        top_candidates: list[CandidateAnalysis] | None = None,
+    ) -> None:
+        self.last_analysis = DecisionAnalysis(
+            selected_move=selected_move,
+            reason=reason,
+            candidate_count=candidate_count,
+            top_candidates=tuple((top_candidates or [])[: self.top_n]),
+        )
+
+    def _candidate_analysis(
+        self,
+        board: Board,
+        move: Move,
+        own_profile: ThreatProfile | None = None,
+        opponent_profile: ThreatProfile | None = None,
+    ) -> CandidateAnalysis:
+        return CandidateAnalysis(
+            move=move,
+            score=evaluate_move(
+                board,
+                move[0],
+                move[1],
+                self.player,
+            ),
+            own_threat=(own_profile.label if own_profile else "普通"),
+            opponent_threat=(
+                opponent_profile.label
+                if opponent_profile
+                else "普通"
+            ),
+        )
+
     def choose_move(self, board: Board) -> Move:
+        self.last_analysis = None
         legal_moves = board.get_legal_moves()
 
         if not legal_moves:
@@ -163,7 +256,19 @@ class ScoringAI(TacticalAI):
             self.player,
         )
         if own_wins:
-            return own_wins[0]
+            selected = own_wins[0]
+            top = (
+                [self._candidate_analysis(board, move) for move in own_wins]
+                if self.diagnostics
+                else []
+            )
+            self._save_analysis(
+                selected_move=selected,
+                reason="立即五连",
+                candidate_count=len(legal_moves),
+                top_candidates=top,
+            )
+            return selected
 
         # 2. 对手已经存在一步胜点，必须先堵。
         opponent_wins = self._find_winning_moves(
@@ -172,14 +277,44 @@ class ScoringAI(TacticalAI):
             self.opponent,
         )
         if opponent_wins:
-            return self._choose_emergency_block(
+            selected = self._choose_emergency_block(
                 board,
                 opponent_wins,
             )
+            top = (
+                sorted(
+                    [
+                        self._candidate_analysis(board, move)
+                        for move in opponent_wins
+                    ],
+                    key=lambda item: item.score,
+                    reverse=True,
+                )
+                if self.diagnostics
+                else []
+            )
+            reason = (
+                "封堵唯一胜点"
+                if len(opponent_wins) == 1
+                else "对手多胜点：选择反击价值最高的封堵"
+            )
+            self._save_analysis(
+                selected_move=selected,
+                reason=reason,
+                candidate_count=len(legal_moves),
+                top_candidates=top,
+            )
+            return selected
 
         if not board.move_history:
             center = board.size // 2
-            return center, center
+            selected = (center, center)
+            self._save_analysis(
+                selected_move=selected,
+                reason="空棋盘选择天元",
+                candidate_count=len(legal_moves),
+            )
+            return selected
 
         nearby_moves = self._get_nearby_moves(
             board,
@@ -202,12 +337,26 @@ class ScoringAI(TacticalAI):
             if profile.forced_win
         ]
         if own_forcing:
-            return self._best_profile_move(
+            selected = self._best_profile_move(
                 board,
                 own_forcing,
                 center,
                 self.player,
             )
+            selected_profile = own_profiles[selected]
+            top = self._rank_profile_candidates(
+                board,
+                own_forcing,
+                own_profiles,
+                None,
+            ) if self.diagnostics else []
+            self._save_analysis(
+                selected_move=selected,
+                reason=f"主动制造{selected_profile.label}",
+                candidate_count=len(candidates),
+                top_candidates=top,
+            )
+            return selected
 
         opponent_profiles = self._profile_moves(
             board,
@@ -222,33 +371,83 @@ class ScoringAI(TacticalAI):
             if profile.forced_win
         ]
         if opponent_forcing:
-            return self._best_profile_move(
+            selected = self._best_profile_move(
                 board,
                 opponent_forcing,
                 center,
                 self.opponent,
             )
+            selected_profile = opponent_profiles[selected]
+            top = self._rank_profile_candidates(
+                board,
+                opponent_forcing,
+                own_profiles,
+                opponent_profiles,
+            ) if self.diagnostics else []
+            self._save_analysis(
+                selected_move=selected,
+                reason=f"抢占对手{selected_profile.label}关键点",
+                candidate_count=len(candidates),
+                top_candidates=top,
+            )
+            return selected
 
-        # 5. 没有强制战术时，才进入普通启发式评分。
-        return max(
-            candidates,
-            key=lambda move: (
-                evaluate_move(
-                    board,
-                    move[0],
-                    move[1],
-                    self.player,
-                ),
+        # 5. 没有强制战术时，统一计算一次分数并保留前 N 个候选。
+        ranked: list[tuple[tuple[int, int, float, int, int], CandidateAnalysis]] = []
+
+        for move in candidates:
+            candidate = self._candidate_analysis(
+                board,
+                move,
+                own_profiles[move],
+                opponent_profiles[move],
+            )
+            sort_key = (
+                candidate.score,
                 own_profiles[move].tactical_rank,
                 opponent_profiles[move].tactical_rank,
                 -(
                     (move[0] - center) ** 2
                     + (move[1] - center) ** 2
                 ),
-                -move[0],
-                -move[1],
-            ),
+                -move[0] * board.size - move[1],
+            )
+            ranked.append((sort_key, candidate))
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        selected = ranked[0][1].move
+        top = [item[1] for item in ranked[: self.top_n]]
+
+        self._save_analysis(
+            selected_move=selected,
+            reason="综合棋型评分最高",
+            candidate_count=len(candidates),
+            top_candidates=top if self.diagnostics else [],
         )
+        return selected
+
+    def _rank_profile_candidates(
+        self,
+        board: Board,
+        profiled_moves: list[tuple[Move, ThreatProfile]],
+        own_profiles: dict[Move, ThreatProfile],
+        opponent_profiles: dict[Move, ThreatProfile] | None,
+    ) -> list[CandidateAnalysis]:
+        candidates = [
+            self._candidate_analysis(
+                board,
+                move,
+                own_profiles.get(move),
+                (
+                    opponent_profiles.get(move)
+                    if opponent_profiles is not None
+                    else None
+                ),
+            )
+            for move, _ in profiled_moves
+        ]
+        candidates.sort(key=lambda item: item.score, reverse=True)
+        return candidates
 
     def _choose_emergency_block(
         self,
