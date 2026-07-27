@@ -21,7 +21,7 @@ from engine.game import format_move, other_player, player_name
 from engine.records import GameRecorder, RecordPaths
 from engine.search import SearchAI
 
-ENGINE_VERSION = "0.7.3"
+ENGINE_VERSION = "0.8"
 
 
 class GomokuAI(Protocol):
@@ -47,7 +47,7 @@ ENGINE_LABELS = {
     "random": "RandomAI（随机基准）",
     "tactical": "TacticalAI（胜负与封堵）",
     "scoring": "ScoringAI（V0.6.2 评分）",
-    "search": "SearchAI（V0.7 搜索）",
+    "search": "SearchAI（V0.8 搜索）",
 }
 
 
@@ -191,11 +191,17 @@ def play_game(
 
         reason = analysis["reason"] if analysis else "基础策略"
         search_text = ""
-        if analysis and int(analysis.get("search_depth", 0)) > 0:
+        if analysis and (
+            int(analysis.get("search_depth", 0)) > 0
+            or int(analysis.get("nodes", 0)) > 0
+        ):
             search_text = (
-                f" 深度={analysis['search_depth']}"
-                f" 节点={analysis['nodes']}"
-                f" 剪枝={analysis['cutoffs']}"
+                f" 深度={analysis.get('search_depth', 0)}/"
+                f"{analysis.get('requested_depth', 0)}"
+                f" 节点={analysis.get('nodes', 0)}"
+                f" NPS={analysis.get('nps', 0)}"
+                f" 剪枝={analysis.get('cutoffs', 0)}"
+                f" TT={analysis.get('transposition_hits', 0)}"
             )
 
         print(
@@ -251,7 +257,7 @@ def play_game(
     if save_record:
         prefix = (
             f"{engine_file_token(black)}-vs-"
-            f"{engine_file_token(white)}-v073"
+            f"{engine_file_token(white)}-v080"
         )
         record_paths = recorder.save(
             board=board,
@@ -280,7 +286,7 @@ def _prompt_engine(
     print("  1  RandomAI   随机落子基准")
     print("  2  TacticalAI 立即胜负、封堵、邻近落子")
     print("  3  ScoringAI  V0.6.2 棋型评分与复合威胁")
-    print("  4  SearchAI   V0.7 Negamax 与 Alpha-Beta")
+    print("  4  SearchAI   V0.8 PVS、VCF 与 Zobrist TT")
 
     default_number = {
         "random": "1",
@@ -426,7 +432,7 @@ def choose_interactive_settings(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "V0.7.3 AI 对战台：Random/Tactical/Scoring/Search "
+            "V0.8 AI 对战台：Random/Tactical/Scoring/Search "
             "可任意组合。无参数运行时进入交互菜单。"
         ),
     )

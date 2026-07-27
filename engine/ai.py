@@ -36,10 +36,25 @@ class DecisionAnalysis:
     candidate_count: int
     top_candidates: tuple[CandidateAnalysis, ...] = ()
     search_depth: int = 0
+    requested_depth: int = 0
+    interrupted_depth: int = 0
     nodes: int = 0
+    nps: int = 0
     cutoffs: int = 0
     transposition_hits: int = 0
+    transposition_cutoffs: int = 0
+    transposition_size: int = 0
+    killer_hits: int = 0
+    history_hits: int = 0
+    extensions: int = 0
+    pvs_researches: int = 0
+    aspiration_researches: int = 0
+    vcf_found: bool = False
+    vcf_depth: int = 0
+    vcf_nodes: int = 0
     elapsed_seconds: float = 0.0
+    soft_time_limit_seconds: float | None = None
+    hard_time_limit_seconds: float | None = None
     principal_variation: tuple[Move, ...] = ()
     search_completed: bool = True
 
@@ -54,10 +69,25 @@ class DecisionAnalysis:
                 for candidate in self.top_candidates
             ],
             "search_depth": self.search_depth,
+            "requested_depth": self.requested_depth,
+            "interrupted_depth": self.interrupted_depth,
             "nodes": self.nodes,
+            "nps": self.nps,
             "cutoffs": self.cutoffs,
             "transposition_hits": self.transposition_hits,
+            "transposition_cutoffs": self.transposition_cutoffs,
+            "transposition_size": self.transposition_size,
+            "killer_hits": self.killer_hits,
+            "history_hits": self.history_hits,
+            "extensions": self.extensions,
+            "pvs_researches": self.pvs_researches,
+            "aspiration_researches": self.aspiration_researches,
+            "vcf_found": self.vcf_found,
+            "vcf_depth": self.vcf_depth,
+            "vcf_nodes": self.vcf_nodes,
             "elapsed_seconds": self.elapsed_seconds,
+            "soft_time_limit_seconds": self.soft_time_limit_seconds,
+            "hard_time_limit_seconds": self.hard_time_limit_seconds,
             "principal_variation": [
                 {
                     "move": list(move),

@@ -187,16 +187,37 @@ class GameRecorder:
                     f"     reason={reason}; candidates={candidate_count}"
                 )
 
+                if move.analysis.get("vcf_found", False):
+                    lines.append(
+                        "     "
+                        f"vcf=found depth:{move.analysis.get('vcf_depth', 0)} "
+                        f"nodes:{move.analysis.get('vcf_nodes', 0):,}"
+                    )
+
                 search_depth = move.analysis.get("search_depth", 0)
                 if search_depth > 0:
                     lines.append(
                         "     "
-                        f"search=depth:{search_depth} "
+                        f"search=depth:{search_depth}/"
+                        f"{move.analysis.get('requested_depth', search_depth)} "
+                        f"interrupted:{move.analysis.get('interrupted_depth', 0)} "
                         f"nodes:{move.analysis.get('nodes', 0):,} "
+                        f"nps:{move.analysis.get('nps', 0):,} "
                         f"cutoffs:{move.analysis.get('cutoffs', 0):,} "
                         f"tt_hits:{move.analysis.get('transposition_hits', 0):,} "
+                        f"tt_cutoffs:{move.analysis.get('transposition_cutoffs', 0):,} "
+                        f"tt_size:{move.analysis.get('transposition_size', 0):,} "
                         f"elapsed:{move.analysis.get('elapsed_seconds', 0.0):.3f}s "
                         f"completed:{move.analysis.get('search_completed', True)}"
+                    )
+                    lines.append(
+                        "     "
+                        f"ordering=killer:{move.analysis.get('killer_hits', 0):,} "
+                        f"history:{move.analysis.get('history_hits', 0):,} "
+                        f"extensions:{move.analysis.get('extensions', 0):,} "
+                        f"pvs_research:{move.analysis.get('pvs_researches', 0):,} "
+                        f"aspiration_research:"
+                        f"{move.analysis.get('aspiration_researches', 0):,}"
                     )
 
                     principal_variation = move.analysis.get(
@@ -244,7 +265,7 @@ class GameRecorder:
         finished_at = datetime.now()
         payload = {
             "format_version": "1.0",
-            "engine_version": "0.7.3",
+            "engine_version": "0.8",
             "mode": self.mode,
             "black": self.black_name,
             "white": self.white_name,
@@ -266,7 +287,7 @@ class GameRecorder:
 
         txt_lines = [
             "Gomoku AI Record",
-            "Engine version: V0.7.3",
+            "Engine version: V0.8",
             f"Mode: {self.mode}",
             f"Black: {self.black_name}",
             f"White: {self.white_name}",

@@ -504,27 +504,40 @@ def evaluate_move(
     column: int,
     player: int,
     defense_weight: float = 1.15,
+    *,
+    own_before: int | None = None,
+    opponent_before: int | None = None,
+    own_profile: ThreatProfile | None = None,
+    opponent_profile: ThreatProfile | None = None,
 ) -> int:
-    """综合静态增益、复合威胁、防守价值和中心位置评价落点。"""
+    """综合静态增益、复合威胁、防守价值和中心位置评价落点。
+
+    搜索器可以传入同一局面共享的基准分和已缓存威胁分析，避免
+    对每个候选点重复计算；普通调用保持原有行为。
+    """
     if not board.is_empty(row, column):
         raise ValueError("只能评价空位置。")
 
     opponent = other_side(player)
-    own_before = evaluate_player(board, player)
-    opponent_before = evaluate_player(board, opponent)
+    if own_before is None:
+        own_before = evaluate_player(board, player)
+    if opponent_before is None:
+        opponent_before = evaluate_player(board, opponent)
 
-    own_profile = analyze_move_threats(
-        board,
-        row,
-        column,
-        player,
-    )
-    opponent_profile = analyze_move_threats(
-        board,
-        row,
-        column,
-        opponent,
-    )
+    if own_profile is None:
+        own_profile = analyze_move_threats(
+            board,
+            row,
+            column,
+            player,
+        )
+    if opponent_profile is None:
+        opponent_profile = analyze_move_threats(
+            board,
+            row,
+            column,
+            opponent,
+        )
 
     board.place(row, column, player)
     try:

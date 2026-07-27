@@ -1,3 +1,6 @@
+from engine.zobrist import get_zobrist_table
+
+
 EMPTY = 0
 BLACK = 1
 WHITE = 2
@@ -29,6 +32,9 @@ class Board:
             for _ in range(size)
         ]
         self.move_history: list[tuple[int, int, int]] = []
+        self._zobrist_table = get_zobrist_table(size)
+        self.zobrist_hash = 0
+        self.empty_count = size * size
 
     def is_inside(self, row: int, column: int) -> bool:
         """判断坐标是否位于棋盘内。"""
@@ -54,6 +60,12 @@ class Board:
 
         self.grid[row][column] = player
         self.move_history.append((row, column, player))
+        self.zobrist_hash ^= self._zobrist_table.piece_key(
+            row,
+            column,
+            player,
+        )
+        self.empty_count -= 1
 
     def _count_direction(
         self,
@@ -119,6 +131,12 @@ class Board:
 
         row, column, player = self.move_history.pop()
         self.grid[row][column] = EMPTY
+        self.zobrist_hash ^= self._zobrist_table.piece_key(
+            row,
+            column,
+            player,
+        )
+        self.empty_count += 1
 
         return row, column, player
 
@@ -133,11 +151,7 @@ class Board:
 
     def is_full(self) -> bool:
         """判断棋盘是否已经没有空位。"""
-        return all(
-            cell != EMPTY
-            for row in self.grid
-            for cell in row
-        )
+        return self.empty_count == 0
 
     def __str__(self) -> str:
         """生成适合在终端显示的棋盘文本。"""

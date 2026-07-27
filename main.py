@@ -18,7 +18,7 @@ from engine.settings import (
     save_search_settings,
 )
 
-ENGINE_VERSION = "0.7.3"
+ENGINE_VERSION = "0.8"
 
 
 def choose_human_player() -> int:
@@ -110,7 +110,7 @@ def create_computer(
     player: int,
     settings: SearchSettings | None = None,
 ) -> SearchAI:
-    """按指定颜色和搜索参数创建 V0.7.3 搜索 AI。"""
+    """按指定颜色和搜索参数创建 V0.8 搜索 AI。"""
     selected = settings or SearchSettings()
 
     return SearchAI(
@@ -156,7 +156,7 @@ def save_and_report(
         board=board,
         result=result,
         duration_seconds=time.perf_counter() - game_started,
-        prefix="pvc-v073",
+        prefix="pvc-v080",
     )
     print(f"TXT 棋谱：{paths.txt}")
     print(f"JSON 诊断：{paths.json}")
@@ -174,16 +174,40 @@ def print_search_summary(computer: SearchAI) -> None:
         f"候选点 {analysis.candidate_count} 个"
     )
 
-    if analysis.search_depth > 0:
+    if analysis.vcf_found:
+        print(
+            "强制搜索："
+            f"VCF 已确认；变化长度 {analysis.vcf_depth} 手；"
+            f"节点 {analysis.vcf_nodes:,}"
+        )
+
+    if analysis.search_depth > 0 or analysis.nodes > 0:
         completed_text = "完整" if analysis.search_completed else "限时截断"
+        depth_text = (
+            f"{analysis.search_depth}/{analysis.requested_depth}"
+        )
+        if analysis.interrupted_depth:
+            depth_text += f"（中断于 {analysis.interrupted_depth}）"
         print(
             "搜索统计："
-            f"深度 {analysis.search_depth}；"
+            f"深度 {depth_text}；"
             f"节点 {analysis.nodes:,}；"
+            f"NPS {analysis.nps:,}；"
             f"剪枝 {analysis.cutoffs:,}；"
-            f"置换命中 {analysis.transposition_hits:,}；"
+            f"置换命中/剪枝 "
+            f"{analysis.transposition_hits:,}/"
+            f"{analysis.transposition_cutoffs:,}；"
+            f"TT {analysis.transposition_size:,}；"
             f"{analysis.elapsed_seconds:.3f}s；"
             f"{completed_text}"
+        )
+        print(
+            "排序与延伸："
+            f"Killer {analysis.killer_hits:,}；"
+            f"History {analysis.history_hits:,}；"
+            f"延伸 {analysis.extensions:,}；"
+            f"PVS 重搜 {analysis.pvs_researches:,}；"
+            f"窗口重搜 {analysis.aspiration_researches:,}"
         )
 
     if analysis.principal_variation:
@@ -220,7 +244,7 @@ def main() -> None:
         f"depth={search_settings.max_depth}，"
         f"time-limit={search_settings.time_limit_seconds:g}s。"
     )
-    print("电脑使用复合威胁、Negamax、Alpha-Beta 和威胁延伸搜索。")
+    print("电脑使用 VCF、PVS、Zobrist 置换表和统一时间管理。")
     print("输入 H 查看指令，U 悔棋，R 重开，M 棋谱，Q 退出。")
 
     while True:
