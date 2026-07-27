@@ -35,6 +35,13 @@ class DecisionAnalysis:
     reason: str
     candidate_count: int
     top_candidates: tuple[CandidateAnalysis, ...] = ()
+    search_depth: int = 0
+    nodes: int = 0
+    cutoffs: int = 0
+    transposition_hits: int = 0
+    elapsed_seconds: float = 0.0
+    principal_variation: tuple[Move, ...] = ()
+    search_completed: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +53,19 @@ class DecisionAnalysis:
                 candidate.to_dict()
                 for candidate in self.top_candidates
             ],
+            "search_depth": self.search_depth,
+            "nodes": self.nodes,
+            "cutoffs": self.cutoffs,
+            "transposition_hits": self.transposition_hits,
+            "elapsed_seconds": self.elapsed_seconds,
+            "principal_variation": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.principal_variation
+            ],
+            "search_completed": self.search_completed,
         }
 
 

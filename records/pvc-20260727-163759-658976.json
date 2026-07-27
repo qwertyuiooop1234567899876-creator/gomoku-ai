@@ -1,0 +1,943 @@
+{
+  "format_version": "1.0",
+  "engine_version": "0.6.2",
+  "mode": "PVC",
+  "black": "Human",
+  "white": "ScoringAI",
+  "result": "白棋 O获胜",
+  "started_at": "2026-07-27T16:36:23",
+  "finished_at": "2026-07-27T16:37:59",
+  "duration_seconds": 96.556235,
+  "move_count": 20,
+  "moves": [
+    {
+      "number": 1,
+      "player": 1,
+      "row": 7,
+      "column": 7,
+      "actor": "Human",
+      "think_seconds": 10.06675610000093,
+      "evaluation_before": 0,
+      "evaluation_after": 0,
+      "analysis": null,
+      "coordinate": "H8",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 2,
+      "player": 2,
+      "row": 6,
+      "column": 7,
+      "actor": "ScoringAI",
+      "think_seconds": 0.18237690000387374,
+      "evaluation_before": 0,
+      "evaluation_after": 0,
+      "analysis": {
+        "selected_move": [
+          6,
+          7
+        ],
+        "selected_coordinate": "H7",
+        "reason": "综合棋型评分最高",
+        "candidate_count": 24,
+        "top_candidates": [
+          {
+            "move": [
+              6,
+              7
+            ],
+            "score": 1248,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "H7"
+          },
+          {
+            "move": [
+              7,
+              6
+            ],
+            "score": 1248,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "G8"
+          },
+          {
+            "move": [
+              7,
+              8
+            ],
+            "score": 1248,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "I8"
+          },
+          {
+            "move": [
+              8,
+              7
+            ],
+            "score": 1248,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "H9"
+          },
+          {
+            "move": [
+              6,
+              6
+            ],
+            "score": 1246,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "G7"
+          }
+        ]
+      },
+      "coordinate": "H7",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 3,
+      "player": 1,
+      "row": 7,
+      "column": 8,
+      "actor": "Human",
+      "think_seconds": 4.532202900008997,
+      "evaluation_before": 0,
+      "evaluation_after": -1000,
+      "analysis": null,
+      "coordinate": "I8",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 4,
+      "player": 2,
+      "row": 7,
+      "column": 6,
+      "actor": "ScoringAI",
+      "think_seconds": 0.23883780000323895,
+      "evaluation_before": -1000,
+      "evaluation_after": 900,
+      "analysis": {
+        "selected_move": [
+          7,
+          6
+        ],
+        "selected_coordinate": "G8",
+        "reason": "综合棋型评分最高",
+        "candidate_count": 32,
+        "top_candidates": [
+          {
+            "move": [
+              7,
+              6
+            ],
+            "score": 229947,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "G8"
+          },
+          {
+            "move": [
+              7,
+              9
+            ],
+            "score": 228941,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "J8"
+          },
+          {
+            "move": [
+              7,
+              5
+            ],
+            "score": 194441,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "F8"
+          },
+          {
+            "move": [
+              7,
+              10
+            ],
+            "score": 194431,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "K8"
+          },
+          {
+            "move": [
+              6,
+              8
+            ],
+            "score": 3396,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "I7"
+          }
+        ]
+      },
+      "coordinate": "G8",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 5,
+      "player": 1,
+      "row": 5,
+      "column": 8,
+      "actor": "Human",
+      "think_seconds": 6.272016300004907,
+      "evaluation_before": 900,
+      "evaluation_after": -800,
+      "analysis": null,
+      "coordinate": "I6",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 6,
+      "player": 2,
+      "row": 6,
+      "column": 8,
+      "actor": "ScoringAI",
+      "think_seconds": 0.2740623999998206,
+      "evaluation_before": -800,
+      "evaluation_after": 1000,
+      "analysis": {
+        "selected_move": [
+          6,
+          8
+        ],
+        "selected_coordinate": "I7",
+        "reason": "综合棋型评分最高",
+        "candidate_count": 41,
+        "top_candidates": [
+          {
+            "move": [
+              6,
+              8
+            ],
+            "score": 231325,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "I7"
+          },
+          {
+            "move": [
+              8,
+              8
+            ],
+            "score": 195825,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "I9"
+          },
+          {
+            "move": [
+              4,
+              8
+            ],
+            "score": 194659,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "I5"
+          },
+          {
+            "move": [
+              7,
+              9
+            ],
+            "score": 11477,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "J8"
+          },
+          {
+            "move": [
+              7,
+              10
+            ],
+            "score": 10087,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "K8"
+          }
+        ]
+      },
+      "coordinate": "I7",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 7,
+      "player": 1,
+      "row": 6,
+      "column": 9,
+      "actor": "Human",
+      "think_seconds": 7.981064700012212,
+      "evaluation_before": 1000,
+      "evaluation_after": -1900,
+      "analysis": null,
+      "coordinate": "J7",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 8,
+      "player": 2,
+      "row": 7,
+      "column": 10,
+      "actor": "ScoringAI",
+      "think_seconds": 0.31141360000765417,
+      "evaluation_before": -1900,
+      "evaluation_after": -900,
+      "analysis": {
+        "selected_move": [
+          7,
+          10
+        ],
+        "selected_coordinate": "K8",
+        "reason": "综合棋型评分最高",
+        "candidate_count": 44,
+        "top_candidates": [
+          {
+            "move": [
+              7,
+              10
+            ],
+            "score": 238016,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "K8"
+          },
+          {
+            "move": [
+              8,
+              7
+            ],
+            "score": 230062,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "H9"
+          },
+          {
+            "move": [
+              5,
+              10
+            ],
+            "score": 229843,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "K6"
+          },
+          {
+            "move": [
+              4,
+              7
+            ],
+            "score": 228931,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "H5"
+          },
+          {
+            "move": [
+              9,
+              6
+            ],
+            "score": 195239,
+            "own_threat": "普通",
+            "opponent_threat": "活三",
+            "coordinate": "G10"
+          }
+        ]
+      },
+      "coordinate": "K8",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 9,
+      "player": 1,
+      "row": 5,
+      "column": 10,
+      "actor": "Human",
+      "think_seconds": 7.462831800003187,
+      "evaluation_before": -900,
+      "evaluation_after": -100700,
+      "analysis": null,
+      "coordinate": "K6",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 10,
+      "player": 2,
+      "row": 8,
+      "column": 7,
+      "actor": "ScoringAI",
+      "think_seconds": 0.12431569999898784,
+      "evaluation_before": -100700,
+      "evaluation_after": -9700,
+      "analysis": {
+        "selected_move": [
+          8,
+          7
+        ],
+        "selected_coordinate": "H9",
+        "reason": "抢占对手活四关键点",
+        "candidate_count": 51,
+        "top_candidates": [
+          {
+            "move": [
+              8,
+              7
+            ],
+            "score": 67736213,
+            "own_threat": "普通",
+            "opponent_threat": "活四",
+            "coordinate": "H9"
+          },
+          {
+            "move": [
+              4,
+              11
+            ],
+            "score": 67735050,
+            "own_threat": "普通",
+            "opponent_threat": "活四",
+            "coordinate": "L5"
+          }
+        ]
+      },
+      "coordinate": "H9",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 11,
+      "player": 1,
+      "row": 5,
+      "column": 9,
+      "actor": "Human",
+      "think_seconds": 17.64173019998998,
+      "evaluation_before": -9700,
+      "evaluation_after": -109900,
+      "analysis": null,
+      "coordinate": "J6",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 12,
+      "player": 2,
+      "row": 5,
+      "column": 7,
+      "actor": "ScoringAI",
+      "think_seconds": 0.12946199999714736,
+      "evaluation_before": -109900,
+      "evaluation_after": -18800,
+      "analysis": {
+        "selected_move": [
+          5,
+          7
+        ],
+        "selected_coordinate": "H6",
+        "reason": "抢占对手活四关键点",
+        "candidate_count": 54,
+        "top_candidates": [
+          {
+            "move": [
+              5,
+              7
+            ],
+            "score": 67736192,
+            "own_threat": "普通",
+            "opponent_threat": "活四",
+            "coordinate": "H6"
+          },
+          {
+            "move": [
+              5,
+              11
+            ],
+            "score": 67735060,
+            "own_threat": "普通",
+            "opponent_threat": "活四",
+            "coordinate": "L6"
+          }
+        ]
+      },
+      "coordinate": "H6",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 13,
+      "player": 1,
+      "row": 7,
+      "column": 9,
+      "actor": "Human",
+      "think_seconds": 8.336110000003828,
+      "evaluation_before": -18800,
+      "evaluation_after": -118700,
+      "analysis": null,
+      "coordinate": "J8",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 14,
+      "player": 2,
+      "row": 8,
+      "column": 9,
+      "actor": "ScoringAI",
+      "think_seconds": 0.11712160000752192,
+      "evaluation_before": -118700,
+      "evaluation_after": -26900,
+      "analysis": {
+        "selected_move": [
+          8,
+          9
+        ],
+        "selected_coordinate": "J9",
+        "reason": "抢占对手活四关键点",
+        "candidate_count": 53,
+        "top_candidates": [
+          {
+            "move": [
+              8,
+              9
+            ],
+            "score": 67737005,
+            "own_threat": "普通",
+            "opponent_threat": "活四",
+            "coordinate": "J9"
+          },
+          {
+            "move": [
+              4,
+              9
+            ],
+            "score": 67736339,
+            "own_threat": "普通",
+            "opponent_threat": "活四",
+            "coordinate": "J5"
+          }
+        ]
+      },
+      "coordinate": "J9",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 15,
+      "player": 1,
+      "row": 6,
+      "column": 10,
+      "actor": "Human",
+      "think_seconds": 5.597965499997372,
+      "evaluation_before": -26900,
+      "evaluation_after": -29100,
+      "analysis": null,
+      "coordinate": "K7",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 16,
+      "player": 2,
+      "row": 9,
+      "column": 8,
+      "actor": "ScoringAI",
+      "think_seconds": 0.06315380000160076,
+      "evaluation_before": -29100,
+      "evaluation_after": 168900,
+      "analysis": {
+        "selected_move": [
+          9,
+          8
+        ],
+        "selected_coordinate": "I10",
+        "reason": "主动制造双活三",
+        "candidate_count": 53,
+        "top_candidates": [
+          {
+            "move": [
+              9,
+              8
+            ],
+            "score": 12198090,
+            "own_threat": "双活三",
+            "opponent_threat": "普通",
+            "coordinate": "I10"
+          }
+        ]
+      },
+      "coordinate": "I10",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 17,
+      "player": 1,
+      "row": 6,
+      "column": 11,
+      "actor": "Human",
+      "think_seconds": 8.931981199988513,
+      "evaluation_before": 168900,
+      "evaluation_after": 68000,
+      "analysis": null,
+      "coordinate": "L7",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 18,
+      "player": 2,
+      "row": 6,
+      "column": 5,
+      "actor": "ScoringAI",
+      "think_seconds": 0.07695509999757633,
+      "evaluation_before": 68000,
+      "evaluation_after": 9975900,
+      "analysis": {
+        "selected_move": [
+          6,
+          5
+        ],
+        "selected_coordinate": "F7",
+        "reason": "主动制造活四",
+        "candidate_count": 61,
+        "top_candidates": [
+          {
+            "move": [
+              6,
+              5
+            ],
+            "score": 58907990,
+            "own_threat": "活四",
+            "opponent_threat": "普通",
+            "coordinate": "F7"
+          },
+          {
+            "move": [
+              10,
+              9
+            ],
+            "score": 58900074,
+            "own_threat": "活四",
+            "opponent_threat": "普通",
+            "coordinate": "J11"
+          }
+        ]
+      },
+      "coordinate": "F7",
+      "player_name": "WHITE"
+    },
+    {
+      "number": 19,
+      "player": 1,
+      "row": 6,
+      "column": 12,
+      "actor": "Human",
+      "think_seconds": 17.85548299999209,
+      "evaluation_before": 9975900,
+      "evaluation_after": 8985900,
+      "analysis": null,
+      "coordinate": "M7",
+      "player_name": "BLACK"
+    },
+    {
+      "number": 20,
+      "player": 2,
+      "row": 5,
+      "column": 4,
+      "actor": "ScoringAI",
+      "think_seconds": 0.012940700005856343,
+      "evaluation_before": 8985900,
+      "evaluation_after": 98985900,
+      "analysis": {
+        "selected_move": [
+          5,
+          4
+        ],
+        "selected_coordinate": "E6",
+        "reason": "立即五连",
+        "candidate_count": 206,
+        "top_candidates": [
+          {
+            "move": [
+              5,
+              4
+            ],
+            "score": 190000074,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "E6"
+          },
+          {
+            "move": [
+              10,
+              9
+            ],
+            "score": 190000074,
+            "own_threat": "普通",
+            "opponent_threat": "普通",
+            "coordinate": "J11"
+          }
+        ]
+      },
+      "coordinate": "E6",
+      "player_name": "WHITE"
+    }
+  ],
+  "events": [],
+  "final_grid": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      2,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      2,
+      2,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      1,
+      1,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "final_board": "   A B C D E F G H I J K L M N O\n 1 . . . . . . . . . . . . . . .\n 2 . . . . . . . . . . . . . . .\n 3 . . . . . . . . . . . . . . .\n 4 . . . . . . . . . . . . . . .\n 5 . . . . . . . . . . . . . . .\n 6 . . . . O . . O X X X . . . .\n 7 . . . . . O . O O X X X X . .\n 8 . . . . . . O X X X O . . . .\n 9 . . . . . . . O . O . . . . .\n10 . . . . . . . . O . . . . . .\n11 . . . . . . . . . . . . . . .\n12 . . . . . . . . . . . . . . .\n13 . . . . . . . . . . . . . . .\n14 . . . . . . . . . . . . . . .\n15 . . . . . . . . . . . . . . ."
+}

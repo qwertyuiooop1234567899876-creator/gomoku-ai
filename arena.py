@@ -3,13 +3,15 @@ from __future__ import annotations
 import argparse
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 from engine.ai import ScoringAI
 from engine.board import BLACK, WHITE, Board
 from engine.evaluator import evaluate_board, render_evaluation_bar
 from engine.game import format_move, other_player, player_name
 from engine.records import GameRecorder, RecordPaths
+from engine.search import SearchAI
+
+AIType = ScoringAI | SearchAI
 
 
 @dataclass(slots=True)
@@ -28,26 +30,72 @@ def result_text(winner: int | None) -> str:
     return "平局"
 
 
+def create_ai(
+    engine_name: str,
+    player: int,
+    *,
+    max_depth: int,
+    time_limit_seconds: float | None,
+) -> AIType:
+    if engine_name == "scoring":
+        return ScoringAI(
+            player=player,
+            diagnostics=True,
+            top_n=5,
+        )
+
+    if engine_name == "search":
+        return SearchAI(
+            player=player,
+            max_depth=max_depth,
+            time_limit_seconds=time_limit_seconds,
+            diagnostics=True,
+            top_n=5,
+        )
+
+    raise ValueError(f"未知引擎：{engine_name}")
+
+
+def engine_display_name(engine_name: str) -> str:
+    return "SearchAI" if engine_name == "search" else "ScoringAI"
+
+
 def play_game(
     *,
+    black_engine: str = "search",
+    white_engine: str = "scoring",
+    max_depth: int = 3,
+    time_limit_seconds: float | None = 2.0,
     watch: bool = False,
     show_evaluation: bool = False,
     delay_seconds: float = 0.0,
     save_record: bool = True,
 ) -> GameResult:
-    """让黑白两个 ScoringAI 自动完成一局并保存完整诊断。"""
+    """让 SearchAI/ScoringAI 任意组合自动完成一局并保存诊断。"""
     if delay_seconds < 0:
         raise ValueError("delay_seconds 不能小于 0。")
 
     board = Board()
+    black_name = engine_display_name(black_engine)
+    white_name = engine_display_name(white_engine)
     players = {
-        BLACK: ScoringAI(player=BLACK, diagnostics=True, top_n=5),
-        WHITE: ScoringAI(player=WHITE, diagnostics=True, top_n=5),
+        BLACK: create_ai(
+            black_engine,
+            BLACK,
+            max_depth=max_depth,
+            time_limit_seconds=time_limit_seconds,
+        ),
+        WHITE: create_ai(
+            white_engine,
+            WHITE,
+            max_depth=max_depth,
+            time_limit_seconds=time_limit_seconds,
+        ),
     }
     recorder = GameRecorder(
         mode="CVC",
-        black_name="ScoringAI",
-        white_name="ScoringAI",
+        black_name=black_name,
+        white_name=white_name,
     )
 
     current_player = BLACK
@@ -81,11 +129,12 @@ def play_game(
             else None
         )
 
+        actor = type(ai).__name__
         move_record = recorder.record_move(
             player=current_player,
             row=row,
             column=column,
-            actor="ScoringAI",
+            actor=actor,
             think_seconds=think_seconds,
             evaluation_before=evaluation_before,
             evaluation_after=evaluation_after,
@@ -93,12 +142,20 @@ def play_game(
         )
 
         reason = analysis["reason"] if analysis else "未记录"
+        search_text = ""
+        if analysis and analysis.get("search_depth", 0) > 0:
+            search_text = (
+                f" 深度={analysis['search_depth']}"
+                f" 节点={analysis['nodes']}"
+                f" 剪枝={analysis['cutoffs']}"
+            )
+
         print(
             f"{move_record.number:3}. "
             f"{player_name(current_player)} "
             f"{format_move(row, column)} "
             f"思考 {think_seconds:.3f}s "
-            f"原因：{reason}"
+            f"原因：{reason}{search_text}"
         )
 
         if board.check_win(row, column):
@@ -133,6 +190,7 @@ def play_game(
 
     print()
     print("=" * 50)
+    print(f"{black_name}（黑） vs {white_name}（白）")
     print(result)
     print(f"总手数：{len(recorder.moves)}")
     print(f"总耗时：{duration_seconds:.3f}s")
@@ -144,11 +202,12 @@ def play_game(
     record_paths: RecordPaths | None = None
 
     if save_record:
+        prefix = f"{black_engine}-vs-{white_engine}-v07"
         record_paths = recorder.save(
             board=board,
             result=result,
             duration_seconds=duration_seconds,
-            prefix="scoring-vs-scoring",
+            prefix=prefix,
         )
         print()
         print(f"TXT 棋谱：{record_paths.txt}")
@@ -164,7 +223,31 @@ def play_game(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="让 ScoringAI 执黑与 ScoringAI 执白自动对战。",
+        description="V0.7 AI 对战台：SearchAI 与 ScoringAI 可自由组合。",
+    )
+    parser.add_argument(
+        "--black",
+        choices=("search", "scoring"),
+        default="search",
+        help="黑棋引擎，默认 search。",
+    )
+    parser.add_argument(
+        "--white",
+        choices=("search", "scoring"),
+        default="scoring",
+        help="白棋引擎，默认 scoring，用于新旧版本对比。",
+    )
+    parser.add_argument(
+        "--depth",
+        type=int,
+        default=3,
+        help="SearchAI 最大迭代深度，默认 3。",
+    )
+    parser.add_argument(
+        "--time-limit",
+        type=float,
+        default=2.0,
+        help="SearchAI 每手时间上限（秒），默认 2。",
     )
     parser.add_argument(
         "--watch",
@@ -193,6 +276,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     play_game(
+        black_engine=args.black,
+        white_engine=args.white,
+        max_depth=args.depth,
+        time_limit_seconds=args.time_limit,
         watch=args.watch,
         show_evaluation=args.evaluation,
         delay_seconds=args.delay,

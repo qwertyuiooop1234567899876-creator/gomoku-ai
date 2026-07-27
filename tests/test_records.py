@@ -65,7 +65,7 @@ class TestGameRecorder(unittest.TestCase):
             self.assertTrue(paths.json.exists())
 
             payload = json.loads(paths.json.read_text(encoding="utf-8"))
-            self.assertEqual("0.6.2", payload["engine_version"])
+            self.assertEqual("0.7", payload["engine_version"])
             self.assertEqual("H8", payload["moves"][0]["coordinate"])
             self.assertEqual("测试结束", payload["result"])
 

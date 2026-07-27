@@ -187,6 +187,29 @@ class GameRecorder:
                     f"     reason={reason}; candidates={candidate_count}"
                 )
 
+                search_depth = move.analysis.get("search_depth", 0)
+                if search_depth > 0:
+                    lines.append(
+                        "     "
+                        f"search=depth:{search_depth} "
+                        f"nodes:{move.analysis.get('nodes', 0):,} "
+                        f"cutoffs:{move.analysis.get('cutoffs', 0):,} "
+                        f"tt_hits:{move.analysis.get('transposition_hits', 0):,} "
+                        f"elapsed:{move.analysis.get('elapsed_seconds', 0.0):.3f}s "
+                        f"completed:{move.analysis.get('search_completed', True)}"
+                    )
+
+                    principal_variation = move.analysis.get(
+                        "principal_variation",
+                        [],
+                    )
+                    if principal_variation:
+                        pv_text = " -> ".join(
+                            item.get("coordinate", "?")
+                            for item in principal_variation
+                        )
+                        lines.append(f"     pv={pv_text}")
+
                 top_candidates = move.analysis.get("top_candidates", [])
                 for rank, candidate in enumerate(top_candidates, start=1):
                     lines.append(
@@ -221,7 +244,7 @@ class GameRecorder:
         finished_at = datetime.now()
         payload = {
             "format_version": "1.0",
-            "engine_version": "0.6.2",
+            "engine_version": "0.7",
             "mode": self.mode,
             "black": self.black_name,
             "white": self.white_name,
@@ -243,7 +266,7 @@ class GameRecorder:
 
         txt_lines = [
             "Gomoku AI Record",
-            "Engine version: V0.6.2",
+            "Engine version: V0.7",
             f"Mode: {self.mode}",
             f"Black: {self.black_name}",
             f"White: {self.white_name}",

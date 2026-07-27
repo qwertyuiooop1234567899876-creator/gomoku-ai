@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 
-from engine.ai import ScoringAI
 from engine.board import BLACK, WHITE, Board
 from engine.evaluator import evaluate_board, render_evaluation_bar
 from engine.game import (
@@ -12,13 +11,28 @@ from engine.game import (
     player_name,
 )
 from engine.records import GameRecorder, RecordPaths
+from engine.search import SearchAI
+
+
+def create_computer() -> SearchAI:
+    """创建 V0.7 搜索 AI；每手最多思考约 2 秒。"""
+    return SearchAI(
+        player=WHITE,
+        max_depth=3,
+        time_limit_seconds=2.0,
+        root_candidate_limit=12,
+        branch_candidate_limit=8,
+        threat_extension_depth=2,
+        diagnostics=True,
+        top_n=5,
+    )
 
 
 def create_recorder() -> GameRecorder:
     return GameRecorder(
         mode="PVC",
         black_name="Human",
-        white_name="ScoringAI",
+        white_name="SearchAI",
     )
 
 
@@ -35,27 +49,54 @@ def save_and_report(
         board=board,
         result=result,
         duration_seconds=time.perf_counter() - game_started,
-        prefix="pvc",
+        prefix="pvc-v07",
     )
     print(f"TXT 棋谱：{paths.txt}")
     print(f"JSON 诊断：{paths.json}")
     return paths
 
 
+def print_search_summary(computer: SearchAI) -> None:
+    analysis = computer.last_analysis
+    if analysis is None:
+        return
+
+    print(
+        "电脑决策："
+        f"{analysis.reason}；"
+        f"候选点 {analysis.candidate_count} 个"
+    )
+
+    if analysis.search_depth > 0:
+        completed_text = "完整" if analysis.search_completed else "限时截断"
+        print(
+            "搜索统计："
+            f"深度 {analysis.search_depth}；"
+            f"节点 {analysis.nodes:,}；"
+            f"剪枝 {analysis.cutoffs:,}；"
+            f"置换命中 {analysis.transposition_hits:,}；"
+            f"{analysis.elapsed_seconds:.3f}s；"
+            f"{completed_text}"
+        )
+
+    if analysis.principal_variation:
+        pv = " → ".join(
+            format_move(*move)
+            for move in analysis.principal_variation
+        )
+        print(f"最佳变化：{pv}")
+
+
 def main() -> None:
     board = Board()
-    computer = ScoringAI(
-        player=WHITE,
-        diagnostics=True,
-        top_n=5,
-    )
+    computer = create_computer()
     recorder = create_recorder()
     current_player = BLACK
     game_started = time.perf_counter()
 
-    print("Gomoku Engine V0.6.2")
+    print("Gomoku Engine V0.7")
     print("玩家执黑棋 X，电脑执白棋 O。")
-    print("已加入实时着法表、自动棋谱和 AI 决策诊断。")
+    print("电脑使用复合威胁、Negamax、Alpha-Beta 和威胁延伸搜索。")
     print("输入 H 查看指令，U 悔棋，R 重开，M 棋谱，Q 退出。")
 
     while True:
@@ -112,11 +153,7 @@ def main() -> None:
                     print("当前对局已保存。")
 
                 board = Board()
-                computer = ScoringAI(
-                    player=WHITE,
-                    diagnostics=True,
-                    top_n=5,
-                )
+                computer = create_computer()
                 recorder = create_recorder()
                 current_player = BLACK
                 game_started = time.perf_counter()
@@ -198,7 +235,7 @@ def main() -> None:
                 player=WHITE,
                 row=row,
                 column=column,
-                actor="ScoringAI",
+                actor="SearchAI",
                 think_seconds=think_seconds,
                 evaluation_before=evaluation_before,
                 evaluation_after=evaluation_after,
@@ -209,12 +246,7 @@ def main() -> None:
                 f"电脑白棋 O 落子：{format_move(row, column)} "
                 f"（{think_seconds:.3f}s）"
             )
-            if analysis:
-                print(
-                    "电脑决策："
-                    f"{analysis['reason']}；"
-                    f"候选点 {analysis['candidate_count']} 个"
-                )
+            print_search_summary(computer)
 
         if board.check_win(row, column):
             print()

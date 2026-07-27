@@ -1,0 +1,1647 @@
+Gomoku AI Record
+Engine version: V0.6.2
+Mode: CVC
+Black: ScoringAI
+White: ScoringAI
+Result: 平局
+Moves: 225
+Duration: 111.012s
+
+完整着法记录：
+ 回合   黑 X   白 O
+   1.  H8     H7  
+   2.  G8     I8  
+   3.  G6     G7  
+   4.  I7     G9  
+   5.  F7     E8  
+   6.  H9     E6  
+   7.  I10    J11 
+   8.  E7     H10 
+   9.  I11    I12 
+  10.  K10    J10 
+  11.  J12    D7  
+  12.  F9     F8  
+  13.  C8     H6  
+  14.  E9     I5  
+  15.  J4     H5  
+  16.  H4     G5  
+  17.  F5     K5  
+  18.  J5     I4  
+  19.  I3     J3  
+  20.  K2     D9  
+  21.  D8     C7  
+  22.  C9     B10 
+  23.  C10    C11 
+  24.  D12    D11 
+  25.  E11    D10 
+  26.  C13    B14 
+  27.  J9     H11 
+  28.  J13    H13 
+  29.  H14    G14 
+  30.  F15    I13 
+  31.  G13    F12 
+  32.  G11    H12 
+  33.  E12    E13 
+  34.  C6     C12 
+  35.  B13    K8  
+  36.  J7     J8  
+  37.  L8     K7  
+  38.  K6     I9  
+  39.  L6     L7  
+  40.  M6     N6  
+  41.  I6     J6  
+  42.  K11    K12 
+  43.  F4     F6  
+  44.  E5     G3  
+  45.  G4     E4  
+  46.  M7     M5  
+  47.  L4     L5  
+  48.  N5     L3  
+  49.  K4     M4  
+  50.  M9     L10 
+  51.  M8     M10 
+  52.  L11    M12 
+  53.  M11    N11 
+  54.  L9     N9  
+  55.  N7     O6  
+  56.  L13    N10 
+  57.  N12    K13 
+  58.  M3     F3  
+  59.  E3     G2  
+  60.  D5     C5  
+  61.  L12    L14 
+  62.  H3     I2  
+  63.  H2     M13 
+  64.  G10    F11 
+  65.  G12    F13 
+  66.  F14    L2  
+  67.  B11    B6  
+  68.  B8     D14 
+  69.  C14    B4  
+  70.  B5     D4  
+  71.  C4     D3  
+  72.  K14    G15 
+  73.  C3     O7  
+  74.  O8     O5  
+  75.  O4     F2  
+  76.  E2     O9  
+  77.  H15    I15 
+  78.  O10    D2  
+  79.  J15    N4  
+  80.  O11    O12 
+  81.  E15    D15 
+  82.  K15    L15 
+  83.  F10    K9  
+  84.  E10    D6  
+  85.  K3     N8  
+  86.  B7     B9  
+  87.  I14    J2  
+  88.  J14    D13 
+  89.  E14    H1  
+  90.  G1     F1  
+  91.  I1     J1  
+  92.  E1     D1  
+  93.  K1     L1  
+  94.  A8     A7  
+  95.  A6     A9  
+  96.  A10    A5  
+  97.  A4     A11 
+  98.  A12    B12 
+  99.  C2     M2  
+ 100.  B3     N3  
+ 101.  N13    M14 
+ 102.  B2     N2  
+ 103.  N14    C1  
+ 104.  M1     A3  
+ 105.  O3     A13 
+ 106.  O13    C15 
+ 107.  M15    B1  
+ 108.  N1     A2  
+ 109.  O2     A14 
+ 110.  O14    B15 
+ 111.  N15    A1  
+ 112.  O1     A15 
+ 113.  O15    —   
+
+Move details:
+  1. 黑 X  H8   actor=ScoringAI think=0.003s eval=+0->+0 delta=+0
+     reason=空棋盘选择天元; candidates=225
+  2. 白 O  H7   actor=ScoringAI think=0.206s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=24
+     #1 H7   score=+1,248 own=普通 opp=普通
+     #2 G8   score=+1,248 own=普通 opp=普通
+     #3 I8   score=+1,248 own=普通 opp=普通
+     #4 H9   score=+1,248 own=普通 opp=普通
+     #5 G7   score=+1,246 own=普通 opp=普通
+  3. 黑 X  G8   actor=ScoringAI think=0.224s eval=+0->-1,000 delta=-1,000
+     reason=综合棋型评分最高; candidates=28
+     #1 G8   score=+2,248 own=普通 opp=普通
+     #2 I8   score=+2,248 own=普通 opp=普通
+     #3 G7   score=+2,246 own=普通 opp=普通
+     #4 I7   score=+2,246 own=普通 opp=普通
+     #5 G6   score=+1,240 own=普通 opp=普通
+  4. 白 O  I8   actor=ScoringAI think=0.248s eval=-1,000->+900 delta=+1,900
+     reason=综合棋型评分最高; candidates=32
+     #1 I8   score=+229,947 own=普通 opp=活三
+     #2 F8   score=+228,941 own=普通 opp=活三
+     #3 J8   score=+194,441 own=普通 opp=活三
+     #4 E8   score=+194,431 own=普通 opp=活三
+     #5 G7   score=+3,396 own=普通 opp=普通
+  5. 黑 X  G6   actor=ScoringAI think=0.297s eval=+900->-800 delta=-1,700
+     reason=综合棋型评分最高; candidates=36
+     #1 G6   score=+229,739 own=普通 opp=活三
+     #2 J9   score=+228,939 own=普通 opp=活三
+     #3 F5   score=+194,423 own=普通 opp=活三
+     #4 K10  score=+194,423 own=普通 opp=活三
+     #5 F8   score=+9,992 own=普通 opp=普通
+  6. 白 O  G7   actor=ScoringAI think=0.334s eval=-800->+1,000 delta=+1,800
+     reason=综合棋型评分最高; candidates=41
+     #1 G7   score=+231,325 own=普通 opp=活三
+     #2 G9   score=+195,825 own=普通 opp=活三
+     #3 G5   score=+194,659 own=普通 opp=活三
+     #4 F8   score=+11,477 own=普通 opp=普通
+     #5 E8   score=+10,087 own=普通 opp=普通
+  7. 黑 X  I7   actor=ScoringAI think=0.291s eval=+1,000->-900 delta=-1,900
+     reason=综合棋型评分最高; candidates=40
+     #1 I7   score=+231,095 own=普通 opp=活三
+     #2 F7   score=+230,939 own=普通 opp=活三
+     #3 J7   score=+195,589 own=普通 opp=活三
+     #4 E7   score=+194,429 own=普通 opp=活三
+     #5 J9   score=+11,475 own=普通 opp=普通
+  8. 白 O  G9   actor=ScoringAI think=0.311s eval=-900->+0 delta=+900
+     reason=综合棋型评分最高; candidates=40
+     #1 G9   score=+229,060 own=普通 opp=活三
+     #2 J6   score=+228,933 own=普通 opp=活三
+     #3 F10  score=+194,433 own=普通 opp=活三
+     #4 K5   score=+194,413 own=普通 opp=活三
+     #5 F8   score=+12,477 own=普通 opp=普通
+  9. 黑 X  F7   actor=ScoringAI think=0.301s eval=+0->-2,100 delta=-2,100
+     reason=综合棋型评分最高; candidates=44
+     #1 F7   score=+13,475 own=普通 opp=普通
+     #2 F8   score=+12,292 own=普通 opp=普通
+     #3 J9   score=+11,475 own=普通 opp=普通
+     #4 E7   score=+10,085 own=普通 opp=普通
+     #5 J6   score=+9,984 own=普通 opp=普通
+ 10. 白 O  E8   actor=ScoringAI think=0.359s eval=-2,100->-1,100 delta=+1,000
+     reason=综合棋型评分最高; candidates=48
+     #1 E8   score=+238,016 own=普通 opp=活三
+     #2 H9   score=+231,062 own=普通 opp=活三
+     #3 E6   score=+229,843 own=普通 opp=活三
+     #4 H5   score=+228,931 own=普通 opp=活三
+     #5 I10  score=+194,439 own=普通 opp=活三
+ 11. 黑 X  H9   actor=ScoringAI think=0.357s eval=-1,100->-100,200 delta=-99,100
+     reason=综合棋型评分最高; candidates=53
+     #1 H9   score=+201,498 own=活三 opp=普通
+     #2 E6   score=+200,794 own=活三 opp=普通
+     #3 I10  score=+169,090 own=活三 opp=普通
+     #4 D5   score=+169,050 own=活三 opp=普通
+     #5 J9   score=+11,475 own=普通 opp=普通
+ 12. 白 O  E6   actor=ScoringAI think=0.149s eval=-100,200->-9,400 delta=+90,800
+     reason=抢占对手活四关键点; candidates=53
+     #1 E6   score=+67,736,794 own=普通 opp=活四
+     #2 I10  score=+67,735,090 own=普通 opp=活四
+ 13. 黑 X  I10  actor=ScoringAI think=0.374s eval=-9,400->-999,400 delta=-990,000
+     reason=综合棋型评分最高; candidates=55
+     #1 I10  score=+1,990,090 own=冲四 opp=普通
+     #2 J11  score=+1,990,074 own=冲四 opp=普通
+     #3 E7   score=+230,179 own=普通 opp=活三
+     #4 E9   score=+195,579 own=普通 opp=活三
+     #5 E5   score=+194,643 own=普通 opp=活三
+ 14. 白 O  J11  actor=ScoringAI think=0.012s eval=-999,400->+600 delta=+1,000,000
+     reason=封堵唯一胜点; candidates=212
+     #1 J11  score=+228,850,073 own=普通 opp=普通
+ 15. 黑 X  E7   actor=ScoringAI think=0.443s eval=+600->-300 delta=-900
+     reason=综合棋型评分最高; candidates=68
+     #1 E7   score=+230,179 own=普通 opp=活三
+     #2 E9   score=+195,579 own=普通 opp=活三
+     #3 E5   score=+194,643 own=普通 opp=活三
+     #4 J9   score=+13,394 own=普通 opp=普通
+     #5 H10  score=+12,142 own=普通 opp=普通
+ 16. 白 O  H10  actor=ScoringAI think=0.421s eval=-300->+800 delta=+1,100
+     reason=综合棋型评分最高; candidates=67
+     #1 H10  score=+13,626 own=普通 opp=普通
+     #2 D7   score=+13,451 own=普通 opp=普通
+     #3 J9   score=+11,940 own=普通 opp=普通
+     #4 J6   score=+11,469 own=普通 opp=普通
+     #5 H5   score=+11,467 own=普通 opp=普通
+ 17. 黑 X  I11  actor=ScoringAI think=0.409s eval=+800->-1,200 delta=-2,000
+     reason=综合棋型评分最高; candidates=67
+     #1 I11  score=+231,079 own=普通 opp=活三
+     #2 J12  score=+195,559 own=普通 opp=活三
+     #3 J9   score=+13,394 own=普通 opp=普通
+     #4 F8   score=+12,807 own=普通 opp=普通
+     #5 D7   score=+12,266 own=普通 opp=普通
+ 18. 白 O  I12  actor=ScoringAI think=0.521s eval=-1,200->+800 delta=+2,000
+     reason=综合棋型评分最高; candidates=67
+     #1 I12  score=+229,915 own=普通 opp=活三
+     #2 I13  score=+194,397 own=普通 opp=活三
+     #3 D7   score=+13,451 own=普通 opp=普通
+     #4 J9   score=+11,940 own=普通 opp=普通
+     #5 I9   score=+11,676 own=普通 opp=普通
+ 19. 黑 X  K10  actor=ScoringAI think=0.470s eval=+800->-200 delta=-1,000
+     reason=综合棋型评分最高; candidates=71
+     #1 K10  score=+238,008 own=普通 opp=活三
+     #2 H13  score=+228,899 own=普通 opp=活三
+     #3 L9   score=+194,415 own=普通 opp=活三
+     #4 G14  score=+194,375 own=普通 opp=活三
+     #5 J9   score=+13,394 own=普通 opp=普通
+ 20. 白 O  J10  actor=ScoringAI think=0.490s eval=-200->+800 delta=+1,000
+     reason=综合棋型评分最高; candidates=76
+     #1 J10  score=+13,733 own=普通 opp=普通
+     #2 D7   score=+13,451 own=普通 opp=普通
+     #3 J6   score=+11,469 own=普通 opp=普通
+     #4 H5   score=+11,467 own=普通 opp=普通
+     #5 H13  score=+9,950 own=普通 opp=普通
+ 21. 黑 X  J12  actor=ScoringAI think=0.528s eval=+800->-200 delta=-1,000
+     reason=综合棋型评分最高; candidates=75
+     #1 J12  score=+230,159 own=普通 opp=活三
+     #2 J9   score=+230,039 own=普通 opp=活三
+     #3 J8   score=+196,476 own=普通 opp=活三
+     #4 J13  score=+195,541 own=普通 opp=活三
+     #5 D7   score=+12,266 own=普通 opp=普通
+ 22. 白 O  D7   actor=ScoringAI think=0.453s eval=-200->+1,900 delta=+2,100
+     reason=综合棋型评分最高; candidates=75
+     #1 D7   score=+13,451 own=普通 opp=普通
+     #2 J6   score=+11,469 own=普通 opp=普通
+     #3 H5   score=+11,467 own=普通 opp=普通
+     #4 K13  score=+11,417 own=普通 opp=普通
+     #5 J9   score=+11,255 own=普通 opp=普通
+ 23. 黑 X  F9   actor=ScoringAI think=0.433s eval=+1,900->+100 delta=-1,800
+     reason=综合棋型评分最高; candidates=79
+     #1 F9   score=+229,954 own=普通 opp=活三
+     #2 F5   score=+229,823 own=普通 opp=活三
+     #3 C8   score=+229,819 own=普通 opp=活三
+     #4 C6   score=+229,811 own=普通 opp=活三
+     #5 G10  score=+194,769 own=普通 opp=活三
+ 24. 白 O  F8   actor=ScoringAI think=0.450s eval=+100->+2,000 delta=+1,900
+     reason=综合棋型评分最高; candidates=79
+     #1 F8   score=+230,386 own=普通 opp=活三
+     #2 C8   score=+199,850 own=活三 opp=普通
+     #3 F5   score=+199,189 own=活三 opp=普通
+     #4 F6   score=+196,128 own=普通 opp=活三
+     #5 F10  score=+194,763 own=普通 opp=活三
+ 25. 黑 X  C8   actor=ScoringAI think=0.482s eval=+2,000->+1,000 delta=-1,000
+     reason=综合棋型评分最高; candidates=78
+     #1 C8   score=+237,984 own=普通 opp=活三
+     #2 H6   score=+231,056 own=普通 opp=活三
+     #3 E9   score=+229,144 own=普通 opp=活三
+     #4 F5   score=+229,023 own=普通 opp=活三
+     #5 I5   score=+194,429 own=普通 opp=活三
+ 26. 白 O  H6   actor=ScoringAI think=0.490s eval=+1,000->+100,100 delta=+99,100
+     reason=综合棋型评分最高; candidates=83
+     #1 H6   score=+201,492 own=活三 opp=普通
+     #2 E9   score=+199,295 own=活三 opp=普通
+     #3 I5   score=+169,080 own=活三 opp=普通
+     #4 D10  score=+169,060 own=活三 opp=普通
+     #5 E10  score=+12,378 own=普通 opp=普通
+ 27. 黑 X  E9   actor=ScoringAI think=0.148s eval=+100,100->+10,000 delta=-90,100
+     reason=抢占对手活四关键点; candidates=83
+     #1 E9   score=+67,735,295 own=普通 opp=活四
+     #2 I5   score=+67,735,080 own=普通 opp=活四
+ 28. 白 O  I5   actor=ScoringAI think=0.467s eval=+10,000->+1,000,000 delta=+990,000
+     reason=综合棋型评分最高; candidates=83
+     #1 I5   score=+1,990,080 own=冲四 opp=普通
+     #2 J4   score=+1,990,060 own=冲四 opp=普通
+     #3 H5   score=+21,367 own=普通 opp=普通
+     #4 D9   score=+13,500 own=普通 opp=普通
+     #5 E10  score=+12,493 own=普通 opp=普通
+ 29. 黑 X  J4   actor=ScoringAI think=0.012s eval=+1,000,000->+0 delta=-1,000,000
+     reason=封堵唯一胜点; candidates=197
+     #1 J4   score=+228,850,059 own=普通 opp=普通
+ 30. 白 O  H5   actor=ScoringAI think=0.570s eval=+0->+11,000 delta=+11,000
+     reason=综合棋型评分最高; candidates=96
+     #1 H5   score=+22,367 own=普通 opp=普通
+     #2 D9   score=+13,500 own=普通 opp=普通
+     #3 J6   score=+13,388 own=普通 opp=普通
+     #4 E10  score=+12,493 own=普通 opp=普通
+     #5 C6   score=+11,662 own=普通 opp=普通
+ 31. 黑 X  H4   actor=ScoringAI think=0.647s eval=+11,000->+200 delta=-10,800
+     reason=综合棋型评分最高; candidates=96
+     #1 H4   score=+2,290,518 own=普通 opp=冲四
+     #2 H3   score=+2,288,435 own=普通 opp=冲四
+     #3 G5   score=+229,944 own=普通 opp=活三
+     #4 J5   score=+229,923 own=普通 opp=活三
+     #5 F5   score=+205,908 own=普通 opp=活三
+ 32. 白 O  G5   actor=ScoringAI think=0.588s eval=+200->+99,300 delta=+99,100
+     reason=综合棋型评分最高; candidates=97
+     #1 G5   score=+394,795 own=活三 opp=活三
+     #2 I4   score=+230,245 own=普通 opp=活三
+     #3 G4   score=+203,545 own=普通 opp=活三
+     #4 J5   score=+200,224 own=活三 opp=普通
+     #5 F6   score=+195,898 own=普通 opp=活三
+ 33. 黑 X  F5   actor=ScoringAI think=0.163s eval=+99,300->+9,100 delta=-90,200
+     reason=抢占对手活四关键点; candidates=97
+     #1 F5   score=+67,746,559 own=普通 opp=活四
+     #2 J5   score=+67,736,074 own=普通 opp=活四
+ 34. 白 O  K5   actor=ScoringAI think=0.492s eval=+9,100->+999,200 delta=+990,100
+     reason=综合棋型评分最高; candidates=97
+     #1 K5   score=+2,000,299 own=冲四 opp=普通
+     #2 J5   score=+1,991,224 own=冲四 opp=普通
+     #3 I4   score=+230,245 own=普通 opp=活三
+     #4 G4   score=+195,860 own=普通 opp=活三
+     #5 K4   score=+194,629 own=普通 opp=活三
+ 35. 黑 X  J5   actor=ScoringAI think=0.012s eval=+999,200->-1,800 delta=-1,001,000
+     reason=封堵唯一胜点; candidates=191
+     #1 J5   score=+228,851,073 own=普通 opp=普通
+ 36. 白 O  I4   actor=ScoringAI think=0.499s eval=-1,800->+100 delta=+1,900
+     reason=综合棋型评分最高; candidates=101
+     #1 I4   score=+231,395 own=普通 opp=活三
+     #2 J6   score=+229,133 own=普通 opp=活三
+     #3 J3   score=+228,891 own=普通 opp=活三
+     #4 K4   score=+196,779 own=普通 opp=活三
+     #5 G4   score=+195,860 own=普通 opp=活三
+ 37. 黑 X  I3   actor=ScoringAI think=0.460s eval=+100->-900 delta=-1,000
+     reason=综合棋型评分最高; candidates=100
+     #1 I3   score=+228,897 own=普通 opp=活三
+     #2 J3   score=+210,427 own=活三 opp=普通
+     #3 J6   score=+199,314 own=活三 opp=普通
+     #4 I2   score=+194,375 own=普通 opp=活三
+     #5 J7   score=+170,110 own=活三 opp=普通
+ 38. 白 O  J3   actor=ScoringAI think=0.483s eval=-900->+9,900 delta=+10,800
+     reason=综合棋型评分最高; candidates=104
+     #1 J3   score=+239,941 own=普通 opp=活三
+     #2 J6   score=+229,133 own=普通 opp=活三
+     #3 J7   score=+195,354 own=普通 opp=活三
+     #4 J2   score=+194,369 own=普通 opp=活三
+     #5 D9   score=+13,500 own=普通 opp=普通
+ 39. 黑 X  K2   actor=ScoringAI think=0.481s eval=+9,900->-100 delta=-10,000
+     reason=综合棋型评分最高; candidates=104
+     #1 K2   score=+2,288,510 own=普通 opp=冲四
+     #2 L1   score=+2,288,500 own=普通 opp=冲四
+     #3 C6   score=+13,146 own=普通 opp=普通
+     #4 J9   score=+12,575 own=普通 opp=普通
+     #5 F4   score=+12,445 own=普通 opp=普通
+ 40. 白 O  D9   actor=ScoringAI think=0.467s eval=-100->+900 delta=+1,000
+     reason=综合棋型评分最高; candidates=105
+     #1 D9   score=+13,500 own=普通 opp=普通
+     #2 E10  score=+12,493 own=普通 opp=普通
+     #3 F6   score=+11,899 own=普通 opp=普通
+     #4 J6   score=+11,669 own=普通 opp=普通
+     #5 C6   score=+11,662 own=普通 opp=普通
+ 41. 黑 X  D8   actor=ScoringAI think=0.518s eval=+900->-1,900 delta=-2,800
+     reason=综合棋型评分最高; candidates=105
+     #1 D8   score=+231,147 own=普通 opp=活三
+     #2 D6   score=+195,889 own=普通 opp=活三
+     #3 D10  score=+194,739 own=普通 opp=活三
+     #4 C6   score=+13,146 own=普通 opp=普通
+     #5 J9   score=+12,575 own=普通 opp=普通
+ 42. 白 O  C7   actor=ScoringAI think=0.486s eval=-1,900->-1,000 delta=+900
+     reason=综合棋型评分最高; candidates=104
+     #1 C7   score=+230,047 own=普通 opp=活三
+     #2 C9   score=+230,047 own=普通 opp=活三
+     #3 F10  score=+229,148 own=普通 opp=活三
+     #4 G11  score=+195,429 own=普通 opp=活三
+     #5 B6   score=+194,369 own=普通 opp=活三
+ 43. 黑 X  C9   actor=ScoringAI think=0.472s eval=-1,000->-100,100 delta=-99,100
+     reason=综合棋型评分最高; candidates=104
+     #1 C9   score=+199,148 own=活三 opp=普通
+     #2 B10  score=+169,020 own=活三 opp=普通
+     #3 F6   score=+19,314 own=普通 opp=普通
+     #4 J9   score=+12,575 own=普通 opp=普通
+     #5 C6   score=+12,461 own=普通 opp=普通
+ 44. 白 O  B10  actor=ScoringAI think=0.145s eval=-100,100->-100 delta=+100,000
+     reason=抢占对手活四关键点; candidates=104
+     #1 B10  score=+67,735,020 own=普通 opp=活四
+ 45. 黑 X  C10  actor=ScoringAI think=0.531s eval=-100->-10,100 delta=-10,000
+     reason=综合棋型评分最高; candidates=107
+     #1 C10  score=+22,477 own=普通 opp=普通
+     #2 J9   score=+12,575 own=普通 opp=普通
+     #3 C6   score=+12,461 own=普通 opp=普通
+     #4 F4   score=+12,445 own=普通 opp=普通
+     #5 H13  score=+11,435 own=普通 opp=普通
+ 46. 白 O  C11  actor=ScoringAI think=0.493s eval=-10,100->+900 delta=+11,000
+     reason=综合棋型评分最高; candidates=107
+     #1 C11  score=+2,289,532 own=普通 opp=冲四
+     #2 C12  score=+2,288,403 own=普通 opp=冲四
+     #3 F6   score=+11,784 own=普通 opp=普通
+     #4 F10  score=+11,684 own=普通 opp=普通
+     #5 E10  score=+11,674 own=普通 opp=普通
+ 47. 黑 X  D12  actor=ScoringAI think=0.513s eval=+900->-100 delta=-1,000
+     reason=综合棋型评分最高; candidates=111
+     #1 D12  score=+228,885 own=普通 opp=活三
+     #2 E13  score=+194,381 own=普通 opp=活三
+     #3 J9   score=+12,575 own=普通 opp=普通
+     #4 C6   score=+12,461 own=普通 opp=普通
+     #5 F4   score=+12,445 own=普通 opp=普通
+ 48. 白 O  D11  actor=ScoringAI think=0.529s eval=-100->+1,000 delta=+1,100
+     reason=综合棋型评分最高; candidates=116
+     #1 D11  score=+12,435 own=普通 opp=普通
+     #2 F6   score=+11,784 own=普通 opp=普通
+     #3 E10  score=+11,674 own=普通 opp=普通
+     #4 J6   score=+11,669 own=普通 opp=普通
+     #5 F10  score=+11,584 own=普通 opp=普通
+ 49. 黑 X  E11  actor=ScoringAI think=0.511s eval=+1,000->-1,800 delta=-2,800
+     reason=综合棋型评分最高; candidates=115
+     #1 E11  score=+230,713 own=普通 opp=活三
+     #2 B11  score=+230,009 own=普通 opp=活三
+     #3 F11  score=+194,423 own=普通 opp=活三
+     #4 J9   score=+12,575 own=普通 opp=普通
+     #5 C6   score=+12,461 own=普通 opp=普通
+ 50. 白 O  D10  actor=ScoringAI think=0.503s eval=-1,800->-1,000 delta=+800
+     reason=综合棋型评分最高; candidates=114
+     #1 D10  score=+229,254 own=普通 opp=活三
+     #2 C13  score=+228,849 own=普通 opp=活三
+     #3 B8   score=+196,407 own=普通 opp=活三
+     #4 F12  score=+196,359 own=普通 opp=活三
+     #5 B14  score=+194,349 own=普通 opp=活三
+ 51. 黑 X  C13  actor=ScoringAI think=0.509s eval=-1,000->-100,000 delta=-99,000
+     reason=综合棋型评分最高; candidates=113
+     #1 C13  score=+199,000 own=活三 opp=普通
+     #2 B14  score=+169,000 own=活三 opp=普通
+     #3 F10  score=+19,084 own=普通 opp=普通
+     #4 J9   score=+12,575 own=普通 opp=普通
+     #5 C6   score=+12,461 own=普通 opp=普通
+ 52. 白 O  B14  actor=ScoringAI think=0.134s eval=-100,000->+0 delta=+100,000
+     reason=抢占对手活四关键点; candidates=118
+     #1 B14  score=+67,735,000 own=普通 opp=活四
+ 53. 黑 X  J9   actor=ScoringAI think=0.510s eval=+0->-1,200 delta=-1,200
+     reason=综合棋型评分最高; candidates=117
+     #1 J9   score=+12,575 own=普通 opp=普通
+     #2 C6   score=+12,461 own=普通 opp=普通
+     #3 F4   score=+12,445 own=普通 opp=普通
+     #4 H13  score=+11,435 own=普通 opp=普通
+     #5 F6   score=+10,314 own=普通 opp=普通
+ 54. 白 O  H11  actor=ScoringAI think=0.524s eval=-1,200->+800 delta=+2,000
+     reason=综合棋型评分最高; candidates=116
+     #1 H11  score=+230,031 own=普通 opp=活三
+     #2 K8   score=+229,851 own=普通 opp=活三
+     #3 L7   score=+194,415 own=普通 opp=活三
+     #4 G12  score=+194,415 own=普通 opp=活三
+     #5 I9   score=+12,696 own=普通 opp=普通
+ 55. 黑 X  J13  actor=ScoringAI think=0.516s eval=+800->-200 delta=-1,000
+     reason=综合棋型评分最高; candidates=115
+     #1 J13  score=+228,891 own=普通 opp=活三
+     #2 K14  score=+194,359 own=普通 opp=活三
+     #3 H13  score=+20,520 own=普通 opp=普通
+     #4 C6   score=+12,461 own=普通 opp=普通
+     #5 F4   score=+12,445 own=普通 opp=普通
+ 56. 白 O  H13  actor=ScoringAI think=0.527s eval=-200->+17,600 delta=+17,800
+     reason=综合棋型评分最高; candidates=119
+     #1 H13  score=+18,770 own=普通 opp=普通
+     #2 I9   score=+12,696 own=普通 opp=普通
+     #3 K13  score=+12,566 own=普通 opp=普通
+     #4 K8   score=+12,386 own=普通 opp=普通
+     #5 L11  score=+12,354 own=普通 opp=普通
+ 57. 黑 X  H14  actor=ScoringAI think=0.549s eval=+17,600->+8,800 delta=-8,800
+     reason=综合棋型评分最高; candidates=120
+     #1 H14  score=+2,291,628 own=普通 opp=冲四
+     #2 H12  score=+2,290,983 own=普通 opp=冲四
+     #3 G14  score=+2,288,526 own=普通 opp=冲四
+     #4 F15  score=+2,288,500 own=普通 opp=冲四
+     #5 C6   score=+12,461 own=普通 opp=普通
+ 58. 白 O  G14  actor=ScoringAI think=0.507s eval=+8,800->+998,800 delta=+990,000
+     reason=综合棋型评分最高; candidates=119
+     #1 G14  score=+1,991,176 own=冲四 opp=普通
+     #2 F15  score=+1,990,000 own=冲四 opp=普通
+     #3 I13  score=+229,342 own=普通 opp=活三
+     #4 K11  score=+196,893 own=普通 opp=活三
+     #5 I9   score=+12,696 own=普通 opp=普通
+ 59. 黑 X  F15  actor=ScoringAI think=0.027s eval=+998,800->-1,200 delta=-1,000,000
+     reason=封堵唯一胜点; candidates=167
+     #1 F15  score=+228,849,999 own=普通 opp=普通
+ 60. 白 O  I13  actor=ScoringAI think=0.480s eval=-1,200->-300 delta=+900
+     reason=综合棋型评分最高; candidates=117
+     #1 I13  score=+229,342 own=普通 opp=活三
+     #2 K11  score=+196,893 own=普通 opp=活三
+     #3 I9   score=+12,696 own=普通 opp=普通
+     #4 K13  score=+12,566 own=普通 opp=普通
+     #5 K8   score=+12,386 own=普通 opp=普通
+ 61. 黑 X  G13  actor=ScoringAI think=0.519s eval=-300->-1,400 delta=-1,100
+     reason=综合棋型评分最高; candidates=116
+     #1 G13  score=+13,582 own=普通 opp=普通
+     #2 C6   score=+12,461 own=普通 opp=普通
+     #3 F4   score=+12,445 own=普通 opp=普通
+     #4 I9   score=+11,361 own=普通 opp=普通
+     #5 E12  score=+11,250 own=普通 opp=普通
+ 62. 白 O  F12  actor=ScoringAI think=0.491s eval=-1,400->+400 delta=+1,800
+     reason=综合棋型评分最高; candidates=115
+     #1 F12  score=+2,300,630 own=普通 opp=冲四
+     #2 I15  score=+2,298,850 own=普通 opp=冲四
+     #3 I9   score=+12,696 own=普通 opp=普通
+     #4 H12  score=+12,553 own=普通 opp=普通
+     #5 K8   score=+12,386 own=普通 opp=普通
+ 63. 黑 X  G11  actor=ScoringAI think=0.485s eval=+400->-8,300 delta=-8,700
+     reason=综合棋型评分最高; candidates=114
+     #1 G11  score=+237,979 own=普通 opp=活三
+     #2 I9   score=+204,790 own=普通 opp=活三
+     #3 E13  score=+196,211 own=普通 opp=活三
+     #4 H12  score=+20,318 own=普通 opp=普通
+     #5 C6   score=+12,461 own=普通 opp=普通
+ 64. 白 O  H12  actor=ScoringAI think=0.461s eval=-8,300->+7,700 delta=+16,000
+     reason=综合棋型评分最高; candidates=113
+     #1 H12  score=+2,310,368 own=普通 opp=冲四
+     #2 F10  score=+2,290,884 own=普通 opp=冲四
+     #3 K8   score=+12,386 own=普通 opp=普通
+     #4 L11  score=+12,354 own=普通 opp=普通
+     #5 I9   score=+11,796 own=普通 opp=普通
+ 65. 黑 X  E12  actor=ScoringAI think=0.469s eval=+7,700->-1,400 delta=-9,100
+     reason=综合棋型评分最高; candidates=112
+     #1 E12  score=+2,301,150 own=普通 opp=冲四
+     #2 G12  score=+2,292,131 own=普通 opp=冲四
+     #3 C6   score=+12,461 own=普通 opp=普通
+     #4 F4   score=+12,445 own=普通 opp=普通
+     #5 K8   score=+10,782 own=普通 opp=普通
+ 66. 白 O  E13  actor=ScoringAI think=0.452s eval=-1,400->-400 delta=+1,000
+     reason=综合棋型评分最高; candidates=111
+     #1 E13  score=+2,299,802 own=普通 opp=冲四
+     #2 E10  score=+2,299,024 own=普通 opp=冲四
+     #3 E14  score=+194,474 own=普通 opp=活三
+     #4 C12  score=+12,403 own=普通 opp=普通
+     #5 K8   score=+12,386 own=普通 opp=普通
+ 67. 黑 X  C6   actor=ScoringAI think=0.436s eval=-400->-500 delta=-100
+     reason=综合棋型评分最高; candidates=110
+     #1 C6   score=+12,461 own=普通 opp=普通
+     #2 F4   score=+12,445 own=普通 opp=普通
+     #3 C12  score=+11,068 own=普通 opp=普通
+     #4 K8   score=+10,782 own=普通 opp=普通
+     #5 L11  score=+10,750 own=普通 opp=普通
+ 68. 白 O  C12  actor=ScoringAI think=0.453s eval=-500->+600 delta=+1,100
+     reason=综合棋型评分最高; candidates=111
+     #1 C12  score=+12,403 own=普通 opp=普通
+     #2 K8   score=+12,386 own=普通 opp=普通
+     #3 E4   score=+12,354 own=普通 opp=普通
+     #4 L11  score=+12,354 own=普通 opp=普通
+     #5 I9   score=+11,796 own=普通 opp=普通
+ 69. 黑 X  B13  actor=ScoringAI think=0.450s eval=+600->-1,400 delta=-2,000
+     reason=综合棋型评分最高; candidates=110
+     #1 B13  score=+115,999 own=普通 opp=普通
+     #2 F4   score=+12,445 own=普通 opp=普通
+     #3 K8   score=+10,782 own=普通 opp=普通
+     #4 E4   score=+10,750 own=普通 opp=普通
+     #5 L11  score=+10,750 own=普通 opp=普通
+ 70. 白 O  K8   actor=ScoringAI think=0.437s eval=-1,400->-1,300 delta=+100
+     reason=综合棋型评分最高; candidates=109
+     #1 K8   score=+12,386 own=普通 opp=普通
+     #2 E4   score=+12,354 own=普通 opp=普通
+     #3 L11  score=+12,354 own=普通 opp=普通
+     #4 I9   score=+11,796 own=普通 opp=普通
+     #5 F6   score=+11,684 own=普通 opp=普通
+ 71. 黑 X  J7   actor=ScoringAI think=0.454s eval=-1,300->-9,300 delta=-8,000
+     reason=综合棋型评分最高; candidates=108
+     #1 J7   score=+203,704 own=普通 opp=活三
+     #2 I6   score=+195,804 own=普通 opp=活三
+     #3 K6   score=+195,673 own=普通 opp=活三
+     #4 K7   score=+195,579 own=普通 opp=活三
+     #5 F4   score=+12,445 own=普通 opp=普通
+ 72. 白 O  J8   actor=ScoringAI think=0.431s eval=-9,300->+8,700 delta=+18,000
+     reason=综合棋型评分最高; candidates=107
+     #1 J8   score=+2,301,007 own=普通 opp=冲四
+     #2 J6   score=+2,291,084 own=普通 opp=冲四
+     #3 K7   score=+181,465 own=活三 opp=普通
+     #4 K6   score=+170,304 own=活三 opp=普通
+     #5 E4   score=+12,354 own=普通 opp=普通
+ 73. 黑 X  L8   actor=ScoringAI think=0.415s eval=+8,700->-1,300 delta=-10,000
+     reason=综合棋型评分最高; candidates=106
+     #1 L8   score=+2,288,568 own=普通 opp=冲四
+     #2 M8   score=+2,288,550 own=普通 opp=冲四
+     #3 K7   score=+206,629 own=普通 opp=活三
+     #4 K6   score=+195,773 own=普通 opp=活三
+     #5 I9   score=+21,711 own=普通 opp=普通
+ 74. 白 O  K7   actor=ScoringAI think=0.459s eval=-1,300->+69,800 delta=+71,100
+     reason=综合棋型评分最高; candidates=110
+     #1 K7   score=+183,615 own=活三 opp=普通
+     #2 K6   score=+170,304 own=活三 opp=普通
+     #3 I9   score=+21,696 own=普通 opp=普通
+     #4 E4   score=+12,354 own=普通 opp=普通
+     #5 L11  score=+12,354 own=普通 opp=普通
+ 75. 黑 X  K6   actor=ScoringAI think=0.113s eval=+69,800->-400 delta=-70,200
+     reason=抢占对手活四关键点; candidates=109
+     #1 K6   score=+67,769,774 own=普通 opp=活四
+ 76. 白 O  I9   actor=ScoringAI think=0.455s eval=-400->+998,700 delta=+999,100
+     reason=综合棋型评分最高; candidates=108
+     #1 I9   score=+2,010,696 own=冲四 opp=普通
+     #2 L6   score=+2,001,230 own=冲四 opp=普通
+     #3 M5   score=+169,032 own=活三 opp=普通
+     #4 L7   score=+12,800 own=普通 opp=普通
+     #5 E4   score=+12,354 own=普通 opp=普通
+ 77. 黑 X  L6   actor=ScoringAI think=0.008s eval=+998,700->-3,100 delta=-1,001,800
+     reason=封堵唯一胜点; candidates=149
+     #1 L6   score=+228,851,974 own=普通 opp=普通
+ 78. 白 O  L7   actor=ScoringAI think=0.443s eval=-3,100->-2,000 delta=+1,100
+     reason=综合棋型评分最高; candidates=108
+     #1 L7   score=+240,730 own=普通 opp=活三
+     #2 J6   score=+229,033 own=普通 opp=活三
+     #3 M6   score=+228,891 own=普通 opp=活三
+     #4 L5   score=+206,914 own=普通 opp=活三
+     #5 N6   score=+195,289 own=普通 opp=活三
+ 79. 黑 X  M6   actor=ScoringAI think=0.400s eval=-2,000->-101,100 delta=-99,100
+     reason=综合棋型评分最高; candidates=107
+     #1 M6   score=+210,427 own=活三 opp=普通
+     #2 J6   score=+199,199 own=活三 opp=普通
+     #3 N6   score=+169,820 own=活三 opp=普通
+     #4 K11  score=+12,664 own=普通 opp=普通
+     #5 F4   score=+12,445 own=普通 opp=普通
+ 80. 白 O  N6   actor=ScoringAI think=0.119s eval=-101,100->-11,100 delta=+90,000
+     reason=抢占对手活四关键点; candidates=111
+     #1 N6   score=+67,735,940 own=普通 opp=活四
+     #2 J6   score=+67,735,184 own=普通 opp=活四
+ 81. 黑 X  I6   actor=ScoringAI think=0.443s eval=-11,100->-1,001,200 delta=-990,100
+     reason=综合棋型评分最高; candidates=110
+     #1 I6   score=+1,990,305 own=冲四 opp=普通
+     #2 J6   score=+1,990,199 own=冲四 opp=普通
+     #3 K11  score=+12,664 own=普通 opp=普通
+     #4 F4   score=+12,445 own=普通 opp=普通
+     #5 M7   score=+12,433 own=普通 opp=普通
+ 82. 白 O  J6   actor=ScoringAI think=0.009s eval=-1,001,200->-1,100 delta=+1,000,100
+     reason=封堵唯一胜点; candidates=144
+     #1 J6   score=+228,850,183 own=普通 opp=普通
+ 83. 黑 X  K11  actor=ScoringAI think=0.427s eval=-1,100->-2,300 delta=-1,200
+     reason=综合棋型评分最高; candidates=108
+     #1 K11  score=+12,664 own=普通 opp=普通
+     #2 F4   score=+12,445 own=普通 opp=普通
+     #3 M7   score=+12,433 own=普通 opp=普通
+     #4 L4   score=+12,340 own=普通 opp=普通
+     #5 N7   score=+11,261 own=普通 opp=普通
+ 84. 白 O  K12  actor=ScoringAI think=0.423s eval=-2,300->-1,200 delta=+1,100
+     reason=综合棋型评分最高; candidates=108
+     #1 K12  score=+230,264 own=普通 opp=活三
+     #2 K13  score=+205,881 own=普通 opp=活三
+     #3 L5   score=+12,799 own=普通 opp=普通
+     #4 K4   score=+12,550 own=普通 opp=普通
+     #5 L11  score=+12,469 own=普通 opp=普通
+ 85. 黑 X  F4   actor=ScoringAI think=0.399s eval=-1,200->-2,300 delta=-1,100
+     reason=综合棋型评分最高; candidates=108
+     #1 F4   score=+12,445 own=普通 opp=普通
+     #2 M7   score=+12,433 own=普通 opp=普通
+     #3 L4   score=+12,340 own=普通 opp=普通
+     #4 L13  score=+11,403 own=普通 opp=普通
+     #5 N7   score=+11,261 own=普通 opp=普通
+ 86. 白 O  F6   actor=ScoringAI think=0.431s eval=-2,300->-1,300 delta=+1,000
+     reason=综合棋型评分最高; candidates=109
+     #1 F6   score=+2,299,034 own=普通 opp=冲四
+     #2 F3   score=+2,298,892 own=普通 opp=冲四
+     #3 F2   score=+194,369 own=普通 opp=活三
+     #4 E4   score=+13,504 own=普通 opp=普通
+     #5 L5   score=+12,799 own=普通 opp=普通
+ 87. 黑 X  E5   actor=ScoringAI think=0.396s eval=-1,300->-2,500 delta=-1,200
+     reason=综合棋型评分最高; candidates=108
+     #1 E5   score=+12,664 own=普通 opp=普通
+     #2 M7   score=+12,433 own=普通 opp=普通
+     #3 L4   score=+12,340 own=普通 opp=普通
+     #4 E4   score=+11,750 own=普通 opp=普通
+     #5 L13  score=+11,403 own=普通 opp=普通
+ 88. 白 O  G3   actor=ScoringAI think=0.402s eval=-2,500->-1,500 delta=+1,000
+     reason=综合棋型评分最高; candidates=108
+     #1 G3   score=+228,897 own=普通 opp=活三
+     #2 H2   score=+194,377 own=普通 opp=活三
+     #3 E4   score=+13,619 own=普通 opp=普通
+     #4 L5   score=+12,799 own=普通 opp=普通
+     #5 D5   score=+12,684 own=普通 opp=普通
+ 89. 黑 X  G4   actor=ScoringAI think=0.417s eval=-1,500->-11,600 delta=-10,100
+     reason=综合棋型评分最高; candidates=109
+     #1 G4   score=+21,781 own=普通 opp=普通
+     #2 M7   score=+12,433 own=普通 opp=普通
+     #3 L4   score=+12,340 own=普通 opp=普通
+     #4 E4   score=+11,850 own=普通 opp=普通
+     #5 L13  score=+11,403 own=普通 opp=普通
+ 90. 白 O  E4   actor=ScoringAI think=0.400s eval=-11,600->-1,500 delta=+10,100
+     reason=综合棋型评分最高; candidates=108
+     #1 E4   score=+2,300,970 own=普通 opp=冲四
+     #2 D4   score=+2,288,651 own=普通 opp=冲四
+     #3 L5   score=+12,799 own=普通 opp=普通
+     #4 D5   score=+12,684 own=普通 opp=普通
+     #5 K4   score=+12,550 own=普通 opp=普通
+ 91. 黑 X  M7   actor=ScoringAI think=0.406s eval=-1,500->-2,600 delta=-1,100
+     reason=综合棋型评分最高; candidates=108
+     #1 M7   score=+12,433 own=普通 opp=普通
+     #2 L4   score=+12,340 own=普通 opp=普通
+     #3 F3   score=+12,242 own=普通 opp=普通
+     #4 L13  score=+11,403 own=普通 opp=普通
+     #5 N7   score=+11,261 own=普通 opp=普通
+ 92. 白 O  M5   actor=ScoringAI think=0.423s eval=-2,600->-700 delta=+1,900
+     reason=综合棋型评分最高; candidates=108
+     #1 M5   score=+229,881 own=普通 opp=活三
+     #2 M8   score=+228,899 own=普通 opp=活三
+     #3 M4   score=+204,372 own=普通 opp=活三
+     #4 M9   score=+203,482 own=普通 opp=活三
+     #5 F3   score=+13,427 own=普通 opp=普通
+ 93. 黑 X  L4   actor=ScoringAI think=0.395s eval=-700->-1,800 delta=-1,100
+     reason=综合棋型评分最高; candidates=109
+     #1 L4   score=+240,270 own=普通 opp=活三
+     #2 K3   score=+195,496 own=普通 opp=活三
+     #3 L5   score=+22,550 own=普通 opp=普通
+     #4 M9   score=+15,848 own=普通 opp=普通
+     #5 F3   score=+12,242 own=普通 opp=普通
+ 94. 白 O  L5   actor=ScoringAI think=0.411s eval=-1,800->+8,300 delta=+10,100
+     reason=综合棋型评分最高; candidates=109
+     #1 L5   score=+34,085 own=普通 opp=普通
+     #2 K4   score=+23,935 own=普通 opp=普通
+     #3 M9   score=+18,218 own=普通 opp=普通
+     #4 F3   score=+13,427 own=普通 opp=普通
+     #5 L11  score=+11,650 own=普通 opp=普通
+ 95. 黑 X  N5   actor=ScoringAI think=0.400s eval=+8,300->-1,700 delta=-10,000
+     reason=综合棋型评分最高; candidates=108
+     #1 N5   score=+2,289,660 own=普通 opp=冲四
+     #2 O5   score=+2,288,500 own=普通 opp=冲四
+     #3 K4   score=+31,450 own=普通 opp=普通
+     #4 M9   score=+15,848 own=普通 opp=普通
+     #5 F3   score=+12,242 own=普通 opp=普通
+ 96. 白 O  L3   actor=ScoringAI think=0.393s eval=-1,700->-1,600 delta=+100
+     reason=综合棋型评分最高; candidates=107
+     #1 L3   score=+204,602 own=普通 opp=活三
+     #2 M4   score=+196,767 own=普通 opp=活三
+     #3 K4   score=+32,935 own=普通 opp=普通
+     #4 M9   score=+18,218 own=普通 opp=普通
+     #5 F3   score=+13,427 own=普通 opp=普通
+ 97. 黑 X  K4   actor=ScoringAI think=0.407s eval=-1,600->-11,600 delta=-10,000
+     reason=综合棋型评分最高; candidates=107
+     #1 K4   score=+21,550 own=普通 opp=普通
+     #2 M9   score=+15,848 own=普通 opp=普通
+     #3 K3   score=+12,532 own=普通 opp=普通
+     #4 F3   score=+12,242 own=普通 opp=普通
+     #5 L13  score=+11,403 own=普通 opp=普通
+ 98. 白 O  M4   actor=ScoringAI think=0.378s eval=-11,600->-1,500 delta=+10,100
+     reason=综合棋型评分最高; candidates=106
+     #1 M4   score=+2,288,618 own=普通 opp=冲四
+     #2 N4   score=+2,288,615 own=普通 opp=冲四
+     #3 M9   score=+18,218 own=普通 opp=普通
+     #4 F3   score=+13,427 own=普通 opp=普通
+     #5 L11  score=+11,650 own=普通 opp=普通
+ 99. 黑 X  M9   actor=ScoringAI think=0.406s eval=-1,500->-17,300 delta=-15,800
+     reason=综合棋型评分最高; candidates=106
+     #1 M9   score=+15,848 own=普通 opp=普通
+     #2 M3   score=+12,534 own=普通 opp=普通
+     #3 F3   score=+12,242 own=普通 opp=普通
+     #4 K3   score=+11,532 own=普通 opp=普通
+     #5 L13  score=+11,403 own=普通 opp=普通
+100. 白 O  L10  actor=ScoringAI think=0.381s eval=-17,300->-9,300 delta=+8,000
+     reason=综合棋型评分最高; candidates=108
+     #1 L10  score=+2,290,975 own=普通 opp=冲四
+     #2 M8   score=+2,290,850 own=普通 opp=冲四
+     #3 M10  score=+2,290,842 own=普通 opp=冲四
+     #4 N8   score=+2,290,828 own=普通 opp=冲四
+     #5 F3   score=+13,427 own=普通 opp=普通
+101. 黑 X  M8   actor=ScoringAI think=0.405s eval=-9,300->-1,001,300 delta=-992,000
+     reason=综合棋型评分最高; candidates=108
+     #1 M8   score=+1,992,050 own=冲四 opp=普通
+     #2 M10  score=+1,992,042 own=冲四 opp=普通
+     #3 K9   score=+19,580 own=普通 opp=普通
+     #4 M3   score=+12,534 own=普通 opp=普通
+     #5 F3   score=+12,242 own=普通 opp=普通
+102. 白 O  M10  actor=ScoringAI think=0.010s eval=-1,001,300->-1,300 delta=+1,000,000
+     reason=封堵唯一胜点; candidates=124
+     #1 M10  score=+228,850,041 own=普通 opp=普通
+103. 黑 X  L11  actor=ScoringAI think=0.392s eval=-1,300->-11,300 delta=-10,000
+     reason=综合棋型评分最高; candidates=107
+     #1 L11  score=+22,700 own=普通 opp=普通
+     #2 L9   score=+22,681 own=普通 opp=普通
+     #3 K9   score=+19,580 own=普通 opp=普通
+     #4 M3   score=+12,534 own=普通 opp=普通
+     #5 F3   score=+12,242 own=普通 opp=普通
+104. 白 O  M12  actor=ScoringAI think=0.378s eval=-11,300->-1,300 delta=+10,000
+     reason=综合棋型评分最高; candidates=107
+     #1 M12  score=+2,288,518 own=普通 opp=冲四
+     #2 N13  score=+2,288,500 own=普通 opp=冲四
+     #3 L9   score=+22,716 own=普通 opp=普通
+     #4 K9   score=+19,280 own=普通 opp=普通
+     #5 F3   score=+13,427 own=普通 opp=普通
+105. 黑 X  M11  actor=ScoringAI think=0.383s eval=-1,300->-11,200 delta=-9,900
+     reason=综合棋型评分最高; candidates=109
+     #1 M11  score=+22,582 own=普通 opp=普通
+     #2 L9   score=+22,566 own=普通 opp=普通
+     #3 K9   score=+19,580 own=普通 opp=普通
+     #4 L13  score=+12,552 own=普通 opp=普通
+     #5 M3   score=+12,534 own=普通 opp=普通
+106. 白 O  N11  actor=ScoringAI think=0.387s eval=-11,200->+800 delta=+12,000
+     reason=综合棋型评分最高; candidates=108
+     #1 N11  score=+2,290,510 own=普通 opp=冲四
+     #2 O11  score=+2,288,500 own=普通 opp=冲四
+     #3 L9   score=+22,716 own=普通 opp=普通
+     #4 F3   score=+13,427 own=普通 opp=普通
+     #5 K13  score=+12,451 own=普通 opp=普通
+107. 黑 X  L9   actor=ScoringAI think=0.377s eval=+800->-11,200 delta=-12,000
+     reason=综合棋型评分最高; candidates=107
+     #1 L9   score=+2,309,916 own=普通 opp=冲四
+     #2 O12  score=+2,298,850 own=普通 opp=冲四
+     #3 L13  score=+240,252 own=普通 opp=活三
+     #4 K14  score=+194,359 own=普通 opp=活三
+     #5 L12  score=+12,736 own=普通 opp=普通
+108. 白 O  N9   actor=ScoringAI think=0.378s eval=-11,200->-9,400 delta=+1,800
+     reason=综合棋型评分最高; candidates=106
+     #1 N9   score=+2,299,676 own=普通 opp=冲四
+     #2 K9   score=+2,298,930 own=普通 opp=冲四
+     #3 N7   score=+2,288,626 own=普通 opp=冲四
+     #4 O6   score=+2,288,500 own=普通 opp=冲四
+     #5 L13  score=+208,918 own=活三 opp=普通
+109. 黑 X  N7   actor=ScoringAI think=0.364s eval=-9,400->-999,400 delta=-990,000
+     reason=综合棋型评分最高; candidates=105
+     #1 N7   score=+1,998,306 own=冲四 opp=普通
+     #2 O6   score=+1,990,000 own=冲四 opp=普通
+     #3 L13  score=+240,252 own=普通 opp=活三
+     #4 N10  score=+230,099 own=普通 opp=活三
+     #5 N12  score=+195,729 own=普通 opp=活三
+110. 白 O  O6   actor=ScoringAI think=0.009s eval=-999,400->+600 delta=+1,000,000
+     reason=封堵唯一胜点; candidates=116
+     #1 O6   score=+228,849,999 own=普通 opp=普通
+111. 黑 X  L13  actor=ScoringAI think=0.367s eval=+600->-500 delta=-1,100
+     reason=综合棋型评分最高; candidates=103
+     #1 L13  score=+240,252 own=普通 opp=活三
+     #2 N10  score=+230,099 own=普通 opp=活三
+     #3 N12  score=+195,729 own=普通 opp=活三
+     #4 K14  score=+194,359 own=普通 opp=活三
+     #5 L12  score=+12,736 own=普通 opp=普通
+112. 白 O  N10  actor=ScoringAI think=0.375s eval=-500->+98,700 delta=+99,200
+     reason=综合棋型评分最高; candidates=104
+     #1 N10  score=+200,370 own=活三 opp=普通
+     #2 N12  score=+170,200 own=活三 opp=普通
+     #3 K13  score=+23,836 own=普通 opp=普通
+     #4 L12  score=+22,801 own=普通 opp=普通
+     #5 F3   score=+13,427 own=普通 opp=普通
+113. 黑 X  N12  actor=ScoringAI think=0.079s eval=+98,700->-1,300 delta=-100,000
+     reason=抢占对手活四关键点; candidates=103
+     #1 N12  score=+67,736,150 own=普通 opp=活四
+114. 白 O  K13  actor=ScoringAI think=0.362s eval=-1,300->-1,200 delta=+100
+     reason=综合棋型评分最高; candidates=102
+     #1 K13  score=+22,917 own=普通 opp=普通
+     #2 F3   score=+13,427 own=普通 opp=普通
+     #3 L12  score=+11,766 own=普通 opp=普通
+     #4 D5   score=+11,635 own=普通 opp=普通
+     #5 H3   score=+11,535 own=普通 opp=普通
+115. 黑 X  M3   actor=ScoringAI think=0.349s eval=-1,200->-1,300 delta=-100
+     reason=综合棋型评分最高; candidates=101
+     #1 M3   score=+12,534 own=普通 opp=普通
+     #2 F3   score=+12,242 own=普通 opp=普通
+     #3 K3   score=+11,532 own=普通 opp=普通
+     #4 D5   score=+10,180 own=普通 opp=普通
+     #5 L12  score=+10,136 own=普通 opp=普通
+116. 白 O  F3   actor=ScoringAI think=0.354s eval=-1,300->+800 delta=+2,100
+     reason=综合棋型评分最高; candidates=101
+     #1 F3   score=+13,427 own=普通 opp=普通
+     #2 L12  score=+11,651 own=普通 opp=普通
+     #3 D5   score=+11,635 own=普通 opp=普通
+     #4 H3   score=+11,535 own=普通 opp=普通
+     #5 I2   score=+10,031 own=普通 opp=普通
+117. 黑 X  E3   actor=ScoringAI think=0.336s eval=+800->-200 delta=-1,000
+     reason=综合棋型评分最高; candidates=101
+     #1 E3   score=+228,881 own=普通 opp=活三
+     #2 D3   score=+194,367 own=普通 opp=活三
+     #3 G2   score=+113,875 own=普通 opp=普通
+     #4 D5   score=+20,415 own=普通 opp=普通
+     #5 H3   score=+20,300 own=普通 opp=普通
+118. 白 O  G2   actor=ScoringAI think=0.365s eval=-200->+98,800 delta=+99,000
+     reason=综合棋型评分最高; candidates=101
+     #1 G2   score=+99,026 own=普通 opp=普通
+     #2 D5   score=+20,535 own=普通 opp=普通
+     #3 L12  score=+11,651 own=普通 opp=普通
+     #4 H3   score=+11,435 own=普通 opp=普通
+     #5 C5   score=+10,152 own=普通 opp=普通
+119. 黑 X  D5   actor=ScoringAI think=0.322s eval=+98,800->-11,100 delta=-109,900
+     reason=综合棋型评分最高; candidates=100
+     #1 D5   score=+2,195,065 own=普通 opp=冲四
+     #2 H1   score=+2,185,002 own=普通 opp=冲四
+     #3 L12  score=+10,136 own=普通 opp=普通
+     #4 H3   score=+9,950 own=普通 opp=普通
+     #5 I2   score=+9,646 own=普通 opp=普通
+120. 白 O  C5   actor=ScoringAI think=0.346s eval=-11,100->-1,100 delta=+10,000
+     reason=综合棋型评分最高; candidates=100
+     #1 C5   score=+2,289,567 own=普通 opp=冲四
+     #2 B5   score=+2,288,510 own=普通 opp=冲四
+     #3 L12  score=+11,651 own=普通 opp=普通
+     #4 H3   score=+11,435 own=普通 opp=普通
+     #5 I2   score=+10,831 own=普通 opp=普通
+121. 黑 X  L12  actor=ScoringAI think=0.333s eval=-1,100->-11,200 delta=-10,100
+     reason=综合棋型评分最高; candidates=100
+     #1 L12  score=+10,136 own=普通 opp=普通
+     #2 H3   score=+9,950 own=普通 opp=普通
+     #3 I2   score=+9,646 own=普通 opp=普通
+     #4 G10  score=+8,090 own=普通 opp=普通
+     #5 F11  score=+3,144 own=普通 opp=普通
+122. 白 O  L14  actor=ScoringAI think=0.339s eval=-11,200->-1,200 delta=+10,000
+     reason=综合棋型评分最高; candidates=99
+     #1 L14  score=+2,289,420 own=普通 opp=冲四
+     #2 L15  score=+2,288,500 own=普通 opp=冲四
+     #3 M13  score=+12,534 own=普通 opp=普通
+     #4 H3   score=+11,435 own=普通 opp=普通
+     #5 I2   score=+10,831 own=普通 opp=普通
+123. 黑 X  H3   actor=ScoringAI think=0.328s eval=-1,200->-11,100 delta=-9,900
+     reason=综合棋型评分最高; candidates=98
+     #1 H3   score=+9,950 own=普通 opp=普通
+     #2 M13  score=+9,900 own=普通 opp=普通
+     #3 I2   score=+9,646 own=普通 opp=普通
+     #4 N14  score=+8,820 own=普通 opp=普通
+     #5 G10  score=+8,090 own=普通 opp=普通
+124. 白 O  I2   actor=ScoringAI think=0.394s eval=-11,100->-300 delta=+10,800
+     reason=综合棋型评分最高; candidates=97
+     #1 I2   score=+2,290,246 own=普通 opp=冲四
+     #2 J1   score=+2,288,500 own=普通 opp=冲四
+     #3 M13  score=+11,385 own=普通 opp=普通
+     #4 N14  score=+9,885 own=普通 opp=普通
+     #5 G10  score=+9,290 own=普通 opp=普通
+125. 黑 X  H2   actor=ScoringAI think=0.335s eval=-300->-1,100 delta=-800
+     reason=综合棋型评分最高; candidates=96
+     #1 H2   score=+229,107 own=普通 opp=活三
+     #2 F2   score=+195,599 own=普通 opp=活三
+     #3 M13  score=+9,900 own=普通 opp=普通
+     #4 N14  score=+8,820 own=普通 opp=普通
+     #5 J2   score=+8,400 own=普通 opp=普通
+126. 白 O  M13  actor=ScoringAI think=0.331s eval=-1,100->-1,000 delta=+100
+     reason=综合棋型评分最高; candidates=95
+     #1 M13  score=+11,385 own=普通 opp=普通
+     #2 N14  score=+9,885 own=普通 opp=普通
+     #3 G10  score=+9,290 own=普通 opp=普通
+     #4 F11  score=+3,024 own=普通 opp=普通
+     #5 L2   score=+2,300 own=普通 opp=普通
+127. 黑 X  G10  actor=ScoringAI think=0.341s eval=-1,000->-9,000 delta=-8,000
+     reason=综合棋型评分最高; candidates=95
+     #1 G10  score=+8,090 own=普通 opp=普通
+     #2 F11  score=+3,144 own=普通 opp=普通
+     #3 B11  score=+2,310 own=普通 opp=普通
+     #4 B6   score=+2,170 own=普通 opp=普通
+     #5 B8   score=+2,098 own=普通 opp=普通
+128. 白 O  F11  actor=ScoringAI think=0.324s eval=-9,000->+800 delta=+9,800
+     reason=综合棋型评分最高; candidates=94
+     #1 F11  score=+2,292,674 own=普通 opp=冲四
+     #2 D13  score=+2,290,668 own=普通 opp=冲四
+     #3 L2   score=+2,300 own=普通 opp=普通
+     #4 B6   score=+2,170 own=普通 opp=普通
+     #5 B11  score=+2,010 own=普通 opp=普通
+129. 黑 X  G12  actor=ScoringAI think=0.316s eval=+800->+0 delta=-800
+     reason=综合棋型评分最高; candidates=93
+     #1 G12  score=+2,299,261 own=普通 opp=冲四
+     #2 E10  score=+2,299,154 own=普通 opp=冲四
+     #3 I14  score=+194,605 own=普通 opp=活三
+     #4 F13  score=+113,891 own=普通 opp=普通
+     #5 F10  score=+10,434 own=普通 opp=普通
+130. 白 O  F13  actor=ScoringAI think=0.303s eval=+0->+99,000 delta=+99,000
+     reason=综合棋型评分最高; candidates=92
+     #1 F13  score=+99,042 own=普通 opp=普通
+     #2 F10  score=+9,084 own=普通 opp=普通
+     #3 L2   score=+2,300 own=普通 opp=普通
+     #4 B6   score=+2,170 own=普通 opp=普通
+     #5 B11  score=+2,010 own=普通 opp=普通
+131. 黑 X  F14  actor=ScoringAI think=0.313s eval=+99,000->-1,000 delta=-100,000
+     reason=综合棋型评分最高; candidates=91
+     #1 F14  score=+2,185,135 own=普通 opp=冲四
+     #2 F10  score=+2,185,084 own=普通 opp=冲四
+     #3 B11  score=+2,310 own=普通 opp=普通
+     #4 B6   score=+2,170 own=普通 opp=普通
+     #5 B8   score=+2,098 own=普通 opp=普通
+132. 白 O  L2   actor=ScoringAI think=0.304s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=90
+     #1 L2   score=+2,300 own=普通 opp=普通
+     #2 B6   score=+2,170 own=普通 opp=普通
+     #3 B11  score=+2,010 own=普通 opp=普通
+     #4 D14  score=+1,950 own=普通 opp=普通
+     #5 B8   score=+1,828 own=普通 opp=普通
+133. 黑 X  B11  actor=ScoringAI think=0.291s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=89
+     #1 B11  score=+2,310 own=普通 opp=普通
+     #2 B6   score=+2,170 own=普通 opp=普通
+     #3 B8   score=+2,098 own=普通 opp=普通
+     #4 D14  score=+1,920 own=普通 opp=普通
+     #5 D4   score=+1,251 own=普通 opp=普通
+134. 白 O  B6   actor=ScoringAI think=0.273s eval=-1,000->+0 delta=+1,000
+     reason=综合棋型评分最高; candidates=88
+     #1 B6   score=+2,170 own=普通 opp=普通
+     #2 D14  score=+1,950 own=普通 opp=普通
+     #3 D4   score=+1,401 own=普通 opp=普通
+     #4 F2   score=+1,270 own=普通 opp=普通
+     #5 G15  score=+1,150 own=普通 opp=普通
+135. 黑 X  B8   actor=ScoringAI think=0.283s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=87
+     #1 B8   score=+2,098 own=普通 opp=普通
+     #2 B4   score=+2,070 own=普通 opp=普通
+     #3 D14  score=+1,920 own=普通 opp=普通
+     #4 B7   score=+1,176 own=普通 opp=普通
+     #5 B5   score=+1,160 own=普通 opp=普通
+136. 白 O  D14  actor=ScoringAI think=0.268s eval=+0->+800 delta=+800
+     reason=综合棋型评分最高; candidates=86
+     #1 D14  score=+1,950 own=普通 opp=普通
+     #2 B4   score=+1,800 own=普通 opp=普通
+     #3 D4   score=+1,301 own=普通 opp=普通
+     #4 F2   score=+1,270 own=普通 opp=普通
+     #5 G15  score=+1,150 own=普通 opp=普通
+137. 黑 X  C14  actor=ScoringAI think=0.282s eval=+800->+0 delta=-800
+     reason=综合棋型评分最高; candidates=85
+     #1 C14  score=+114,079 own=普通 opp=普通
+     #2 E14  score=+8,290 own=普通 opp=普通
+     #3 A14  score=+8,280 own=普通 opp=普通
+     #4 B4   score=+2,070 own=普通 opp=普通
+     #5 B5   score=+1,160 own=普通 opp=普通
+138. 白 O  B4   actor=ScoringAI think=0.266s eval=+0->+1,800 delta=+1,800
+     reason=综合棋型评分最高; candidates=84
+     #1 B4   score=+1,800 own=普通 opp=普通
+     #2 D4   score=+1,301 own=普通 opp=普通
+     #3 F2   score=+1,270 own=普通 opp=普通
+     #4 G15  score=+1,150 own=普通 opp=普通
+     #5 E15  score=+1,150 own=普通 opp=普通
+139. 黑 X  B5   actor=ScoringAI think=0.279s eval=+1,800->+1,000 delta=-800
+     reason=综合棋型评分最高; candidates=85
+     #1 B5   score=+229,089 own=普通 opp=活三
+     #2 B3   score=+194,579 own=普通 opp=活三
+     #3 D4   score=+9,186 own=普通 opp=普通
+     #4 B7   score=+8,306 own=普通 opp=普通
+     #5 C4   score=+1,283 own=普通 opp=普通
+140. 白 O  D4   actor=ScoringAI think=0.256s eval=+1,000->+8,000 delta=+7,000
+     reason=综合棋型评分最高; candidates=84
+     #1 D4   score=+8,301 own=普通 opp=普通
+     #2 C4   score=+2,268 own=普通 opp=普通
+     #3 D3   score=+1,972 own=普通 opp=普通
+     #4 F2   score=+1,270 own=普通 opp=普通
+     #5 G15  score=+1,150 own=普通 opp=普通
+141. 黑 X  C4   actor=ScoringAI think=0.265s eval=+8,000->-1,000 delta=-9,000
+     reason=综合棋型评分最高; candidates=83
+     #1 C4   score=+2,291,933 own=普通 opp=冲四
+     #2 A4   score=+2,290,800 own=普通 opp=冲四
+     #3 K14  score=+1,160 own=普通 opp=普通
+     #4 C3   score=+1,150 own=普通 opp=普通
+     #5 O7   score=+1,150 own=普通 opp=普通
+142. 白 O  D3   actor=ScoringAI think=0.257s eval=-1,000->+0 delta=+1,000
+     reason=综合棋型评分最高; candidates=82
+     #1 D3   score=+228,982 own=普通 opp=活三
+     #2 E2   score=+194,359 own=普通 opp=活三
+     #3 A6   score=+10,350 own=普通 opp=普通
+     #4 G15  score=+1,150 own=普通 opp=普通
+     #5 E15  score=+1,150 own=普通 opp=普通
+143. 黑 X  K14  actor=ScoringAI think=0.255s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=82
+     #1 K14  score=+1,160 own=普通 opp=普通
+     #2 C3   score=+1,150 own=普通 opp=普通
+     #3 O7   score=+1,150 own=普通 opp=普通
+     #4 O5   score=+1,150 own=普通 opp=普通
+     #5 M14  score=+1,150 own=普通 opp=普通
+144. 白 O  G15  actor=ScoringAI think=0.254s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=81
+     #1 G15  score=+1,150 own=普通 opp=普通
+     #2 E15  score=+1,150 own=普通 opp=普通
+     #3 C3   score=+1,000 own=普通 opp=普通
+     #4 O7   score=+1,000 own=普通 opp=普通
+     #5 O5   score=+1,000 own=普通 opp=普通
+145. 黑 X  C3   actor=ScoringAI think=0.247s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=80
+     #1 C3   score=+1,150 own=普通 opp=普通
+     #2 O7   score=+1,150 own=普通 opp=普通
+     #3 O5   score=+1,150 own=普通 opp=普通
+     #4 O8   score=+921 own=普通 opp=普通
+     #5 D2   score=+919 own=普通 opp=普通
+146. 白 O  O7   actor=ScoringAI think=0.273s eval=+0->+1,000 delta=+1,000
+     reason=综合棋型评分最高; candidates=80
+     #1 O7   score=+1,000 own=普通 opp=普通
+     #2 O5   score=+1,000 own=普通 opp=普通
+     #3 O8   score=+802 own=普通 opp=普通
+     #4 O4   score=+800 own=普通 opp=普通
+     #5 F2   score=+120 own=普通 opp=普通
+147. 黑 X  O8   actor=ScoringAI think=0.241s eval=+1,000->+100 delta=-900
+     reason=综合棋型评分最高; candidates=79
+     #1 O8   score=+228,851 own=普通 opp=活三
+     #2 O5   score=+228,849 own=普通 opp=活三
+     #3 O9   score=+194,349 own=普通 opp=活三
+     #4 O4   score=+194,349 own=普通 opp=活三
+     #5 F2   score=+135 own=普通 opp=普通
+148. 白 O  O5   actor=ScoringAI think=0.247s eval=+100->+10,000 delta=+9,900
+     reason=综合棋型评分最高; candidates=78
+     #1 O5   score=+9,900 own=普通 opp=普通
+     #2 O4   score=+7,900 own=普通 opp=普通
+     #3 F2   score=+120 own=普通 opp=普通
+     #4 O9   score=+114 own=普通 opp=普通
+     #5 N4   score=+114 own=普通 opp=普通
+149. 黑 X  O4   actor=ScoringAI think=0.230s eval=+10,000->+0 delta=-10,000
+     reason=综合棋型评分最高; candidates=77
+     #1 O4   score=+2,288,500 own=普通 opp=冲四
+     #2 O3   score=+2,288,500 own=普通 opp=冲四
+     #3 F2   score=+135 own=普通 opp=普通
+     #4 H15  score=+116 own=普通 opp=普通
+     #5 O9   score=+100 own=普通 opp=普通
+150. 白 O  F2   actor=ScoringAI think=0.230s eval=+0->+100 delta=+100
+     reason=综合棋型评分最高; candidates=76
+     #1 F2   score=+120 own=普通 opp=普通
+     #2 O9   score=+114 own=普通 opp=普通
+     #3 N4   score=+114 own=普通 opp=普通
+     #4 E15  score=+114 own=普通 opp=普通
+     #5 H15  score=+102 own=普通 opp=普通
+151. 黑 X  E2   actor=ScoringAI think=0.220s eval=+100->+0 delta=-100
+     reason=综合棋型评分最高; candidates=75
+     #1 E2   score=+11,395 own=普通 opp=普通
+     #2 D2   score=+9,085 own=普通 opp=普通
+     #3 H15  score=+116 own=普通 opp=普通
+     #4 O9   score=+100 own=普通 opp=普通
+     #5 N4   score=+100 own=普通 opp=普通
+152. 白 O  O9   actor=ScoringAI think=0.224s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=74
+     #1 O9   score=+114 own=普通 opp=普通
+     #2 D2   score=+114 own=普通 opp=普通
+     #3 N4   score=+114 own=普通 opp=普通
+     #4 E15  score=+114 own=普通 opp=普通
+     #5 H15  score=+102 own=普通 opp=普通
+153. 黑 X  H15  actor=ScoringAI think=0.224s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=73
+     #1 H15  score=+116 own=普通 opp=普通
+     #2 O10  score=+114 own=普通 opp=普通
+     #3 D2   score=+100 own=普通 opp=普通
+     #4 N4   score=+100 own=普通 opp=普通
+     #5 E15  score=+100 own=普通 opp=普通
+154. 白 O  I15  actor=ScoringAI think=0.209s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=72
+     #1 I15  score=+114 own=普通 opp=普通
+     #2 D2   score=+114 own=普通 opp=普通
+     #3 N4   score=+114 own=普通 opp=普通
+     #4 E15  score=+114 own=普通 opp=普通
+     #5 O10  score=+100 own=普通 opp=普通
+155. 黑 X  O10  actor=ScoringAI think=0.216s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=71
+     #1 O10  score=+114 own=普通 opp=普通
+     #2 J15  score=+114 own=普通 opp=普通
+     #3 D2   score=+100 own=普通 opp=普通
+     #4 N4   score=+100 own=普通 opp=普通
+     #5 E15  score=+100 own=普通 opp=普通
+156. 白 O  D2   actor=ScoringAI think=0.208s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=70
+     #1 D2   score=+114 own=普通 opp=普通
+     #2 N4   score=+114 own=普通 opp=普通
+     #3 O11  score=+114 own=普通 opp=普通
+     #4 E15  score=+114 own=普通 opp=普通
+     #5 J15  score=+100 own=普通 opp=普通
+157. 黑 X  J15  actor=ScoringAI think=0.210s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=69
+     #1 J15  score=+114 own=普通 opp=普通
+     #2 N4   score=+100 own=普通 opp=普通
+     #3 O11  score=+100 own=普通 opp=普通
+     #4 E15  score=+100 own=普通 opp=普通
+     #5 F10  score=+84 own=普通 opp=普通
+158. 白 O  N4   actor=ScoringAI think=0.196s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=68
+     #1 N4   score=+114 own=普通 opp=普通
+     #2 O11  score=+114 own=普通 opp=普通
+     #3 E15  score=+114 own=普通 opp=普通
+     #4 K15  score=+114 own=普通 opp=普通
+     #5 F10  score=+84 own=普通 opp=普通
+159. 黑 X  O11  actor=ScoringAI think=0.200s eval=+0->-100 delta=-100
+     reason=综合棋型评分最高; candidates=67
+     #1 O11  score=+100 own=普通 opp=普通
+     #2 E15  score=+100 own=普通 opp=普通
+     #3 K15  score=+100 own=普通 opp=普通
+     #4 F10  score=+84 own=普通 opp=普通
+     #5 K9   score=+80 own=普通 opp=普通
+160. 白 O  O12  actor=ScoringAI think=0.197s eval=-100->+0 delta=+100
+     reason=综合棋型评分最高; candidates=66
+     #1 O12  score=+11,385 own=普通 opp=普通
+     #2 O13  score=+9,085 own=普通 opp=普通
+     #3 E15  score=+114 own=普通 opp=普通
+     #4 K15  score=+114 own=普通 opp=普通
+     #5 F10  score=+84 own=普通 opp=普通
+161. 黑 X  E15  actor=ScoringAI think=0.185s eval=+0->-100 delta=-100
+     reason=综合棋型评分最高; candidates=65
+     #1 E15  score=+100 own=普通 opp=普通
+     #2 K15  score=+100 own=普通 opp=普通
+     #3 F10  score=+84 own=普通 opp=普通
+     #4 K9   score=+80 own=普通 opp=普通
+     #5 E10  score=+74 own=普通 opp=普通
+162. 白 O  D15  actor=ScoringAI think=0.207s eval=-100->+0 delta=+100
+     reason=综合棋型评分最高; candidates=64
+     #1 D15  score=+11,385 own=普通 opp=普通
+     #2 C15  score=+9,085 own=普通 opp=普通
+     #3 K15  score=+114 own=普通 opp=普通
+     #4 F10  score=+84 own=普通 opp=普通
+     #5 K9   score=+80 own=普通 opp=普通
+163. 黑 X  K15  actor=ScoringAI think=0.211s eval=+0->-100 delta=-100
+     reason=综合棋型评分最高; candidates=63
+     #1 K15  score=+100 own=普通 opp=普通
+     #2 F10  score=+84 own=普通 opp=普通
+     #3 K9   score=+80 own=普通 opp=普通
+     #4 E10  score=+74 own=普通 opp=普通
+     #5 D6   score=+60 own=普通 opp=普通
+164. 白 O  L15  actor=ScoringAI think=0.243s eval=-100->+0 delta=+100
+     reason=综合棋型评分最高; candidates=62
+     #1 L15  score=+11,385 own=普通 opp=普通
+     #2 M15  score=+9,085 own=普通 opp=普通
+     #3 F10  score=+84 own=普通 opp=普通
+     #4 K9   score=+80 own=普通 opp=普通
+     #5 E10  score=+74 own=普通 opp=普通
+165. 黑 X  F10  actor=ScoringAI think=0.465s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=61
+     #1 F10  score=+84 own=普通 opp=普通
+     #2 K9   score=+80 own=普通 opp=普通
+     #3 E10  score=+74 own=普通 opp=普通
+     #4 D6   score=+60 own=普通 opp=普通
+     #5 K3   score=+32 own=普通 opp=普通
+166. 白 O  K9   actor=ScoringAI think=0.207s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=60
+     #1 K9   score=+80 own=普通 opp=普通
+     #2 E10  score=+74 own=普通 opp=普通
+     #3 D6   score=+60 own=普通 opp=普通
+     #4 K3   score=+32 own=普通 opp=普通
+     #5 N8   score=+28 own=普通 opp=普通
+167. 黑 X  E10  actor=ScoringAI think=0.234s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=59
+     #1 E10  score=+74 own=普通 opp=普通
+     #2 D6   score=+60 own=普通 opp=普通
+     #3 K3   score=+32 own=普通 opp=普通
+     #4 N8   score=+28 own=普通 opp=普通
+     #5 B7   score=+26 own=普通 opp=普通
+168. 白 O  D6   actor=ScoringAI think=0.229s eval=+0->-1,000 delta=-1,000
+     reason=综合棋型评分最高; candidates=58
+     #1 D6   score=+60 own=普通 opp=普通
+     #2 K3   score=+32 own=普通 opp=普通
+     #3 N8   score=+28 own=普通 opp=普通
+     #4 B7   score=+26 own=普通 opp=普通
+     #5 B9   score=+26 own=普通 opp=普通
+169. 黑 X  K3   actor=ScoringAI think=0.249s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=57
+     #1 K3   score=+32 own=普通 opp=普通
+     #2 N8   score=+28 own=普通 opp=普通
+     #3 B7   score=+26 own=普通 opp=普通
+     #4 B9   score=+26 own=普通 opp=普通
+     #5 I14  score=+26 own=普通 opp=普通
+170. 白 O  N8   actor=ScoringAI think=0.224s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=56
+     #1 N8   score=+28 own=普通 opp=普通
+     #2 B7   score=+26 own=普通 opp=普通
+     #3 B9   score=+26 own=普通 opp=普通
+     #4 I14  score=+26 own=普通 opp=普通
+     #5 J2   score=+20 own=普通 opp=普通
+171. 黑 X  B7   actor=ScoringAI think=0.221s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=55
+     #1 B7   score=+26 own=普通 opp=普通
+     #2 B9   score=+26 own=普通 opp=普通
+     #3 I14  score=+26 own=普通 opp=普通
+     #4 J2   score=+20 own=普通 opp=普通
+     #5 J14  score=+20 own=普通 opp=普通
+172. 白 O  B9   actor=ScoringAI think=0.198s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=54
+     #1 B9   score=+26 own=普通 opp=普通
+     #2 I14  score=+26 own=普通 opp=普通
+     #3 J2   score=+20 own=普通 opp=普通
+     #4 J14  score=+20 own=普通 opp=普通
+     #5 D13  score=+18 own=普通 opp=普通
+173. 黑 X  I14  actor=ScoringAI think=0.204s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=53
+     #1 I14  score=+26 own=普通 opp=普通
+     #2 J2   score=+20 own=普通 opp=普通
+     #3 J14  score=+20 own=普通 opp=普通
+     #4 D13  score=+18 own=普通 opp=普通
+     #5 E14  score=+10 own=普通 opp=普通
+174. 白 O  J2   actor=ScoringAI think=0.206s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=52
+     #1 J2   score=+20 own=普通 opp=普通
+     #2 J14  score=+20 own=普通 opp=普通
+     #3 D13  score=+18 own=普通 opp=普通
+     #4 E14  score=+10 own=普通 opp=普通
+     #5 H1   score=+2 own=普通 opp=普通
+175. 黑 X  J14  actor=ScoringAI think=0.173s eval=-1,000->-1,000 delta=+0
+     reason=综合棋型评分最高; candidates=51
+     #1 J14  score=+20 own=普通 opp=普通
+     #2 D13  score=+18 own=普通 opp=普通
+     #3 E14  score=+10 own=普通 opp=普通
+     #4 H1   score=+2 own=普通 opp=普通
+     #5 A8   score=+2 own=普通 opp=普通
+176. 白 O  D13  actor=ScoringAI think=0.208s eval=-1,000->+0 delta=+1,000
+     reason=综合棋型评分最高; candidates=50
+     #1 D13  score=+18 own=普通 opp=普通
+     #2 E14  score=+10 own=普通 opp=普通
+     #3 H1   score=+2 own=普通 opp=普通
+     #4 A8   score=+2 own=普通 opp=普通
+     #5 G1   score=+0 own=普通 opp=普通
+177. 黑 X  E14  actor=ScoringAI think=0.191s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=49
+     #1 E14  score=+10 own=普通 opp=普通
+     #2 H1   score=+2 own=普通 opp=普通
+     #3 A8   score=+2 own=普通 opp=普通
+     #4 G1   score=+0 own=普通 opp=普通
+     #5 I1   score=+0 own=普通 opp=普通
+178. 白 O  H1   actor=ScoringAI think=0.194s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=48
+     #1 H1   score=+2 own=普通 opp=普通
+     #2 A8   score=+2 own=普通 opp=普通
+     #3 G1   score=+0 own=普通 opp=普通
+     #4 I1   score=+0 own=普通 opp=普通
+     #5 A7   score=+0 own=普通 opp=普通
+179. 黑 X  G1   actor=ScoringAI think=0.182s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=47
+     #1 G1   score=+1,150 own=普通 opp=普通
+     #2 I1   score=+1,150 own=普通 opp=普通
+     #3 F1   score=+919 own=普通 opp=普通
+     #4 J1   score=+919 own=普通 opp=普通
+     #5 A8   score=+2 own=普通 opp=普通
+180. 白 O  F1   actor=ScoringAI think=0.175s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=46
+     #1 F1   score=+114 own=普通 opp=普通
+     #2 I1   score=+100 own=普通 opp=普通
+     #3 A8   score=+2 own=普通 opp=普通
+     #4 A7   score=+0 own=普通 opp=普通
+     #5 A9   score=+0 own=普通 opp=普通
+181. 黑 X  I1   actor=ScoringAI think=0.163s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=45
+     #1 I1   score=+114 own=普通 opp=普通
+     #2 E1   score=+114 own=普通 opp=普通
+     #3 A8   score=+2 own=普通 opp=普通
+     #4 A7   score=+0 own=普通 opp=普通
+     #5 A9   score=+0 own=普通 opp=普通
+182. 白 O  J1   actor=ScoringAI think=0.159s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=44
+     #1 J1   score=+114 own=普通 opp=普通
+     #2 E1   score=+100 own=普通 opp=普通
+     #3 A8   score=+2 own=普通 opp=普通
+     #4 A7   score=+0 own=普通 opp=普通
+     #5 A9   score=+0 own=普通 opp=普通
+183. 黑 X  E1   actor=ScoringAI think=0.153s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=43
+     #1 E1   score=+114 own=普通 opp=普通
+     #2 K1   score=+114 own=普通 opp=普通
+     #3 A8   score=+2 own=普通 opp=普通
+     #4 A7   score=+0 own=普通 opp=普通
+     #5 A9   score=+0 own=普通 opp=普通
+184. 白 O  D1   actor=ScoringAI think=0.157s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=42
+     #1 D1   score=+114 own=普通 opp=普通
+     #2 K1   score=+100 own=普通 opp=普通
+     #3 A8   score=+2 own=普通 opp=普通
+     #4 A7   score=+0 own=普通 opp=普通
+     #5 A9   score=+0 own=普通 opp=普通
+185. 黑 X  K1   actor=ScoringAI think=0.164s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=41
+     #1 K1   score=+114 own=普通 opp=普通
+     #2 A8   score=+2 own=普通 opp=普通
+     #3 A7   score=+0 own=普通 opp=普通
+     #4 A9   score=+0 own=普通 opp=普通
+     #5 B12  score=+0 own=普通 opp=普通
+186. 白 O  L1   actor=ScoringAI think=0.136s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=40
+     #1 L1   score=+114 own=普通 opp=普通
+     #2 A8   score=+2 own=普通 opp=普通
+     #3 A7   score=+0 own=普通 opp=普通
+     #4 A9   score=+0 own=普通 opp=普通
+     #5 B12  score=+0 own=普通 opp=普通
+187. 黑 X  A8   actor=ScoringAI think=0.141s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=39
+     #1 A8   score=+2 own=普通 opp=普通
+     #2 A7   score=+0 own=普通 opp=普通
+     #3 A9   score=+0 own=普通 opp=普通
+     #4 B12  score=+0 own=普通 opp=普通
+     #5 A6   score=+0 own=普通 opp=普通
+188. 白 O  A7   actor=ScoringAI think=0.135s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=38
+     #1 A7   score=+1,150 own=普通 opp=普通
+     #2 A9   score=+1,150 own=普通 opp=普通
+     #3 A6   score=+919 own=普通 opp=普通
+     #4 A10  score=+919 own=普通 opp=普通
+     #5 B12  score=+0 own=普通 opp=普通
+189. 黑 X  A6   actor=ScoringAI think=0.129s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=37
+     #1 A6   score=+114 own=普通 opp=普通
+     #2 A9   score=+100 own=普通 opp=普通
+     #3 B12  score=+0 own=普通 opp=普通
+     #4 A10  score=+0 own=普通 opp=普通
+     #5 A5   score=+0 own=普通 opp=普通
+190. 白 O  A9   actor=ScoringAI think=0.119s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=36
+     #1 A9   score=+114 own=普通 opp=普通
+     #2 A5   score=+114 own=普通 opp=普通
+     #3 B12  score=+0 own=普通 opp=普通
+     #4 A10  score=+0 own=普通 opp=普通
+     #5 A11  score=+0 own=普通 opp=普通
+191. 黑 X  A10  actor=ScoringAI think=0.137s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=35
+     #1 A10  score=+114 own=普通 opp=普通
+     #2 A5   score=+100 own=普通 opp=普通
+     #3 B12  score=+0 own=普通 opp=普通
+     #4 A11  score=+0 own=普通 opp=普通
+     #5 C2   score=+0 own=普通 opp=普通
+192. 白 O  A5   actor=ScoringAI think=0.108s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=34
+     #1 A5   score=+114 own=普通 opp=普通
+     #2 A11  score=+114 own=普通 opp=普通
+     #3 B12  score=+0 own=普通 opp=普通
+     #4 C2   score=+0 own=普通 opp=普通
+     #5 M2   score=+0 own=普通 opp=普通
+193. 黑 X  A4   actor=ScoringAI think=0.117s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=33
+     #1 A4   score=+114 own=普通 opp=普通
+     #2 A11  score=+100 own=普通 opp=普通
+     #3 B12  score=+0 own=普通 opp=普通
+     #4 C2   score=+0 own=普通 opp=普通
+     #5 M2   score=+0 own=普通 opp=普通
+194. 白 O  A11  actor=ScoringAI think=0.117s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=32
+     #1 A11  score=+114 own=普通 opp=普通
+     #2 B12  score=+0 own=普通 opp=普通
+     #3 C2   score=+0 own=普通 opp=普通
+     #4 M2   score=+0 own=普通 opp=普通
+     #5 B3   score=+0 own=普通 opp=普通
+195. 黑 X  A12  actor=ScoringAI think=0.108s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=31
+     #1 A12  score=+114 own=普通 opp=普通
+     #2 B12  score=+0 own=普通 opp=普通
+     #3 C2   score=+0 own=普通 opp=普通
+     #4 M2   score=+0 own=普通 opp=普通
+     #5 B3   score=+0 own=普通 opp=普通
+196. 白 O  B12  actor=ScoringAI think=0.096s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=30
+     #1 B12  score=+0 own=普通 opp=普通
+     #2 C2   score=+0 own=普通 opp=普通
+     #3 M2   score=+0 own=普通 opp=普通
+     #4 B3   score=+0 own=普通 opp=普通
+     #5 N3   score=+0 own=普通 opp=普通
+197. 黑 X  C2   actor=ScoringAI think=0.100s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=29
+     #1 C2   score=+0 own=普通 opp=普通
+     #2 M2   score=+0 own=普通 opp=普通
+     #3 B3   score=+0 own=普通 opp=普通
+     #4 N3   score=+0 own=普通 opp=普通
+     #5 N13  score=+0 own=普通 opp=普通
+198. 白 O  M2   actor=ScoringAI think=0.100s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=28
+     #1 M2   score=+0 own=普通 opp=普通
+     #2 B3   score=+0 own=普通 opp=普通
+     #3 N3   score=+0 own=普通 opp=普通
+     #4 N13  score=+0 own=普通 opp=普通
+     #5 M14  score=+0 own=普通 opp=普通
+199. 黑 X  B3   actor=ScoringAI think=0.077s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=27
+     #1 B3   score=+0 own=普通 opp=普通
+     #2 N3   score=+0 own=普通 opp=普通
+     #3 N13  score=+0 own=普通 opp=普通
+     #4 M14  score=+0 own=普通 opp=普通
+     #5 B2   score=+0 own=普通 opp=普通
+200. 白 O  N3   actor=ScoringAI think=0.101s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=26
+     #1 N3   score=+0 own=普通 opp=普通
+     #2 N13  score=+0 own=普通 opp=普通
+     #3 M14  score=+0 own=普通 opp=普通
+     #4 B2   score=+0 own=普通 opp=普通
+     #5 N2   score=+0 own=普通 opp=普通
+201. 黑 X  N13  actor=ScoringAI think=0.079s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=25
+     #1 N13  score=+0 own=普通 opp=普通
+     #2 M14  score=+0 own=普通 opp=普通
+     #3 B2   score=+0 own=普通 opp=普通
+     #4 N2   score=+0 own=普通 opp=普通
+     #5 N14  score=+0 own=普通 opp=普通
+202. 白 O  M14  actor=ScoringAI think=0.079s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=24
+     #1 M14  score=+0 own=普通 opp=普通
+     #2 B2   score=+0 own=普通 opp=普通
+     #3 N2   score=+0 own=普通 opp=普通
+     #4 N14  score=+0 own=普通 opp=普通
+     #5 C1   score=+0 own=普通 opp=普通
+203. 黑 X  B2   actor=ScoringAI think=0.067s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=23
+     #1 B2   score=+0 own=普通 opp=普通
+     #2 N2   score=+0 own=普通 opp=普通
+     #3 N14  score=+0 own=普通 opp=普通
+     #4 C1   score=+0 own=普通 opp=普通
+     #5 M1   score=+0 own=普通 opp=普通
+204. 白 O  N2   actor=ScoringAI think=0.070s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=22
+     #1 N2   score=+0 own=普通 opp=普通
+     #2 N14  score=+0 own=普通 opp=普通
+     #3 C1   score=+0 own=普通 opp=普通
+     #4 M1   score=+0 own=普通 opp=普通
+     #5 A3   score=+0 own=普通 opp=普通
+205. 黑 X  N14  actor=ScoringAI think=0.066s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=21
+     #1 N14  score=+0 own=普通 opp=普通
+     #2 C1   score=+0 own=普通 opp=普通
+     #3 M1   score=+0 own=普通 opp=普通
+     #4 A3   score=+0 own=普通 opp=普通
+     #5 O3   score=+0 own=普通 opp=普通
+206. 白 O  C1   actor=ScoringAI think=0.052s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=20
+     #1 C1   score=+0 own=普通 opp=普通
+     #2 M1   score=+0 own=普通 opp=普通
+     #3 A3   score=+0 own=普通 opp=普通
+     #4 O3   score=+0 own=普通 opp=普通
+     #5 A13  score=+0 own=普通 opp=普通
+207. 黑 X  M1   actor=ScoringAI think=0.062s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=19
+     #1 M1   score=+0 own=普通 opp=普通
+     #2 A3   score=+0 own=普通 opp=普通
+     #3 O3   score=+0 own=普通 opp=普通
+     #4 A13  score=+0 own=普通 opp=普通
+     #5 O13  score=+0 own=普通 opp=普通
+208. 白 O  A3   actor=ScoringAI think=0.058s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=18
+     #1 A3   score=+0 own=普通 opp=普通
+     #2 O3   score=+0 own=普通 opp=普通
+     #3 A13  score=+0 own=普通 opp=普通
+     #4 O13  score=+0 own=普通 opp=普通
+     #5 C15  score=+0 own=普通 opp=普通
+209. 黑 X  O3   actor=ScoringAI think=0.063s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=17
+     #1 O3   score=+0 own=普通 opp=普通
+     #2 A13  score=+0 own=普通 opp=普通
+     #3 O13  score=+0 own=普通 opp=普通
+     #4 C15  score=+0 own=普通 opp=普通
+     #5 M15  score=+0 own=普通 opp=普通
+210. 白 O  A13  actor=ScoringAI think=0.057s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=16
+     #1 A13  score=+0 own=普通 opp=普通
+     #2 O13  score=+0 own=普通 opp=普通
+     #3 C15  score=+0 own=普通 opp=普通
+     #4 M15  score=+0 own=普通 opp=普通
+     #5 B1   score=+0 own=普通 opp=普通
+211. 黑 X  O13  actor=ScoringAI think=0.043s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=15
+     #1 O13  score=+0 own=普通 opp=普通
+     #2 C15  score=+0 own=普通 opp=普通
+     #3 M15  score=+0 own=普通 opp=普通
+     #4 B1   score=+0 own=普通 opp=普通
+     #5 N1   score=+0 own=普通 opp=普通
+212. 白 O  C15  actor=ScoringAI think=0.042s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=14
+     #1 C15  score=+0 own=普通 opp=普通
+     #2 M15  score=+0 own=普通 opp=普通
+     #3 B1   score=+0 own=普通 opp=普通
+     #4 N1   score=+0 own=普通 opp=普通
+     #5 A2   score=+0 own=普通 opp=普通
+213. 黑 X  M15  actor=ScoringAI think=0.036s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=13
+     #1 M15  score=+0 own=普通 opp=普通
+     #2 B1   score=+0 own=普通 opp=普通
+     #3 N1   score=+0 own=普通 opp=普通
+     #4 A2   score=+0 own=普通 opp=普通
+     #5 O2   score=+0 own=普通 opp=普通
+214. 白 O  B1   actor=ScoringAI think=0.035s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=12
+     #1 B1   score=+0 own=普通 opp=普通
+     #2 N1   score=+0 own=普通 opp=普通
+     #3 A2   score=+0 own=普通 opp=普通
+     #4 O2   score=+0 own=普通 opp=普通
+     #5 A14  score=+0 own=普通 opp=普通
+215. 黑 X  N1   actor=ScoringAI think=0.028s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=11
+     #1 N1   score=+0 own=普通 opp=普通
+     #2 A2   score=+0 own=普通 opp=普通
+     #3 O2   score=+0 own=普通 opp=普通
+     #4 A14  score=+0 own=普通 opp=普通
+     #5 O14  score=+0 own=普通 opp=普通
+216. 白 O  A2   actor=ScoringAI think=0.032s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=10
+     #1 A2   score=+0 own=普通 opp=普通
+     #2 O2   score=+0 own=普通 opp=普通
+     #3 A14  score=+0 own=普通 opp=普通
+     #4 O14  score=+0 own=普通 opp=普通
+     #5 B15  score=+0 own=普通 opp=普通
+217. 黑 X  O2   actor=ScoringAI think=0.032s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=9
+     #1 O2   score=+0 own=普通 opp=普通
+     #2 A14  score=+0 own=普通 opp=普通
+     #3 O14  score=+0 own=普通 opp=普通
+     #4 B15  score=+0 own=普通 opp=普通
+     #5 N15  score=+0 own=普通 opp=普通
+218. 白 O  A14  actor=ScoringAI think=0.025s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=8
+     #1 A14  score=+0 own=普通 opp=普通
+     #2 O14  score=+0 own=普通 opp=普通
+     #3 B15  score=+0 own=普通 opp=普通
+     #4 N15  score=+0 own=普通 opp=普通
+     #5 A1   score=+0 own=普通 opp=普通
+219. 黑 X  O14  actor=ScoringAI think=0.022s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=7
+     #1 O14  score=+0 own=普通 opp=普通
+     #2 B15  score=+0 own=普通 opp=普通
+     #3 N15  score=+0 own=普通 opp=普通
+     #4 A1   score=+0 own=普通 opp=普通
+     #5 O1   score=+0 own=普通 opp=普通
+220. 白 O  B15  actor=ScoringAI think=0.022s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=6
+     #1 B15  score=+0 own=普通 opp=普通
+     #2 N15  score=+0 own=普通 opp=普通
+     #3 A1   score=+0 own=普通 opp=普通
+     #4 O1   score=+0 own=普通 opp=普通
+     #5 A15  score=+0 own=普通 opp=普通
+221. 黑 X  N15  actor=ScoringAI think=0.012s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=5
+     #1 N15  score=+0 own=普通 opp=普通
+     #2 A1   score=+0 own=普通 opp=普通
+     #3 O1   score=+0 own=普通 opp=普通
+     #4 A15  score=+0 own=普通 opp=普通
+     #5 O15  score=+0 own=普通 opp=普通
+222. 白 O  A1   actor=ScoringAI think=0.015s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=4
+     #1 A1   score=+0 own=普通 opp=普通
+     #2 O1   score=+0 own=普通 opp=普通
+     #3 A15  score=+0 own=普通 opp=普通
+     #4 O15  score=+0 own=普通 opp=普通
+223. 黑 X  O1   actor=ScoringAI think=0.009s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=3
+     #1 O1   score=+0 own=普通 opp=普通
+     #2 A15  score=+0 own=普通 opp=普通
+     #3 O15  score=+0 own=普通 opp=普通
+224. 白 O  A15  actor=ScoringAI think=0.010s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=2
+     #1 A15  score=+0 own=普通 opp=普通
+     #2 O15  score=+0 own=普通 opp=普通
+225. 黑 X  O15  actor=ScoringAI think=0.003s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=1
+     #1 O15  score=+0 own=普通 opp=普通
+
+Events:
+- 无
+
+Final board:
+   A B C D E F G H I J K L M N O
+ 1 O O O O X O X O X O X O X X X
+ 2 O X X O X O O X O O X O O O X
+ 3 O X X O X O O X X O X O X O X
+ 4 X O X O O X X X O X X X O O X
+ 5 O X O X X X O O O X O O O X O
+ 6 X O X O O O X O X O X X X O O
+ 7 O X O O X X O O X X O O X X O
+ 8 X X X X O O X X O O O X X O X
+ 9 O O X O X X O X O X O X X O O
+10 X O X O X X X O X O X O O O X
+11 O X O O X O X O X O X X X O X
+12 X O O X X O X O O X O X O X O
+13 O X X O O O X O O X O X O X X
+14 O O X O X X O X X X X O O X X
+15 O O O O X X O X O X X O X X X

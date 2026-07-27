@@ -1,0 +1,105 @@
+Gomoku AI Record
+Engine version: V0.6.2
+Mode: PVC
+Black: Human
+White: ScoringAI
+Result: 白棋 O获胜
+Moves: 20
+Duration: 96.556s
+
+完整着法记录：
+ 回合   黑 X   白 O
+   1.  H8     H7  
+   2.  I8     G8  
+   3.  I6     I7  
+   4.  J7     K8  
+   5.  K6     H9  
+   6.  J6     H6  
+   7.  J8     J9  
+   8.  K7     I10 
+   9.  L7     F7  
+  10.  M7     E6  
+
+Move details:
+  1. 黑 X  H8   actor=Human think=10.067s eval=+0->+0 delta=+0
+  2. 白 O  H7   actor=ScoringAI think=0.182s eval=+0->+0 delta=+0
+     reason=综合棋型评分最高; candidates=24
+     #1 H7   score=+1,248 own=普通 opp=普通
+     #2 G8   score=+1,248 own=普通 opp=普通
+     #3 I8   score=+1,248 own=普通 opp=普通
+     #4 H9   score=+1,248 own=普通 opp=普通
+     #5 G7   score=+1,246 own=普通 opp=普通
+  3. 黑 X  I8   actor=Human think=4.532s eval=+0->-1,000 delta=-1,000
+  4. 白 O  G8   actor=ScoringAI think=0.239s eval=-1,000->+900 delta=+1,900
+     reason=综合棋型评分最高; candidates=32
+     #1 G8   score=+229,947 own=普通 opp=活三
+     #2 J8   score=+228,941 own=普通 opp=活三
+     #3 F8   score=+194,441 own=普通 opp=活三
+     #4 K8   score=+194,431 own=普通 opp=活三
+     #5 I7   score=+3,396 own=普通 opp=普通
+  5. 黑 X  I6   actor=Human think=6.272s eval=+900->-800 delta=-1,700
+  6. 白 O  I7   actor=ScoringAI think=0.274s eval=-800->+1,000 delta=+1,800
+     reason=综合棋型评分最高; candidates=41
+     #1 I7   score=+231,325 own=普通 opp=活三
+     #2 I9   score=+195,825 own=普通 opp=活三
+     #3 I5   score=+194,659 own=普通 opp=活三
+     #4 J8   score=+11,477 own=普通 opp=普通
+     #5 K8   score=+10,087 own=普通 opp=普通
+  7. 黑 X  J7   actor=Human think=7.981s eval=+1,000->-1,900 delta=-2,900
+  8. 白 O  K8   actor=ScoringAI think=0.311s eval=-1,900->-900 delta=+1,000
+     reason=综合棋型评分最高; candidates=44
+     #1 K8   score=+238,016 own=普通 opp=活三
+     #2 H9   score=+230,062 own=普通 opp=活三
+     #3 K6   score=+229,843 own=普通 opp=活三
+     #4 H5   score=+228,931 own=普通 opp=活三
+     #5 G10  score=+195,239 own=普通 opp=活三
+  9. 黑 X  K6   actor=Human think=7.463s eval=-900->-100,700 delta=-99,800
+ 10. 白 O  H9   actor=ScoringAI think=0.124s eval=-100,700->-9,700 delta=+91,000
+     reason=抢占对手活四关键点; candidates=51
+     #1 H9   score=+67,736,213 own=普通 opp=活四
+     #2 L5   score=+67,735,050 own=普通 opp=活四
+ 11. 黑 X  J6   actor=Human think=17.642s eval=-9,700->-109,900 delta=-100,200
+ 12. 白 O  H6   actor=ScoringAI think=0.129s eval=-109,900->-18,800 delta=+91,100
+     reason=抢占对手活四关键点; candidates=54
+     #1 H6   score=+67,736,192 own=普通 opp=活四
+     #2 L6   score=+67,735,060 own=普通 opp=活四
+ 13. 黑 X  J8   actor=Human think=8.336s eval=-18,800->-118,700 delta=-99,900
+ 14. 白 O  J9   actor=ScoringAI think=0.117s eval=-118,700->-26,900 delta=+91,800
+     reason=抢占对手活四关键点; candidates=53
+     #1 J9   score=+67,737,005 own=普通 opp=活四
+     #2 J5   score=+67,736,339 own=普通 opp=活四
+ 15. 黑 X  K7   actor=Human think=5.598s eval=-26,900->-29,100 delta=-2,200
+ 16. 白 O  I10  actor=ScoringAI think=0.063s eval=-29,100->+168,900 delta=+198,000
+     reason=主动制造双活三; candidates=53
+     #1 I10  score=+12,198,090 own=双活三 opp=普通
+ 17. 黑 X  L7   actor=Human think=8.932s eval=+168,900->+68,000 delta=-100,900
+ 18. 白 O  F7   actor=ScoringAI think=0.077s eval=+68,000->+9,975,900 delta=+9,907,900
+     reason=主动制造活四; candidates=61
+     #1 F7   score=+58,907,990 own=活四 opp=普通
+     #2 J11  score=+58,900,074 own=活四 opp=普通
+ 19. 黑 X  M7   actor=Human think=17.855s eval=+9,975,900->+8,985,900 delta=-990,000
+ 20. 白 O  E6   actor=ScoringAI think=0.013s eval=+8,985,900->+98,985,900 delta=+90,000,000
+     reason=立即五连; candidates=206
+     #1 E6   score=+190,000,074 own=普通 opp=普通
+     #2 J11  score=+190,000,074 own=普通 opp=普通
+
+Events:
+- 无
+
+Final board:
+   A B C D E F G H I J K L M N O
+ 1 . . . . . . . . . . . . . . .
+ 2 . . . . . . . . . . . . . . .
+ 3 . . . . . . . . . . . . . . .
+ 4 . . . . . . . . . . . . . . .
+ 5 . . . . . . . . . . . . . . .
+ 6 . . . . O . . O X X X . . . .
+ 7 . . . . . O . O O X X X X . .
+ 8 . . . . . . O X X X O . . . .
+ 9 . . . . . . . O . O . . . . .
+10 . . . . . . . . O . . . . . .
+11 . . . . . . . . . . . . . . .
+12 . . . . . . . . . . . . . . .
+13 . . . . . . . . . . . . . . .
+14 . . . . . . . . . . . . . . .
+15 . . . . . . . . . . . . . . .
