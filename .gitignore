@@ -3,3 +3,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .vscode/
+records/
+
+# Local search preferences
+search_settings.json
+search_settings.json.tmp

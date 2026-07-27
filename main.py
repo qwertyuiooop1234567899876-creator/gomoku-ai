@@ -12,8 +12,13 @@ from engine.game import (
 )
 from engine.records import GameRecorder, RecordPaths
 from engine.search import SearchAI
+from engine.settings import (
+    SearchSettings,
+    load_search_settings,
+    save_search_settings,
+)
 
-ENGINE_VERSION = "0.7.1"
+ENGINE_VERSION = "0.7.2"
 
 
 def choose_human_player() -> int:
@@ -33,12 +38,85 @@ def choose_human_player() -> int:
         print("输入无效：请输入 B、W，或直接回车。")
 
 
-def create_computer(player: int) -> SearchAI:
-    """创建指定执棋颜色的 V0.7.1 搜索 AI。"""
+def choose_search_settings(
+    settings_path: str = "search_settings.json",
+) -> SearchSettings:
+    """读取上次参数，并允许玩家在启动时修改。"""
+    current = load_search_settings(settings_path)
+
+    print(
+        "当前搜索参数："
+        f"depth={current.max_depth}，"
+        f"time-limit={current.time_limit_seconds:g}s"
+    )
+
+    while True:
+        raw_depth = input(
+            "最大搜索深度 "
+            f"[{current.max_depth}]（1～8，回车保持）："
+        ).strip()
+
+        try:
+            max_depth = (
+                current.max_depth
+                if raw_depth == ""
+                else int(raw_depth)
+            )
+            if not 1 <= max_depth <= 8:
+                raise ValueError
+            break
+        except ValueError:
+            print("输入无效：搜索深度必须是 1～8 的整数。")
+
+    while True:
+        raw_time_limit = input(
+            "每步思考上限秒 "
+            f"[{current.time_limit_seconds:g}]"
+            "（0.1～60，回车保持）："
+        ).strip()
+
+        try:
+            time_limit_seconds = (
+                current.time_limit_seconds
+                if raw_time_limit == ""
+                else float(raw_time_limit)
+            )
+            if not 0.1 <= time_limit_seconds <= 60.0:
+                raise ValueError
+            break
+        except ValueError:
+            print("输入无效：时间限制必须在 0.1～60 秒之间。")
+
+    selected = SearchSettings(
+        max_depth=max_depth,
+        time_limit_seconds=time_limit_seconds,
+    )
+    save_search_settings(
+        selected,
+        settings_path,
+    )
+
+    print(
+        "本局搜索参数："
+        f"depth={selected.max_depth}，"
+        f"time-limit={selected.time_limit_seconds:g}s；"
+        "已记忆为下次默认值。"
+    )
+
+    return selected
+
+
+def create_computer(
+    player: int,
+    settings: SearchSettings | None = None,
+) -> SearchAI:
+    """按指定颜色和搜索参数创建 V0.7.2 搜索 AI。"""
+    selected = settings or SearchSettings()
+
     return SearchAI(
         player=player,
-        max_depth=3,
-        time_limit_seconds=2.0,
+        max_depth=selected.max_depth,
+        time_limit_seconds=selected.time_limit_seconds,
         root_candidate_limit=12,
         branch_candidate_limit=8,
         threat_extension_depth=2,
@@ -78,7 +156,7 @@ def save_and_report(
         board=board,
         result=result,
         duration_seconds=time.perf_counter() - game_started,
-        prefix="pvc-v071",
+        prefix="pvc-v072",
     )
     print(f"TXT 棋谱：{paths.txt}")
     print(f"JSON 诊断：{paths.json}")
@@ -117,11 +195,15 @@ def print_search_summary(computer: SearchAI) -> None:
 
 
 def main() -> None:
+    search_settings = choose_search_settings()
     human_player = choose_human_player()
     computer_player = other_player(human_player)
 
     board = Board()
-    computer = create_computer(computer_player)
+    computer = create_computer(
+        computer_player,
+        search_settings,
+    )
     recorder = create_recorder(human_player)
     current_player = BLACK
     game_started = time.perf_counter()
@@ -133,6 +215,11 @@ def main() -> None:
     )
     if computer_player == BLACK:
         print("电脑执黑棋，将自动先下。")
+    print(
+        "搜索参数："
+        f"depth={search_settings.max_depth}，"
+        f"time-limit={search_settings.time_limit_seconds:g}s。"
+    )
     print("电脑使用复合威胁、Negamax、Alpha-Beta 和威胁延伸搜索。")
     print("输入 H 查看指令，U 悔棋，R 重开，M 棋谱，Q 退出。")
 
@@ -190,7 +277,10 @@ def main() -> None:
                     print("当前对局已保存。")
 
                 board = Board()
-                computer = create_computer(computer_player)
+                computer = create_computer(
+                    computer_player,
+                    search_settings,
+                )
                 recorder = create_recorder(human_player)
                 current_player = BLACK
                 game_started = time.perf_counter()
