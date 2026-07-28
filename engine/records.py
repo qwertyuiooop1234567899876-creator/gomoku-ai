@@ -165,6 +165,16 @@ class GameRecorder:
         data["player_name"] = "BLACK" if move.player == BLACK else "WHITE"
         return data
 
+    @staticmethod
+    def _format_time_used_ratio(analysis: dict[str, Any]) -> str:
+        ratio = analysis.get("time_used_ratio")
+        if ratio is None:
+            return "n/a"
+        try:
+            return f"{float(ratio) * 100:.1f}%"
+        except (TypeError, ValueError):
+            return "n/a"
+
     def _render_move_details(self) -> list[str]:
         lines = ["Move details:"]
 
@@ -194,6 +204,33 @@ class GameRecorder:
                         f"nodes:{move.analysis.get('vcf_nodes', 0):,}"
                     )
 
+                if move.analysis.get("defense_vct_checked", False):
+                    lines.append(
+                        "     "
+                        f"defense_vct=checked "
+                        f"depth:{move.analysis.get('defense_vct_depth', 0)} "
+                        f"nodes:{move.analysis.get('defense_vct_nodes', 0):,} "
+                        f"best:{move.analysis.get('defense_vct_best_coordinate', '?')}"
+                    )
+                    for rank, candidate in enumerate(
+                        move.analysis.get("defense_vct_candidates", []),
+                        start=1,
+                    ):
+                        pv = candidate.get("principal_variation", [])
+                        pv_text = " -> ".join(
+                            item.get("coordinate", "?")
+                            for item in pv
+                        )
+                        suffix = f" pv={pv_text}" if pv_text else ""
+                        lines.append(
+                            "     "
+                            f"defense#{rank} "
+                            f"{candidate.get('coordinate', '?'):4} "
+                            f"status={candidate.get('status', 'unknown')} "
+                            f"score={candidate.get('score', 0):+,}"
+                            f"{suffix}"
+                        )
+
                 search_depth = move.analysis.get("search_depth", 0)
                 if search_depth > 0:
                     lines.append(
@@ -208,7 +245,9 @@ class GameRecorder:
                         f"tt_cutoffs:{move.analysis.get('transposition_cutoffs', 0):,} "
                         f"tt_size:{move.analysis.get('transposition_size', 0):,} "
                         f"elapsed:{move.analysis.get('elapsed_seconds', 0.0):.3f}s "
-                        f"completed:{move.analysis.get('search_completed', True)}"
+                        f"completed:{move.analysis.get('search_completed', True)} "
+                        f"stop:{move.analysis.get('stop_reason', 'unspecified')} "
+                        f"time_used:{self._format_time_used_ratio(move.analysis)}"
                     )
                     lines.append(
                         "     "
@@ -265,7 +304,7 @@ class GameRecorder:
         finished_at = datetime.now()
         payload = {
             "format_version": "1.0",
-            "engine_version": "0.8.1",
+            "engine_version": "0.8.5",
             "mode": self.mode,
             "black": self.black_name,
             "white": self.white_name,
@@ -287,7 +326,7 @@ class GameRecorder:
 
         txt_lines = [
             "Gomoku AI Record",
-            "Engine version: V0.8.1",
+            "Engine version: V0.8.5",
             f"Mode: {self.mode}",
             f"Black: {self.black_name}",
             f"White: {self.white_name}",

@@ -18,7 +18,7 @@ from engine.settings import (
     save_search_settings,
 )
 
-ENGINE_VERSION = "0.8.1"
+ENGINE_VERSION = "0.8.5"
 
 
 def choose_human_player() -> int:
@@ -110,7 +110,7 @@ def create_computer(
     player: int,
     settings: SearchSettings | None = None,
 ) -> SearchAI:
-    """按指定颜色和搜索参数创建 V0.8.1 搜索 AI。"""
+    """按指定颜色和搜索参数创建 V0.8.5 防守分支 VCT 探针与前沿引导 PVS 搜索 AI。"""
     selected = settings or SearchSettings()
 
     return SearchAI(
@@ -199,7 +199,10 @@ def print_search_summary(computer: SearchAI) -> None:
             f"{analysis.transposition_cutoffs:,}；"
             f"TT {analysis.transposition_size:,}；"
             f"{analysis.elapsed_seconds:.3f}s；"
-            f"{completed_text}"
+            f"{completed_text}；"
+            f"停止原因 {analysis.stop_reason}；"
+            f"时间利用率 "
+            f"{('n/a' if analysis.time_used_ratio is None else f'{analysis.time_used_ratio * 100:.1f}%')}"
         )
         print(
             "排序与延伸："
@@ -244,7 +247,7 @@ def main() -> None:
         f"depth={search_settings.max_depth}，"
         f"time-limit={search_settings.time_limit_seconds:g}s。"
     )
-    print("电脑使用 VCF、PVS、Zobrist 置换表和统一时间管理。")
+    print("电脑使用 VCF、VCT-lite、PVS、Zobrist 置换表和统一时间管理。")
     print("输入 H 查看指令，U 悔棋，R 重开，M 棋谱，Q 退出。")
 
     while True:

@@ -4,7 +4,9 @@
     "description": "空棋盘选择天元",
     "player": "BLACK",
     "moves": [],
-    "expected_moves": ["H8"],
+    "expected_moves": [
+      "H8"
+    ],
     "max_depth": 2
   },
   {
@@ -12,10 +14,19 @@
     "description": "白棋横向四连立即取胜",
     "player": "WHITE",
     "stones": {
-      "BLACK": ["E8"],
-      "WHITE": ["F8", "G8", "H8", "I8"]
+      "BLACK": [
+        "E8"
+      ],
+      "WHITE": [
+        "F8",
+        "G8",
+        "H8",
+        "I8"
+      ]
     },
-    "expected_moves": ["J8"],
+    "expected_moves": [
+      "J8"
+    ],
     "max_depth": 2
   },
   {
@@ -23,10 +34,19 @@
     "description": "白棋封堵黑棋唯一横向胜点",
     "player": "WHITE",
     "stones": {
-      "WHITE": ["E7"],
-      "BLACK": ["F7", "G7", "H7", "I7"]
+      "WHITE": [
+        "E7"
+      ],
+      "BLACK": [
+        "F7",
+        "G7",
+        "H7",
+        "I7"
+      ]
     },
-    "expected_moves": ["J7"],
+    "expected_moves": [
+      "J7"
+    ],
     "max_depth": 2
   },
   {
@@ -34,10 +54,19 @@
     "description": "黑棋斜线四连立即取胜",
     "player": "BLACK",
     "stones": {
-      "WHITE": ["D4"],
-      "BLACK": ["E5", "F6", "G7", "H8"]
+      "WHITE": [
+        "D4"
+      ],
+      "BLACK": [
+        "E5",
+        "F6",
+        "G7",
+        "H8"
+      ]
     },
-    "expected_moves": ["I9"],
+    "expected_moves": [
+      "I9"
+    ],
     "max_depth": 2
   },
   {
@@ -45,10 +74,17 @@
     "description": "白棋主动制造双活三",
     "player": "WHITE",
     "stones": {
-      "WHITE": ["G8", "I8", "G7", "I9"],
+      "WHITE": [
+        "G8",
+        "I8",
+        "G7",
+        "I9"
+      ],
       "BLACK": []
     },
-    "expected_moves": ["H8"],
+    "expected_moves": [
+      "H8"
+    ],
     "max_depth": 2
   },
   {
@@ -56,10 +92,17 @@
     "description": "白棋抢占黑棋双活三交叉点",
     "player": "WHITE",
     "stones": {
-      "BLACK": ["G8", "I8", "G7", "I9"],
+      "BLACK": [
+        "G8",
+        "I8",
+        "G7",
+        "I9"
+      ],
       "WHITE": []
     },
-    "expected_moves": ["H8"],
+    "expected_moves": [
+      "H8"
+    ],
     "max_depth": 2
   },
   {
@@ -67,9 +110,19 @@
     "description": "V0.6.2 败局中的 J9 主动反击",
     "player": "WHITE",
     "moves": [
-      "H8", "H7", "I7", "G9", "J8", "I8", "K9", "H6", "J10"
+      "H8",
+      "H7",
+      "I7",
+      "G9",
+      "J8",
+      "I8",
+      "K9",
+      "H6",
+      "J10"
     ],
-    "expected_moves": ["J9"],
+    "expected_moves": [
+      "J9"
+    ],
     "max_depth": 2
   },
   {
@@ -77,10 +130,29 @@
     "description": "V0.7.3 自战中 I5 攻防一体",
     "player": "WHITE",
     "moves": [
-      "H8", "H7", "G7", "I6", "G8", "G9", "I9", "F6", "F8", "I8",
-      "G6", "I7", "D8", "E8", "J10", "K11", "G4", "G5", "H6"
+      "H8",
+      "H7",
+      "G7",
+      "I6",
+      "G8",
+      "G9",
+      "I9",
+      "F6",
+      "F8",
+      "I8",
+      "G6",
+      "I7",
+      "D8",
+      "E8",
+      "J10",
+      "K11",
+      "G4",
+      "G5",
+      "H6"
     ],
-    "expected_moves": ["I5"],
+    "expected_moves": [
+      "I5"
+    ],
     "max_depth": 4
   },
   {
@@ -88,13 +160,55 @@
     "description": "白棋 K8 开始终局强制链",
     "player": "WHITE",
     "moves": [
-      "H8", "H7", "G7", "I6", "G8", "G9", "I9", "F6", "F8", "I8",
-      "G6", "I7", "D8", "E8", "J10", "K11", "G4", "G5", "H6", "I5",
-      "I4", "H5", "J5", "F5", "E5", "H4", "I3", "G3", "J6", "E1",
-      "F2", "J7", "G2", "H3", "E9", "D10", "H2", "I2", "D2", "E2",
-      "J4", "K5", "J3", "J2", "K6"
+      "H8",
+      "H7",
+      "G7",
+      "I6",
+      "G8",
+      "G9",
+      "I9",
+      "F6",
+      "F8",
+      "I8",
+      "G6",
+      "I7",
+      "D8",
+      "E8",
+      "J10",
+      "K11",
+      "G4",
+      "G5",
+      "H6",
+      "I5",
+      "I4",
+      "H5",
+      "J5",
+      "F5",
+      "E5",
+      "H4",
+      "I3",
+      "G3",
+      "J6",
+      "E1",
+      "F2",
+      "J7",
+      "G2",
+      "H3",
+      "E9",
+      "D10",
+      "H2",
+      "I2",
+      "D2",
+      "E2",
+      "J4",
+      "K5",
+      "J3",
+      "J2",
+      "K6"
     ],
-    "expected_moves": ["K8"],
+    "expected_moves": [
+      "K8"
+    ],
     "max_depth": 3
   },
   {
@@ -102,14 +216,64 @@
     "description": "白棋终局同时存在两条强制获胜路线",
     "player": "WHITE",
     "moves": [
-      "H8", "H7", "G7", "I6", "G8", "G9", "I9", "F6", "F8", "I8",
-      "G6", "I7", "D8", "E8", "J10", "K11", "G4", "G5", "H6", "I5",
-      "I4", "H5", "J5", "F5", "E5", "H4", "I3", "G3", "J6", "E1",
-      "F2", "J7", "G2", "H3", "E9", "D10", "H2", "I2", "D2", "E2",
-      "J4", "K5", "J3", "J2", "K6", "K8", "L9", "K10", "K9", "J9",
-      "L11", "L7", "K7"
+      "H8",
+      "H7",
+      "G7",
+      "I6",
+      "G8",
+      "G9",
+      "I9",
+      "F6",
+      "F8",
+      "I8",
+      "G6",
+      "I7",
+      "D8",
+      "E8",
+      "J10",
+      "K11",
+      "G4",
+      "G5",
+      "H6",
+      "I5",
+      "I4",
+      "H5",
+      "J5",
+      "F5",
+      "E5",
+      "H4",
+      "I3",
+      "G3",
+      "J6",
+      "E1",
+      "F2",
+      "J7",
+      "G2",
+      "H3",
+      "E9",
+      "D10",
+      "H2",
+      "I2",
+      "D2",
+      "E2",
+      "J4",
+      "K5",
+      "J3",
+      "J2",
+      "K6",
+      "K8",
+      "L9",
+      "K10",
+      "K9",
+      "J9",
+      "L11",
+      "L7",
+      "K7"
     ],
-    "expected_moves": ["M6", "I10"],
+    "expected_moves": [
+      "M6",
+      "I10"
+    ],
     "max_depth": 3
   },
   {
@@ -117,10 +281,19 @@
     "description": "三连发展成开放四，VCF 快速确认胜势",
     "player": "WHITE",
     "stones": {
-      "WHITE": ["F8", "G8", "H8"],
-      "BLACK": ["A1"]
+      "WHITE": [
+        "F8",
+        "G8",
+        "H8"
+      ],
+      "BLACK": [
+        "A1"
+      ]
     },
-    "expected_moves": ["E8", "I8"],
+    "expected_moves": [
+      "E8",
+      "I8"
+    ],
     "max_depth": 3,
     "expected_reason_contains": "VCF"
   },
@@ -129,11 +302,67 @@
     "description": "对手开放四形成双胜点，当前方只能选择其一",
     "player": "WHITE",
     "stones": {
-      "BLACK": ["F8", "G8", "H8", "I8"],
+      "BLACK": [
+        "F8",
+        "G8",
+        "H8",
+        "I8"
+      ],
       "WHITE": []
     },
-    "expected_moves": ["E8", "J8"],
+    "expected_moves": [
+      "E8",
+      "J8"
+    ],
     "max_depth": 2,
     "expected_reason_contains": "多胜点"
+  },
+  {
+    "name": "block_g9_multi_threat_frontier",
+    "description": "白棋必须占据 G9，阻止黑棋下一手形成多个独立强制点",
+    "player": "WHITE",
+    "moves": [
+      "H8",
+      "H7",
+      "G7",
+      "I9",
+      "F8",
+      "E8",
+      "E9",
+      "H6",
+      "F10"
+    ],
+    "expected_moves": [
+      "G9"
+    ],
+    "max_depth": 2,
+    "expected_reason_contains": "多重威胁启动点"
+  },
+  {
+    "name": "choose_h11_over_l7_defense_vct",
+    "description": "黑棋用防守分支 VCT 探针比较两个封堵端点，选择 H11 而不是 L7",
+    "player": "BLACK",
+    "moves": [
+      "H8",
+      "I7",
+      "I6",
+      "H7",
+      "G7",
+      "F6",
+      "J7",
+      "K8",
+      "J8",
+      "J9",
+      "I8",
+      "I10"
+    ],
+    "expected_moves": [
+      "H11"
+    ],
+    "rejected_moves": [
+      "L7"
+    ],
+    "max_depth": 3,
+    "expected_reason_contains": "防守分支 VCT"
   }
 ]

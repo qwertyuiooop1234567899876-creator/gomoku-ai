@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
-from engine.ai import CandidateAnalysis, DecisionAnalysis, Move, ScoringAI
+from engine.ai import (
+    CandidateAnalysis,
+    DecisionAnalysis,
+    DefenseCandidateAnalysis,
+    Move,
+    ScoringAI,
+)
 from engine.board import DIRECTIONS, EMPTY, WHITE, Board
 from engine.evaluator import (
     ThreatProfile,
@@ -36,9 +42,17 @@ class BoundType(str, Enum):
     UPPER = "upper"
 
 
+class DefenseProof(str, Enum):
+    """防守分支探针在有限搜索范围内给出的状态。"""
+
+    SURVIVES_PROBE = "survives_probe"
+    UNKNOWN = "unknown"
+    FORCED_LOSS = "forced_loss"
+
+
 @dataclass(frozen=True, slots=True)
 class SearchConfig:
-    """V0.8.1 搜索参数。"""
+    """V0.8.5 搜索参数。"""
 
     max_depth: int = 3
     time_limit_seconds: float | None = 2.0
@@ -57,6 +71,14 @@ class SearchConfig:
     soft_time_ratio: float = 0.88
     vcf_max_attacker_moves: int = 5
     vcf_time_fraction: float = 0.18
+    frontier_reply_limit: int = 6
+    defense_vct_max_candidates: int = 3
+    defense_vct_probe_depth: int = 3
+    defense_vct_extension_depth: int = 4
+    defense_vct_branch_limit: int = 6
+    defense_vct_time_fraction: float = 0.12
+    defense_vct_max_seconds: float = 2.5
+    defense_vct_score_margin: int = 20_000
 
     def __post_init__(self) -> None:
         if self.max_depth < 1:
@@ -90,6 +112,22 @@ class SearchConfig:
             raise ValueError("vcf_max_attacker_moves 不能小于 0。")
         if not 0 < self.vcf_time_fraction <= 1:
             raise ValueError("vcf_time_fraction 必须在 0～1 之间。")
+        if self.frontier_reply_limit < 2:
+            raise ValueError("frontier_reply_limit 不能小于 2。")
+        if self.defense_vct_max_candidates < 2:
+            raise ValueError("defense_vct_max_candidates 不能小于 2。")
+        if self.defense_vct_probe_depth < 1:
+            raise ValueError("defense_vct_probe_depth 必须大于 0。")
+        if self.defense_vct_extension_depth < 1:
+            raise ValueError("defense_vct_extension_depth 必须大于 0。")
+        if self.defense_vct_branch_limit < 2:
+            raise ValueError("defense_vct_branch_limit 不能小于 2。")
+        if not 0 < self.defense_vct_time_fraction <= 1:
+            raise ValueError("defense_vct_time_fraction 必须在 0～1 之间。")
+        if self.defense_vct_max_seconds <= 0:
+            raise ValueError("defense_vct_max_seconds 必须大于 0。")
+        if self.defense_vct_score_margin < 0:
+            raise ValueError("defense_vct_score_margin 不能小于 0。")
 
 
 @dataclass(slots=True)
@@ -104,6 +142,7 @@ class SearchCounters:
     pvs_researches: int = 0
     aspiration_researches: int = 0
     vcf_nodes: int = 0
+    defense_vct_nodes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,15 +162,38 @@ class RootResult:
     score: int
     principal_variation: tuple[Move, ...]
     ranked_moves: tuple[tuple[Move, int], ...]
+    ranked_variations: tuple[
+        tuple[Move, int, tuple[Move, ...]], ...
+    ] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class DefenseProbeResult:
+    """一次窄分支防守 VCT 探测结果。"""
+
+    completed_depth: int
+    nodes: int
+    candidates: tuple[DefenseCandidateAnalysis, ...]
+
+    @property
+    def best_move(self) -> Move | None:
+        return self.candidates[0].move if self.candidates else None
 
 
 class SearchAI(ScoringAI):
     """
-    V0.8.1 搜索 AI。
+    V0.8.5 搜索 AI。
 
-    在 V0.8 搜索底层基础上，将每个 SearchAI 的独立置换表容量
-    固定提高到 100,000 条。黑白双方不共享置换表，避免对战
-    测试中出现跨引擎缓存复用带来的公平性争议。
+    保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
+    只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
+    评分直接落子；最终选择重新交给 PVS/迭代加深，避免多个疑似
+    前沿点分数接近时过早返回。V0.8.4 进一步禁止把普通 PVS 中的
+    “接近将杀分”当作严格证明：除立即五连、唯一封堵、多胜点败势
+    和独立 VCF 快速通道外，搜索必须继续到请求深度或时间边界。
+    V0.8.5 在对手强威胁只有 2～3 个封堵候选时增加窄分支
+    defense-VCT 探针：用更深的威胁延伸比较不同封堵端点，并在
+    普通 PVS 分数接近时作为战术优先级裁决，处理 L7/H11 一类
+    “都能挡住眼前棋形，但其中一边会放出长 VCT”的局面。
     """
 
     def __init__(
@@ -170,6 +232,7 @@ class SearchAI(ScoringAI):
             tuple[int, int, int, int],
             ThreatProfile,
         ] = {}
+        self._defense_probe: DefenseProbeResult | None = None
 
     def choose_move(self, board: Board) -> Move:
         """按硬战术、VCF、限时迭代加深的顺序选择落点。"""
@@ -187,6 +250,7 @@ class SearchAI(ScoringAI):
         self._killer_moves.clear()
         self._interrupted_depth = 0
         self._threat_cache.clear()
+        self._defense_probe = None
         self._decay_history()
         self._prune_transposition_table()
 
@@ -208,6 +272,7 @@ class SearchAI(ScoringAI):
                 completed_depth=0,
                 principal_variation=(selected,),
                 search_completed=True,
+                stop_reason="immediate_win",
             )
             return selected
 
@@ -226,6 +291,7 @@ class SearchAI(ScoringAI):
                 completed_depth=0,
                 principal_variation=(selected,),
                 search_completed=True,
+                stop_reason="unique_block",
             )
             return selected
 
@@ -248,6 +314,7 @@ class SearchAI(ScoringAI):
                 completed_depth=0,
                 principal_variation=(selected,),
                 search_completed=True,
+                stop_reason="multiple_loss_points",
             )
             return selected
 
@@ -262,6 +329,7 @@ class SearchAI(ScoringAI):
                 completed_depth=0,
                 principal_variation=(selected,),
                 search_completed=True,
+                stop_reason="opening",
             )
             return selected
 
@@ -288,8 +356,12 @@ class SearchAI(ScoringAI):
                     search_completed=True,
                     vcf_found=True,
                     vcf_depth=len(vcf_line),
+                    stop_reason="vcf_proven",
                 )
                 return selected
+
+        preserve_frontier_order = False
+        defense_probe: DefenseProbeResult | None = None
 
         try:
             root_pool = self._root_profile_pool(board, legal_moves)
@@ -314,6 +386,24 @@ class SearchAI(ScoringAI):
                 for move, profile in opponent_profiles.items()
                 if profile.forced_win
             ]
+            opponent_frontiers = self._multi_threat_frontiers(
+                board,
+                root_pool,
+                self.opponent,
+                profiles=opponent_profiles,
+            )
+            if opponent_frontiers:
+                maximum_frontier_size = max(
+                    len(replies)
+                    for replies in opponent_frontiers.values()
+                )
+                opponent_frontier_moves = [
+                    move
+                    for move, replies in opponent_frontiers.items()
+                    if len(replies) == maximum_frontier_size
+                ]
+            else:
+                opponent_frontier_moves = []
 
             if own_forcing_moves:
                 search_candidates = self._order_specific_moves(
@@ -334,7 +424,53 @@ class SearchAI(ScoringAI):
                     tt_move=self._tt_best_move(board, self.player),
                     full_evaluation=True,
                 )
-                tactical_reason = "搜索对手强制威胁的最佳防守"
+                if 2 <= len(search_candidates) <= (
+                    self.config.defense_vct_max_candidates
+                ):
+                    defense_probe = self._run_defense_vct_probe(
+                        board,
+                        self.player,
+                        search_candidates,
+                    )
+                    if defense_probe is not None:
+                        self._defense_probe = defense_probe
+                        probe_order = [
+                            candidate.move
+                            for candidate in defense_probe.candidates
+                        ]
+                        search_candidates = [
+                            *probe_order,
+                            *(
+                                move
+                                for move in search_candidates
+                                if move not in probe_order
+                            ),
+                        ]
+                        tactical_reason = (
+                            "防守分支 VCT 探针与 PVS 联合验证"
+                        )
+                    else:
+                        tactical_reason = "搜索对手强制威胁的最佳防守"
+                else:
+                    tactical_reason = "搜索对手强制威胁的最佳防守"
+            elif opponent_frontier_moves:
+                # V0.8.2 在这里直接按静态分返回，导致多个前沿点分数
+                # 接近时（例如 K9/J7/H6/J10）没有真正验证对手最佳应手。
+                # V0.8.3 将前沿检测降级为“根节点排序提示”：危险点
+                # 必须进入候选集并优先搜索，但最终着法由 PVS 决定。
+                frontier_candidates = self._order_specific_moves(
+                    board,
+                    opponent_frontier_moves,
+                    self.player,
+                    ply=0,
+                    tt_move=self._tt_best_move(board, self.player),
+                    full_evaluation=True,
+                )
+                search_candidates = frontier_candidates[
+                    : self.config.frontier_reply_limit
+                ]
+                preserve_frontier_order = True
+                tactical_reason = "多重威胁启动点候选的 PVS 防守"
             else:
                 search_candidates = self._ordered_moves(
                     board,
@@ -362,6 +498,7 @@ class SearchAI(ScoringAI):
                 completed_depth=0,
                 principal_variation=(fallback_move,),
                 search_completed=False,
+                stop_reason="hard_deadline_fallback",
             )
             return fallback_move
 
@@ -382,11 +519,13 @@ class SearchAI(ScoringAI):
         )
         completed_depth = 0
         search_completed = True
+        stop_reason = "requested_depth_completed"
 
         for depth in range(1, self.config.max_depth + 1):
             if depth > 1 and self._time.soft_expired():
                 self._interrupted_depth = depth
                 search_completed = False
+                stop_reason = "soft_deadline"
                 break
 
             try:
@@ -431,26 +570,37 @@ class SearchAI(ScoringAI):
             except SearchTimeout:
                 self._interrupted_depth = depth
                 search_completed = False
+                stop_reason = "hard_deadline"
                 break
+
+            if defense_probe is not None:
+                result = self._apply_defense_probe_tiebreak(
+                    result,
+                    defense_probe,
+                )
 
             best_result = result
             completed_depth = depth
 
-            # 下一层首先验证上一层最佳着。
-            search_candidates = self._promote_move(
-                search_candidates,
-                result.move,
-            )
+            # 普通搜索下一层首先验证上一层最佳着。多重威胁前沿
+            # 保留静态危险度顺序，避免浅层误判把真正关键点永久后移。
+            if not preserve_frontier_order:
+                search_candidates = self._promote_move(
+                    search_candidates,
+                    result.move,
+                )
 
-            if abs(result.score) >= MATE_SCORE - 100:
-                break
+            # V0.8.3 会在分数接近 MATE_SCORE 时提前停止。但普通
+            # PVS 使用的是选择性候选和威胁延伸，这类分数可能只是
+            # 强棋型或受限搜索中的“疑似必杀”，并非严格证明。
+            # 因此这里不再按分数退出；只有 choose_move 前面的明确
+            # 战术通道和独立 VCF 能提前返回。
 
-        if completed_depth < self.config.max_depth and not (
-            abs(best_result.score) >= MATE_SCORE - 100
-        ):
+        if completed_depth < self.config.max_depth:
             search_completed = False
             if self._interrupted_depth == 0:
                 self._interrupted_depth = completed_depth + 1
+                stop_reason = "search_incomplete"
 
         reason = (
             f"{tactical_reason}（完成深度 {completed_depth}）"
@@ -467,8 +617,218 @@ class SearchAI(ScoringAI):
             search_completed=search_completed,
             own_profiles=own_profiles,
             opponent_profiles=opponent_profiles,
+            stop_reason=stop_reason,
         )
         return best_result.move
+
+    def _run_defense_vct_probe(
+        self,
+        board: Board,
+        player: int,
+        candidates: list[Move],
+    ) -> DefenseProbeResult | None:
+        """用窄分支、更深威胁延伸比较少量防守候选。
+
+        这不是完整 VCT 证明器。它只在根节点防守候选很少时运行，
+        并把更多预算放到威胁延伸上，用来识别“眼前都能挡，但某个
+        封堵端点会放出更长威胁链”的差异。结果只作为普通 PVS
+        分数接近时的战术裁决，不替代完整搜索。
+        """
+        budget = self._defense_vct_budget_seconds()
+        if budget == 0:
+            return None
+
+        probe = SearchAI(
+            player=player,
+            max_depth=self.config.defense_vct_probe_depth,
+            time_limit_seconds=budget,
+            root_candidate_limit=max(2, len(candidates)),
+            branch_candidate_limit=self.config.defense_vct_branch_limit,
+            threat_extension_depth=self.config.defense_vct_extension_depth,
+            diagnostics=False,
+        )
+        probe.config = replace(
+            probe.config,
+            use_aspiration=False,
+            use_pvs=True,
+        )
+        probe._time = TimeManager.start(
+            budget,
+            soft_ratio=0.96,
+        )
+        probe._generation += 1
+        probe._counters = SearchCounters()
+
+        ordered = list(candidates)
+        best: RootResult | None = None
+        completed_depth = 0
+
+        for depth in range(1, self.config.defense_vct_probe_depth + 1):
+            if depth > 1 and probe._time.soft_expired():
+                break
+            try:
+                result = probe._search_root(
+                    board,
+                    player,
+                    depth,
+                    ordered,
+                    alpha=-INFINITY,
+                    beta=INFINITY,
+                )
+            except SearchTimeout:
+                break
+            best = result
+            completed_depth = depth
+            ordered = probe._promote_move(ordered, result.move)
+
+        self._counters.defense_vct_nodes += probe._counters.nodes
+        if (
+            best is None
+            or completed_depth < self.config.defense_vct_probe_depth
+        ):
+            return None
+
+        variations = {
+            move: (score, pv)
+            for move, score, pv in best.ranked_variations
+        }
+        analyses: list[DefenseCandidateAnalysis] = []
+        for move in candidates:
+            score, pv = variations.get(
+                move,
+                (
+                    dict(best.ranked_moves).get(move, -INFINITY),
+                    (move,),
+                ),
+            )
+            if score <= -MATE_SCORE + 10_000:
+                status = DefenseProof.FORCED_LOSS
+            elif completed_depth <= 0:
+                status = DefenseProof.UNKNOWN
+            else:
+                status = DefenseProof.SURVIVES_PROBE
+            analyses.append(
+                DefenseCandidateAnalysis(
+                    move=move,
+                    score=score,
+                    status=status.value,
+                    principal_variation=pv,
+                )
+            )
+
+        status_priority = {
+            DefenseProof.SURVIVES_PROBE.value: 2,
+            DefenseProof.UNKNOWN.value: 1,
+            DefenseProof.FORCED_LOSS.value: 0,
+        }
+        original_priority = {
+            move: len(candidates) - index
+            for index, move in enumerate(candidates)
+        }
+        analyses.sort(
+            key=lambda item: (
+                status_priority.get(item.status, 0),
+                item.score,
+                original_priority.get(item.move, 0),
+            ),
+            reverse=True,
+        )
+        return DefenseProbeResult(
+            completed_depth=completed_depth,
+            nodes=probe._counters.nodes,
+            candidates=tuple(analyses),
+        )
+
+    def _defense_vct_budget_seconds(self) -> float | None:
+        total = self.config.time_limit_seconds
+        if total is None:
+            return None
+
+        remaining = self._time.remaining_seconds
+        if remaining is None:
+            return None
+
+        budget = min(
+            self.config.defense_vct_max_seconds,
+            max(0.15, total * self.config.defense_vct_time_fraction),
+        )
+        budget = min(budget, max(0.0, remaining - 0.05))
+        return budget if budget >= 0.05 else 0
+
+    def _apply_defense_probe_tiebreak(
+        self,
+        result: RootResult,
+        probe: DefenseProbeResult,
+    ) -> RootResult:
+        """PVS 分数接近时，优先采用更深威胁探针的防守排序。"""
+        root_scores = dict(result.ranked_moves)
+        available = [
+            candidate
+            for candidate in probe.candidates
+            if candidate.move in root_scores
+        ]
+        if not available:
+            return result
+
+        status_priority = {
+            DefenseProof.SURVIVES_PROBE.value: 2,
+            DefenseProof.UNKNOWN.value: 1,
+            DefenseProof.FORCED_LOSS.value: 0,
+        }
+        best_status = max(
+            status_priority.get(candidate.status, 0)
+            for candidate in available
+        )
+        status_filtered = [
+            candidate
+            for candidate in available
+            if status_priority.get(candidate.status, 0) == best_status
+        ]
+        best_root_score = max(
+            root_scores[candidate.move]
+            for candidate in status_filtered
+        )
+        eligible = [
+            candidate
+            for candidate in status_filtered
+            if root_scores[candidate.move]
+            >= best_root_score - self.config.defense_vct_score_margin
+        ]
+        chosen = eligible[0]
+        if chosen.move == result.move:
+            return result
+
+        variation_map = {
+            move: pv
+            for move, _, pv in result.ranked_variations
+        }
+        chosen_pv = variation_map.get(
+            chosen.move,
+            chosen.principal_variation or (chosen.move,),
+        )
+        reordered = (
+            (chosen.move, root_scores[chosen.move]),
+            *(
+                item
+                for item in result.ranked_moves
+                if item[0] != chosen.move
+            ),
+        )
+        reordered_variations = (
+            (chosen.move, root_scores[chosen.move], chosen_pv),
+            *(
+                item
+                for item in result.ranked_variations
+                if item[0] != chosen.move
+            ),
+        )
+        return RootResult(
+            move=chosen.move,
+            score=root_scores[chosen.move],
+            principal_variation=chosen_pv,
+            ranked_moves=reordered,
+            ranked_variations=reordered_variations,
+        )
 
     def _search_root(
         self,
@@ -540,7 +900,17 @@ class SearchAI(ScoringAI):
         if not ranked:
             raise SearchTimeout
 
-        ranked.sort(key=lambda item: item[1], reverse=True)
+        candidate_priority = {
+            move: len(candidates) - index
+            for index, move in enumerate(candidates)
+        }
+        ranked.sort(
+            key=lambda item: (
+                item[1],
+                candidate_priority.get(item[0], 0),
+            ),
+            reverse=True,
+        )
         best_move, best_score, best_pv = ranked[0]
 
         # Aspiration fail-low 时保留一个明确分数；外层会全窗口重搜。
@@ -555,6 +925,7 @@ class SearchAI(ScoringAI):
                 (move, score)
                 for move, score, _ in ranked
             ),
+            ranked_variations=tuple(ranked),
         )
 
     def _negamax(
@@ -949,6 +1320,103 @@ class SearchAI(ScoringAI):
             reverse=True,
         )
         return [move for move, _, _ in forcing[:limit]]
+
+    def _multi_threat_frontiers(
+        self,
+        board: Board,
+        candidates: list[Move],
+        attacker: int,
+        *,
+        profiles: dict[Move, ThreatProfile] | None = None,
+    ) -> dict[Move, tuple[Move, ...]]:
+        """寻找一手后会产生至少两个独立强制点的启动着。
+
+        只检查本身已经形成活三/冲四信号的候选，避免对所有普通点
+        做二次展开。返回值记录启动点及其下一层强制点，供根节点
+        防守筛选和自动回归测试使用。
+        """
+        profiles = profiles or {}
+        frontiers: dict[Move, tuple[Move, ...]] = {}
+
+        ordered = sorted(
+            candidates,
+            key=lambda move: self._quick_order_score(
+                board,
+                move,
+                attacker,
+            ),
+            reverse=True,
+        )
+
+        for move in ordered:
+            self._check_timeout()
+            profile = profiles.get(move)
+            if profile is None:
+                profile = self._analyze_cached(board, move, attacker)
+
+            # 已经属于当前强制威胁的点由原有逻辑处理。这里只寻找
+            # “普通/活三启动 -> 下一手多重强制点”的前沿。
+            if profile.forced_win:
+                continue
+            if (
+                profile.open_three_directions < 1
+                and profile.four_directions < 1
+            ):
+                continue
+
+            board.place(move[0], move[1], attacker)
+            try:
+                reply_raw = self._raw_candidates(
+                    board,
+                    board.get_legal_moves(),
+                    at_root=False,
+                )
+                reply_limit = max(
+                    self.config.frontier_reply_limit * 5,
+                    32,
+                )
+                replies = sorted(
+                    reply_raw,
+                    key=lambda reply: self._quick_order_score(
+                        board,
+                        reply,
+                        attacker,
+                    ),
+                    reverse=True,
+                )[:reply_limit]
+                strong_replies: list[tuple[Move, ThreatProfile]] = []
+                for reply in replies:
+                    self._check_timeout()
+                    reply_profile = self._analyze_cached(
+                        board,
+                        reply,
+                        attacker,
+                    )
+                    if reply_profile.forced_win:
+                        strong_replies.append((reply, reply_profile))
+                strong_replies.sort(
+                    key=lambda item: (
+                        item[1].tactical_rank,
+                        len(item[1].winning_moves),
+                        self._quick_order_score(
+                            board,
+                            item[0],
+                            attacker,
+                        ),
+                    ),
+                    reverse=True,
+                )
+                if len(strong_replies) >= 2:
+                    frontiers[move] = tuple(
+                        reply
+                        for reply, _ in strong_replies[
+                            : self.config.frontier_reply_limit
+                        ]
+                    )
+            finally:
+                board.undo()
+
+        return frontiers
 
     def _root_profile_pool(
         self,
@@ -1490,6 +1958,7 @@ class SearchAI(ScoringAI):
         opponent_profiles: dict[Move, ThreatProfile] | None = None,
         vcf_found: bool = False,
         vcf_depth: int = 0,
+        stop_reason: str = "unspecified",
     ) -> None:
         elapsed = self._time.elapsed_seconds
         nps = int(self._counters.nodes / elapsed) if elapsed > 0 else 0
@@ -1524,6 +1993,14 @@ class SearchAI(ScoringAI):
                 * self.config.soft_time_ratio
             )
         )
+        time_used_ratio = (
+            None
+            if self.config.time_limit_seconds is None
+            else min(
+                1.0,
+                elapsed / self.config.time_limit_seconds,
+            )
+        )
         self.last_analysis = DecisionAnalysis(
             selected_move=selected_move,
             reason=reason,
@@ -1551,4 +2028,27 @@ class SearchAI(ScoringAI):
             hard_time_limit_seconds=self.config.time_limit_seconds,
             principal_variation=principal_variation,
             search_completed=search_completed,
+            stop_reason=stop_reason,
+            time_used_ratio=time_used_ratio,
+            defense_vct_checked=self._defense_probe is not None,
+            defense_vct_depth=(
+                0
+                if self._defense_probe is None
+                else self._defense_probe.completed_depth
+            ),
+            defense_vct_nodes=(
+                0
+                if self._defense_probe is None
+                else self._defense_probe.nodes
+            ),
+            defense_vct_best_move=(
+                None
+                if self._defense_probe is None
+                else self._defense_probe.best_move
+            ),
+            defense_vct_candidates=(
+                ()
+                if self._defense_probe is None
+                else self._defense_probe.candidates
+            ),
         )

@@ -30,6 +30,31 @@ class CandidateAnalysis:
 
 
 @dataclass(frozen=True, slots=True)
+class DefenseCandidateAnalysis:
+    """防守分支威胁探针对单个候选的判断。"""
+
+    move: Move
+    score: int
+    status: str
+    principal_variation: tuple[Move, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "move": list(self.move),
+            "coordinate": format_move(*self.move),
+            "score": self.score,
+            "status": self.status,
+            "principal_variation": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.principal_variation
+            ],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionAnalysis:
     selected_move: Move
     reason: str
@@ -57,6 +82,13 @@ class DecisionAnalysis:
     hard_time_limit_seconds: float | None = None
     principal_variation: tuple[Move, ...] = ()
     search_completed: bool = True
+    stop_reason: str = "unspecified"
+    time_used_ratio: float | None = None
+    defense_vct_checked: bool = False
+    defense_vct_depth: int = 0
+    defense_vct_nodes: int = 0
+    defense_vct_best_move: Move | None = None
+    defense_vct_candidates: tuple[DefenseCandidateAnalysis, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -96,6 +128,25 @@ class DecisionAnalysis:
                 for move in self.principal_variation
             ],
             "search_completed": self.search_completed,
+            "stop_reason": self.stop_reason,
+            "time_used_ratio": self.time_used_ratio,
+            "defense_vct_checked": self.defense_vct_checked,
+            "defense_vct_depth": self.defense_vct_depth,
+            "defense_vct_nodes": self.defense_vct_nodes,
+            "defense_vct_best_move": (
+                None
+                if self.defense_vct_best_move is None
+                else list(self.defense_vct_best_move)
+            ),
+            "defense_vct_best_coordinate": (
+                None
+                if self.defense_vct_best_move is None
+                else format_move(*self.defense_vct_best_move)
+            ),
+            "defense_vct_candidates": [
+                candidate.to_dict()
+                for candidate in self.defense_vct_candidates
+            ],
         }
 
 
