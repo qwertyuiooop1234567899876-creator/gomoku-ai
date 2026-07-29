@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -137,7 +138,23 @@ def _analysis_to_dict(ai: GomokuAI) -> dict[str, object] | None:
     analysis = getattr(ai, "last_analysis", None)
     if analysis is None:
         return None
-    return analysis.to_dict()
+    if isinstance(analysis, Mapping):
+        return dict(analysis)
+
+    to_dict = getattr(analysis, "to_dict", None)
+    if not callable(to_dict):
+        raise TypeError(
+            f"{type(ai).__name__}.last_analysis 必须是映射，"
+            "或提供 to_dict()。"
+        )
+
+    payload = to_dict()
+    if not isinstance(payload, Mapping):
+        raise TypeError(
+            f"{type(ai).__name__}.last_analysis.to_dict() "
+            "必须返回映射。"
+        )
+    return dict(payload)
 
 
 def play_game(

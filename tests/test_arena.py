@@ -1,6 +1,6 @@
 import unittest
 
-from arena import create_ai, engine_display_name
+from arena import _analysis_to_dict, create_ai, engine_display_name
 from engine.ai import RandomAI, ScoringAI, TacticalAI
 from engine.arena_settings import AISelection
 from engine.board import BLACK, WHITE
@@ -62,6 +62,42 @@ class TestArenaFactory(unittest.TestCase):
         )
 
         self.assertEqual("YiXin(t=10s,threads=2)", name)
+
+
+class TestArenaAnalysisCompatibility(unittest.TestCase):
+    def test_yixin_dict_analysis_is_accepted(self) -> None:
+        analysis = {
+            "engine_name": "yixin",
+            "reason": "YiXin 外部核心协议搜索",
+        }
+        ai = type("FakeYixin", (), {"last_analysis": analysis})()
+
+        payload = _analysis_to_dict(ai)
+
+        self.assertEqual(analysis, payload)
+        self.assertIsNot(analysis, payload)
+
+    def test_search_analysis_object_is_still_serialized(self) -> None:
+        class Analysis:
+            def to_dict(self) -> dict[str, object]:
+                return {
+                    "engine_name": "search",
+                    "reason": "PVS 搜索",
+                }
+
+        ai = type(
+            "FakeSearch",
+            (),
+            {"last_analysis": Analysis()},
+        )()
+
+        self.assertEqual(
+            {
+                "engine_name": "search",
+                "reason": "PVS 搜索",
+            },
+            _analysis_to_dict(ai),
+        )
 
 
 if __name__ == "__main__":
