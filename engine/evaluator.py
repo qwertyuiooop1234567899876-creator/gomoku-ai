@@ -469,6 +469,13 @@ def find_winning_moves(
     winning_moves: list[Move] = []
 
     for row, column in moves:
+        if not _could_be_winning_move(
+            board,
+            row,
+            column,
+            player,
+        ):
+            continue
         board.place(row, column, player)
 
         try:
@@ -478,6 +485,30 @@ def find_winning_moves(
             board.undo()
 
     return winning_moves
+
+
+def _could_be_winning_move(
+    board: Board,
+    row: int,
+    column: int,
+    player: int,
+) -> bool:
+    """Cheap necessary condition before simulating a winning move."""
+    for row_step, column_step in DIRECTIONS:
+        friendly = 0
+        for offset in range(-4, 5):
+            if offset == 0:
+                continue
+            candidate_row = row + offset * row_step
+            candidate_column = column + offset * column_step
+            if (
+                board.is_inside(candidate_row, candidate_column)
+                and board.grid[candidate_row][candidate_column] == player
+            ):
+                friendly += 1
+        if friendly >= 4:
+            return True
+    return False
 
 
 def _profile_bonus(profile: ThreatProfile) -> int:

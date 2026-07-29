@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_ARENA_SETTINGS_PATH = Path("arena_settings.json")
-VALID_ENGINES = ("random", "tactical", "scoring", "search")
+VALID_ENGINES = ("random", "tactical", "scoring", "search", "yixin")
 
 
 @dataclass(frozen=True, slots=True)
 class AISelection:
-    """一方参赛 AI 的类型与 SearchAI 专属参数。"""
+    """一方参赛 AI 的类型与搜索时间参数。"""
 
     engine_name: str = "search"
     max_depth: int = 3
@@ -20,7 +20,8 @@ class AISelection:
     def __post_init__(self) -> None:
         if self.engine_name not in VALID_ENGINES:
             raise ValueError(
-                "engine_name 必须是 random、tactical、scoring 或 search。"
+                "engine_name 必须是 random、tactical、scoring、"
+                "search 或 yixin。"
             )
         if not 1 <= self.max_depth <= 8:
             raise ValueError("max_depth 必须在 1～8 之间。")
@@ -32,6 +33,10 @@ class AISelection:
     @property
     def uses_search(self) -> bool:
         return self.engine_name == "search"
+
+    @property
+    def uses_time_limit(self) -> bool:
+        return self.engine_name in {"search", "yixin"}
 
     def with_engine(self, engine_name: str) -> "AISelection":
         """切换引擎时保留该方上一次 SearchAI 参数。"""

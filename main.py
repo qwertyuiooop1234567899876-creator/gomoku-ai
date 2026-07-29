@@ -17,8 +17,7 @@ from engine.settings import (
     load_search_settings,
     save_search_settings,
 )
-
-ENGINE_VERSION = "0.8.5"
+from engine.version import ENGINE_VERSION
 
 
 def choose_human_player() -> int:
@@ -110,7 +109,7 @@ def create_computer(
     player: int,
     settings: SearchSettings | None = None,
 ) -> SearchAI:
-    """按指定颜色和搜索参数创建 V0.8.5 防守分支 VCT 探针与前沿引导 PVS 搜索 AI。"""
+    """按指定颜色和搜索参数创建证明搜索与 PVS 搜索 AI。"""
     selected = settings or SearchSettings()
 
     return SearchAI(

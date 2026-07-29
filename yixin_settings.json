@@ -1,0 +1,19 @@
+{
+  "executable_path": "yixin/engine.exe",
+  "launch_arguments": [],
+  "board_size": 15,
+  "timeout_turn_seconds": 10.0,
+  "startup_timeout_seconds": 5.0,
+  "response_grace_seconds": 5.0,
+  "thread_num": 2,
+  "thread_split_depth": 6,
+  "hash_size": 21,
+  "caution_factor": 2,
+  "checkmate": 0,
+  "rule": 0,
+  "pondering": false,
+  "show_detail": true,
+  "use_database": false,
+  "max_depth": null,
+  "max_node": null
+}

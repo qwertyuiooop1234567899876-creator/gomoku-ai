@@ -55,6 +55,62 @@ class DefenseCandidateAnalysis:
 
 
 @dataclass(frozen=True, slots=True)
+class ProofCandidateAnalysis:
+    """严格证明器对一个根候选的保守判断。"""
+
+    move: Move
+    state: str
+    completed: bool
+    nodes: int
+    elapsed_seconds: float
+    cutoff_reason: str | None = None
+    principal_variation: tuple[Move, ...] = ()
+    threat_risk: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "move": list(self.move),
+            "coordinate": format_move(*self.move),
+            "state": self.state,
+            "completed": self.completed,
+            "nodes": self.nodes,
+            "elapsed_seconds": self.elapsed_seconds,
+            "cutoff_reason": self.cutoff_reason,
+            "threat_risk": self.threat_risk,
+            "principal_variation": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.principal_variation
+            ],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RootSafetyCandidateAnalysis:
+    """未完成主搜索结束前，对近分根候选的独立复核结果。"""
+
+    move: Move
+    score: int
+    principal_variation: tuple[Move, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "move": list(self.move),
+            "coordinate": format_move(*self.move),
+            "score": self.score,
+            "principal_variation": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.principal_variation
+            ],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionAnalysis:
     selected_move: Move
     reason: str
@@ -89,6 +145,41 @@ class DecisionAnalysis:
     defense_vct_nodes: int = 0
     defense_vct_best_move: Move | None = None
     defense_vct_candidates: tuple[DefenseCandidateAnalysis, ...] = ()
+    proof_checked: bool = False
+    proof_state: str = "not_checked"
+    proof_nodes: int = 0
+    proof_elapsed_seconds: float = 0.0
+    proof_best_move: Move | None = None
+    proof_principal_variation: tuple[Move, ...] = ()
+    proof_cutoff_reason: str | None = None
+    proof_candidates: tuple[ProofCandidateAnalysis, ...] = ()
+    proof_tt_queries: int = 0
+    proof_tt_hits: int = 0
+    proof_tt_compatible_hits: int = 0
+    proof_tt_stores: int = 0
+    proof_tt_skipped_stores: int = 0
+    proof_tt_evictions: int = 0
+    proof_tt_size: int = 0
+    threat_candidate_batches: int = 0
+    threat_exact_descriptions: int = 0
+    threat_frontier_batches: int = 0
+    threat_frontier_descriptions: int = 0
+    threat_cache_queries: int = 0
+    threat_cache_hits: int = 0
+    threat_cache_stores: int = 0
+    threat_cache_skips: int = 0
+    root_safety_checked: bool = False
+    root_safety_applied: bool = False
+    root_safety_trigger: str | None = None
+    root_safety_pvs_gap: int | None = None
+    root_safety_main_rank_stable: bool = True
+    root_safety_depth: int = 0
+    root_safety_nodes: int = 0
+    root_safety_best_move: Move | None = None
+    root_safety_leaders: tuple[Move, ...] = ()
+    root_safety_candidates: tuple[
+        RootSafetyCandidateAnalysis, ...
+    ] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -146,6 +237,83 @@ class DecisionAnalysis:
             "defense_vct_candidates": [
                 candidate.to_dict()
                 for candidate in self.defense_vct_candidates
+            ],
+            "proof_checked": self.proof_checked,
+            "proof_state": self.proof_state,
+            "proof_nodes": self.proof_nodes,
+            "proof_elapsed_seconds": self.proof_elapsed_seconds,
+            "proof_best_move": (
+                None
+                if self.proof_best_move is None
+                else list(self.proof_best_move)
+            ),
+            "proof_best_coordinate": (
+                None
+                if self.proof_best_move is None
+                else format_move(*self.proof_best_move)
+            ),
+            "proof_principal_variation": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.proof_principal_variation
+            ],
+            "proof_cutoff_reason": self.proof_cutoff_reason,
+            "proof_candidates": [
+                candidate.to_dict()
+                for candidate in self.proof_candidates
+            ],
+            "proof_tt_queries": self.proof_tt_queries,
+            "proof_tt_hits": self.proof_tt_hits,
+            "proof_tt_compatible_hits": (
+                self.proof_tt_compatible_hits
+            ),
+            "proof_tt_stores": self.proof_tt_stores,
+            "proof_tt_skipped_stores": self.proof_tt_skipped_stores,
+            "proof_tt_evictions": self.proof_tt_evictions,
+            "proof_tt_size": self.proof_tt_size,
+            "threat_candidate_batches": self.threat_candidate_batches,
+            "threat_exact_descriptions": (
+                self.threat_exact_descriptions
+            ),
+            "threat_frontier_batches": self.threat_frontier_batches,
+            "threat_frontier_descriptions": (
+                self.threat_frontier_descriptions
+            ),
+            "threat_cache_queries": self.threat_cache_queries,
+            "threat_cache_hits": self.threat_cache_hits,
+            "threat_cache_stores": self.threat_cache_stores,
+            "threat_cache_skips": self.threat_cache_skips,
+            "root_safety_checked": self.root_safety_checked,
+            "root_safety_applied": self.root_safety_applied,
+            "root_safety_trigger": self.root_safety_trigger,
+            "root_safety_pvs_gap": self.root_safety_pvs_gap,
+            "root_safety_main_rank_stable": (
+                self.root_safety_main_rank_stable
+            ),
+            "root_safety_depth": self.root_safety_depth,
+            "root_safety_nodes": self.root_safety_nodes,
+            "root_safety_best_move": (
+                None
+                if self.root_safety_best_move is None
+                else list(self.root_safety_best_move)
+            ),
+            "root_safety_best_coordinate": (
+                None
+                if self.root_safety_best_move is None
+                else format_move(*self.root_safety_best_move)
+            ),
+            "root_safety_leaders": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.root_safety_leaders
+            ],
+            "root_safety_candidates": [
+                candidate.to_dict()
+                for candidate in self.root_safety_candidates
             ],
         }
 

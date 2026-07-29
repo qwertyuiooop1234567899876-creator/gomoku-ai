@@ -8,6 +8,7 @@ from typing import Any
 
 from engine.board import BLACK, WHITE, Board
 from engine.game import format_move
+from engine.version import ENGINE_VERSION, RECORD_FORMAT_VERSION
 
 
 @dataclass(slots=True)
@@ -197,12 +198,106 @@ class GameRecorder:
                     f"     reason={reason}; candidates={candidate_count}"
                 )
 
+                if move.analysis.get("engine_name") == "yixin":
+                    bestline = move.analysis.get("bestline", [])
+                    bestline_text = " -> ".join(
+                        str(item) for item in bestline
+                    )
+                    lines.append(
+                        "     "
+                        f"yixin=eval:"
+                        f"{move.analysis.get('evaluation', None)} "
+                        f"white_eval:"
+                        f"{move.analysis.get('evaluation_white', None)} "
+                        f"depth:"
+                        f"{move.analysis.get('search_depth', 0)}-"
+                        f"{move.analysis.get('selective_depth', 0)} "
+                        f"bestline:{bestline_text or '?'}"
+                    )
+
                 if move.analysis.get("vcf_found", False):
                     lines.append(
                         "     "
                         f"vcf=found depth:{move.analysis.get('vcf_depth', 0)} "
                         f"nodes:{move.analysis.get('vcf_nodes', 0):,}"
                     )
+
+                if move.analysis.get("proof_checked", False):
+                    lines.append(
+                        "     "
+                        f"proof={move.analysis.get('proof_state', 'unknown')} "
+                        f"nodes:{move.analysis.get('proof_nodes', 0):,} "
+                        f"elapsed:"
+                        f"{move.analysis.get('proof_elapsed_seconds', 0.0):.3f}s "
+                        f"best:{move.analysis.get('proof_best_coordinate', '?')} "
+                        f"cutoff:"
+                        f"{move.analysis.get('proof_cutoff_reason', None)}"
+                    )
+                    proof_tt_queries = move.analysis.get(
+                        "proof_tt_queries",
+                        0,
+                    )
+                    proof_tt_hits = move.analysis.get(
+                        "proof_tt_hits",
+                        0,
+                    )
+                    threat_cache_queries = move.analysis.get(
+                        "threat_cache_queries",
+                        0,
+                    )
+                    threat_cache_hits = move.analysis.get(
+                        "threat_cache_hits",
+                        0,
+                    )
+                    lines.append(
+                        "     "
+                        f"proof_tt=hits:{proof_tt_hits:,}/"
+                        f"queries:{proof_tt_queries:,} "
+                        f"compatible:"
+                        f"{move.analysis.get('proof_tt_compatible_hits', 0):,} "
+                        f"stores:{move.analysis.get('proof_tt_stores', 0):,} "
+                        f"skipped:"
+                        f"{move.analysis.get('proof_tt_skipped_stores', 0):,} "
+                        f"size:{move.analysis.get('proof_tt_size', 0):,}; "
+                        f"threat_cache=hits:{threat_cache_hits:,}/"
+                        f"queries:{threat_cache_queries:,} "
+                        f"stores:"
+                        f"{move.analysis.get('threat_cache_stores', 0):,} "
+                        f"skipped:"
+                        f"{move.analysis.get('threat_cache_skips', 0):,}"
+                    )
+                    lines.append(
+                        "     "
+                        f"threat_work=candidate_batches:"
+                        f"{move.analysis.get('threat_candidate_batches', 0):,} "
+                        f"exact_descriptions:"
+                        f"{move.analysis.get('threat_exact_descriptions', 0):,} "
+                        f"frontier_batches:"
+                        f"{move.analysis.get('threat_frontier_batches', 0):,} "
+                        f"frontier_descriptions:"
+                        f"{move.analysis.get('threat_frontier_descriptions', 0):,}"
+                    )
+                    for rank, candidate in enumerate(
+                        move.analysis.get("proof_candidates", []),
+                        start=1,
+                    ):
+                        pv = candidate.get("principal_variation", [])
+                        pv_text = " -> ".join(
+                            item.get("coordinate", "?")
+                            for item in pv
+                        )
+                        suffix = f" pv={pv_text}" if pv_text else ""
+                        lines.append(
+                            "     "
+                            f"proof#{rank} "
+                            f"{candidate.get('coordinate', '?'):4} "
+                            f"state={candidate.get('state', 'unknown')} "
+                            f"complete={candidate.get('completed', False)} "
+                            f"nodes={candidate.get('nodes', 0):,} "
+                            f"risk={candidate.get('threat_risk', None)} "
+                            f"cutoff={candidate.get('cutoff_reason', None)}"
+                            f"{suffix}"
+                        )
 
                 if move.analysis.get("defense_vct_checked", False):
                     lines.append(
@@ -227,6 +322,55 @@ class GameRecorder:
                             f"defense#{rank} "
                             f"{candidate.get('coordinate', '?'):4} "
                             f"status={candidate.get('status', 'unknown')} "
+                            f"score={candidate.get('score', 0):+,}"
+                            f"{suffix}"
+                        )
+
+                if move.analysis.get("root_safety_checked", False):
+                    leaders = move.analysis.get(
+                        "root_safety_leaders",
+                        [],
+                    )
+                    leader_text = " -> ".join(
+                        item.get("coordinate", "?")
+                        for item in leaders
+                    )
+                    lines.append(
+                        "     "
+                        f"root_safety=checked "
+                        f"applied:"
+                        f"{move.analysis.get('root_safety_applied', False)} "
+                        f"trigger:"
+                        f"{move.analysis.get('root_safety_trigger', None)} "
+                        f"pvs_gap:"
+                        f"{move.analysis.get('root_safety_pvs_gap', None)} "
+                        f"main_stable:"
+                        f"{move.analysis.get('root_safety_main_rank_stable', True)} "
+                        f"depth:"
+                        f"{move.analysis.get('root_safety_depth', 0)} "
+                        f"nodes:"
+                        f"{move.analysis.get('root_safety_nodes', 0):,} "
+                        f"best:"
+                        f"{move.analysis.get('root_safety_best_coordinate', '?')} "
+                        f"leaders:{leader_text or '?'}"
+                    )
+                    for rank, candidate in enumerate(
+                        move.analysis.get(
+                            "root_safety_candidates",
+                            [],
+                        ),
+                        start=1,
+                    ):
+                        pv = candidate.get("principal_variation", [])
+                        pv_text = " -> ".join(
+                            item.get("coordinate", "?")
+                            for item in pv
+                        )
+                        suffix = f" pv={pv_text}" if pv_text else ""
+                        lines.append(
+                            "     "
+                            f"safety#{rank} "
+                            f"{candidate.get('coordinate', '?'):4} "
                             f"score={candidate.get('score', 0):+,}"
                             f"{suffix}"
                         )
@@ -303,8 +447,8 @@ class GameRecorder:
 
         finished_at = datetime.now()
         payload = {
-            "format_version": "1.0",
-            "engine_version": "0.8.5",
+            "format_version": RECORD_FORMAT_VERSION,
+            "engine_version": ENGINE_VERSION,
             "mode": self.mode,
             "black": self.black_name,
             "white": self.white_name,
@@ -326,7 +470,7 @@ class GameRecorder:
 
         txt_lines = [
             "Gomoku AI Record",
-            "Engine version: V0.8.5",
+            f"Engine version: V{ENGINE_VERSION}",
             f"Mode: {self.mode}",
             f"Black: {self.black_name}",
             f"White: {self.white_name}",

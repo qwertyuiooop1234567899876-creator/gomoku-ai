@@ -66,6 +66,12 @@ class TestArenaSettings(unittest.TestCase):
         self.assertEqual(6, changed.max_depth)
         self.assertEqual(12.0, changed.time_limit_seconds)
 
+    def test_yixin_is_a_valid_timed_engine(self) -> None:
+        selection = AISelection("yixin", 6, 10.0)
+
+        self.assertFalse(selection.uses_search)
+        self.assertTrue(selection.uses_time_limit)
+
 
 if __name__ == "__main__":
     unittest.main()

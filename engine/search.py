@@ -9,12 +9,13 @@ from engine.ai import (
     DecisionAnalysis,
     DefenseCandidateAnalysis,
     Move,
+    ProofCandidateAnalysis,
+    RootSafetyCandidateAnalysis,
     ScoringAI,
 )
 from engine.board import DIRECTIONS, EMPTY, WHITE, Board
 from engine.evaluator import (
     ThreatProfile,
-    analyze_move_threats,
     evaluate_board,
     evaluate_move,
     evaluate_player,
@@ -22,9 +23,19 @@ from engine.evaluator import (
     other_side,
 )
 from engine.time_manager import TimeManager
+from engine.proof_search import (
+    ProofBudget,
+    ProofResult,
+    ProofSearch,
+    ProofState,
+    ProofTable,
+    ProofTableStats,
+)
+from engine.threats import ThreatAnalyzer, ThreatAnalyzerStats
 from engine.zobrist import get_zobrist_table
 
 MATE_SCORE = 1_000_000_000
+HEURISTIC_SCORE_LIMIT = 100_000_000
 INFINITY = MATE_SCORE * 2
 
 
@@ -52,7 +63,7 @@ class DefenseProof(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class SearchConfig:
-    """V0.8.5 搜索参数。"""
+    """V0.9.2 搜索参数。"""
 
     max_depth: int = 3
     time_limit_seconds: float | None = 2.0
@@ -79,6 +90,25 @@ class SearchConfig:
     defense_vct_time_fraction: float = 0.12
     defense_vct_max_seconds: float = 2.5
     defense_vct_score_margin: int = 20_000
+    proof_time_fraction: float = 0.35
+    proof_max_seconds: float = 15.0
+    proof_root_candidate_limit: int = 4
+    proof_max_nodes: int = 150_000
+    proof_max_attacker_moves: int = 10
+    proof_quiet_frontier_limit: int = 16
+    proof_quiet_attacker_moves: int = 1
+    proof_frontier_scan_limit: int = 24
+    proof_risk_pvs_margin: int = 20_000
+    proof_use_threat_cache: bool = True
+    root_safety_enabled: bool = True
+    root_safety_candidate_limit: int = 2
+    root_safety_score_margin: int = 20_000
+    root_safety_micro_margin: int = 2_000
+    root_safety_time_fraction: float = 0.10
+    root_safety_max_seconds: float = 6.0
+    root_safety_min_seconds: float = 0.75
+    root_safety_extension_bonus: int = 2
+    root_safety_min_completed_depth: int = 3
 
     def __post_init__(self) -> None:
         if self.max_depth < 1:
@@ -128,6 +158,60 @@ class SearchConfig:
             raise ValueError("defense_vct_max_seconds 必须大于 0。")
         if self.defense_vct_score_margin < 0:
             raise ValueError("defense_vct_score_margin 不能小于 0。")
+        if not 0 < self.proof_time_fraction <= 1:
+            raise ValueError("proof_time_fraction 必须在 0～1 之间。")
+        if self.proof_max_seconds <= 0:
+            raise ValueError("proof_max_seconds 必须大于 0。")
+        if self.proof_root_candidate_limit < 1:
+            raise ValueError("proof_root_candidate_limit 必须大于 0。")
+        if self.proof_max_nodes < 1:
+            raise ValueError("proof_max_nodes 必须大于 0。")
+        if self.proof_max_attacker_moves < 1:
+            raise ValueError("proof_max_attacker_moves 必须大于 0。")
+        if self.proof_quiet_frontier_limit < 0:
+            raise ValueError("proof_quiet_frontier_limit 不能小于 0。")
+        if self.proof_quiet_attacker_moves < 0:
+            raise ValueError("proof_quiet_attacker_moves 不能小于 0。")
+        if self.proof_frontier_scan_limit < 1:
+            raise ValueError("proof_frontier_scan_limit 必须大于 0。")
+        if self.proof_risk_pvs_margin < 0:
+            raise ValueError("proof_risk_pvs_margin 不能小于 0。")
+        if self.root_safety_candidate_limit < 2:
+            raise ValueError("root_safety_candidate_limit 不能小于 2。")
+        if self.root_safety_score_margin < 0:
+            raise ValueError("root_safety_score_margin 不能小于 0。")
+        if self.root_safety_micro_margin < 0:
+            raise ValueError("root_safety_micro_margin 不能小于 0。")
+        if (
+            self.root_safety_micro_margin
+            > self.root_safety_score_margin
+        ):
+            raise ValueError(
+                "root_safety_micro_margin 不能大于 "
+                "root_safety_score_margin。"
+            )
+        if not 0 < self.root_safety_time_fraction < 0.5:
+            raise ValueError(
+                "root_safety_time_fraction 必须在 0～0.5 之间。"
+            )
+        if self.root_safety_max_seconds <= 0:
+            raise ValueError("root_safety_max_seconds 必须大于 0。")
+        if self.root_safety_min_seconds <= 0:
+            raise ValueError("root_safety_min_seconds 必须大于 0。")
+        if (
+            self.root_safety_min_seconds
+            > self.root_safety_max_seconds
+        ):
+            raise ValueError(
+                "root_safety_min_seconds 不能大于 "
+                "root_safety_max_seconds。"
+            )
+        if self.root_safety_extension_bonus < 0:
+            raise ValueError("root_safety_extension_bonus 不能小于 0。")
+        if self.root_safety_min_completed_depth < 2:
+            raise ValueError(
+                "root_safety_min_completed_depth 不能小于 2。"
+            )
 
 
 @dataclass(slots=True)
@@ -143,6 +227,8 @@ class SearchCounters:
     aspiration_researches: int = 0
     vcf_nodes: int = 0
     defense_vct_nodes: int = 0
+    proof_nodes: int = 0
+    root_safety_nodes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,9 +266,33 @@ class DefenseProbeResult:
         return self.candidates[0].move if self.candidates else None
 
 
+@dataclass(frozen=True, slots=True)
+class RootSafetyProbeResult:
+    """近分根候选的独立全窗口复核，不具有严格证明语义。"""
+
+    trigger: str
+    pvs_gap: int
+    main_rank_stable: bool
+    completed_depth: int
+    nodes: int
+    candidates: tuple[RootSafetyCandidateAnalysis, ...]
+    leader_history: tuple[Move, ...] = ()
+
+    @property
+    def best_move(self) -> Move | None:
+        return self.candidates[0].move if self.candidates else None
+
+    @property
+    def rank_stable(self) -> bool:
+        return (
+            len(self.leader_history) >= 2
+            and self.leader_history[-1] == self.leader_history[-2]
+        )
+
+
 class SearchAI(ScoringAI):
     """
-    V0.8.5 搜索 AI。
+    V0.9.2 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -232,7 +342,18 @@ class SearchAI(ScoringAI):
             tuple[int, int, int, int],
             ThreatProfile,
         ] = {}
+        self._threat_exact_cache: dict = {}
+        self._threat_candidate_cache: dict = {}
         self._defense_probe: DefenseProbeResult | None = None
+        self._proof_table = ProofTable()
+        self._proof_table_start_stats = ProofTableStats()
+        self._proof_analyzer = self._new_threat_analyzer()
+        self._proof_root_result: ProofResult | None = None
+        self._proof_candidates: tuple[ProofCandidateAnalysis, ...] = ()
+        self._root_safety_probe: RootSafetyProbeResult | None = None
+        self._root_safety_applied = False
+        self._search_phase_deadline: float | None = None
+        self._search_phase_timeout_hit = False
 
     def choose_move(self, board: Board) -> Move:
         """按硬战术、VCF、限时迭代加深的顺序选择落点。"""
@@ -250,7 +371,17 @@ class SearchAI(ScoringAI):
         self._killer_moves.clear()
         self._interrupted_depth = 0
         self._threat_cache.clear()
+        self._threat_exact_cache.clear()
+        self._threat_candidate_cache.clear()
         self._defense_probe = None
+        self._proof_root_result = None
+        self._proof_candidates = ()
+        self._root_safety_probe = None
+        self._root_safety_applied = False
+        self._search_phase_deadline = None
+        self._search_phase_timeout_hit = False
+        self._proof_table_start_stats = self._proof_table.stats()
+        self._proof_analyzer = self._new_threat_analyzer()
         self._decay_history()
         self._prune_transposition_table()
 
@@ -502,6 +633,33 @@ class SearchAI(ScoringAI):
             )
             return fallback_move
 
+        proof_win = self._run_proof_arbitration(
+            board,
+            search_candidates,
+            search_own_win=bool(own_forcing_moves),
+        )
+        if (
+            proof_win is not None
+            and proof_win.state is ProofState.PROVEN_WIN
+            and proof_win.best_move is not None
+            and board.is_empty(*proof_win.best_move)
+        ):
+            selected = proof_win.best_move
+            self._save_search_analysis(
+                selected_move=selected,
+                reason="AND/OR 威胁空间搜索严格证明胜势",
+                candidate_count=len(search_candidates),
+                ranked_moves=[(selected, MATE_SCORE)],
+                completed_depth=0,
+                principal_variation=proof_win.principal_variation,
+                search_completed=True,
+                stop_reason="proof_proven_win",
+            )
+            return selected
+
+        search_candidates = self._filter_proven_losing_candidates(
+            search_candidates
+        )
         if not search_candidates:
             search_candidates = [fallback_move]
 
@@ -517,9 +675,12 @@ class SearchAI(ScoringAI):
             principal_variation=(fallback_move,),
             ranked_moves=((fallback_move, fallback_score),),
         )
+        final_pvs_result: RootResult | None = None
+        final_risk_result: RootResult | None = None
         completed_depth = 0
         search_completed = True
         stop_reason = "requested_depth_completed"
+        root_history: list[RootResult] = []
 
         for depth in range(1, self.config.max_depth + 1):
             if depth > 1 and self._time.soft_expired():
@@ -527,6 +688,29 @@ class SearchAI(ScoringAI):
                 search_completed = False
                 stop_reason = "soft_deadline"
                 break
+
+            self._search_phase_deadline = None
+            self._search_phase_timeout_hit = False
+            if completed_depth > 0 and self._root_safety_trigger(
+                best_result,
+                root_history,
+            ) is not None:
+                reserve = self._root_safety_budget_seconds()
+                if (
+                    reserve > 0
+                    and self._time.hard_deadline is not None
+                ):
+                    self._search_phase_deadline = (
+                        self._time.hard_deadline - reserve
+                    )
+                    if (
+                        time.perf_counter()
+                        >= self._search_phase_deadline
+                    ):
+                        self._interrupted_depth = depth
+                        search_completed = False
+                        stop_reason = "root_safety_reserve"
+                        break
 
             try:
                 if (
@@ -570,17 +754,33 @@ class SearchAI(ScoringAI):
             except SearchTimeout:
                 self._interrupted_depth = depth
                 search_completed = False
-                stop_reason = "hard_deadline"
+                stop_reason = (
+                    "root_safety_reserve"
+                    if self._search_phase_timeout_hit
+                    else "hard_deadline"
+                )
                 break
 
+            final_pvs_result = None
+            final_risk_result = None
             if defense_probe is not None:
                 result = self._apply_defense_probe_tiebreak(
                     result,
                     defense_probe,
                 )
+            elif self._proof_candidates:
+                pvs_result = result
+                result = self._apply_proof_tiebreak(pvs_result)
+                if self._is_unknown_risk_override(
+                    pvs_result,
+                    result,
+                ):
+                    final_pvs_result = pvs_result
+                    final_risk_result = result
 
             best_result = result
             completed_depth = depth
+            root_history.append(result)
 
             # 普通搜索下一层首先验证上一层最佳着。多重威胁前沿
             # 保留静态危险度顺序，避免浅层误判把真正关键点永久后移。
@@ -596,17 +796,65 @@ class SearchAI(ScoringAI):
             # 因此这里不再按分数退出；只有 choose_move 前面的明确
             # 战术通道和独立 VCF 能提前返回。
 
+        self._search_phase_deadline = None
         if completed_depth < self.config.max_depth:
             search_completed = False
             if self._interrupted_depth == 0:
                 self._interrupted_depth = completed_depth + 1
                 stop_reason = "search_incomplete"
 
+        if (
+            final_pvs_result is not None
+            and final_risk_result is not None
+            and completed_depth > 0
+        ):
+            best_result = self._finalize_risk_override(
+                board,
+                final_pvs_result,
+                final_risk_result,
+                completed_depth=completed_depth,
+                root_history=root_history,
+            )
+        elif not search_completed and completed_depth > 0:
+            safety_probe = self._maybe_run_root_safety_probe(
+                board,
+                best_result,
+                completed_depth=completed_depth,
+                root_history=root_history,
+            )
+            if safety_probe is not None:
+                self._root_safety_probe = safety_probe
+                revised = self._apply_root_safety_probe(
+                    best_result,
+                    safety_probe,
+                )
+                self._root_safety_applied = (
+                    revised.move != best_result.move
+                )
+                best_result = revised
+
         reason = (
             f"{tactical_reason}（完成深度 {completed_depth}）"
             if completed_depth > 0
             else f"{tactical_reason}（时间不足，使用快速回退）"
         )
+        if self._root_safety_probe is not None:
+            if self._root_safety_applied:
+                if (
+                    self._root_safety_probe.trigger
+                    == "threat_risk_override"
+                ):
+                    reason += "；独立复核批准风险指标改选"
+                else:
+                    reason += "；决胜节点复核改选近分候选"
+            else:
+                if (
+                    self._root_safety_probe.trigger
+                    == "threat_risk_override"
+                ):
+                    reason += "；风险改选未获确认，保留 PVS 首选"
+                else:
+                    reason += "；决胜节点复核保持原候选"
         self._save_search_analysis(
             selected_move=best_result.move,
             reason=reason,
@@ -620,6 +868,756 @@ class SearchAI(ScoringAI):
             stop_reason=stop_reason,
         )
         return best_result.move
+
+    def _run_proof_arbitration(
+        self,
+        board: Board,
+        candidates: list[Move],
+        *,
+        search_own_win: bool,
+    ) -> ProofResult | None:
+        """Run the strict proof channel without borrowing PVS state.
+
+        A candidate result is always relative to ``self.opponent`` after
+        our candidate has been placed.  PROVEN_WIN therefore means that the
+        candidate is a strictly proved loss for us; UNKNOWN remains unknown.
+        Threat-risk is only a secondary ordering hint among UNKNOWN results.
+        """
+        seconds = self._proof_budget_seconds()
+        if seconds <= 0 or not candidates:
+            return None
+
+        deadline = time.perf_counter() + seconds
+        analyzer = self._proof_analyzer
+
+        if search_own_win and time.perf_counter() < deadline:
+            root_deadline = min(
+                deadline,
+                time.perf_counter() + max(0.05, seconds * 0.25),
+            )
+            root_search = ProofSearch(
+                budget=ProofBudget(
+                    max_nodes=self.config.proof_max_nodes,
+                    max_attacker_moves=(
+                        self.config.proof_max_attacker_moves
+                    ),
+                    max_quiet_frontiers=0,
+                    max_quiet_attacker_moves=0,
+                    deadline=root_deadline,
+                ),
+                analyzer=analyzer,
+                table=self._proof_table,
+                clock=time.perf_counter,
+            )
+            self._proof_root_result = root_search.search(
+                board,
+                attacker=self.player,
+                side_to_move=self.player,
+            )
+            self._counters.proof_nodes += (
+                self._proof_root_result.nodes
+            )
+            if (
+                self._proof_root_result.state
+                is ProofState.PROVEN_WIN
+            ):
+                return self._proof_root_result
+
+        probed = list(
+            candidates[: self.config.proof_root_candidate_limit]
+        )
+        risks: dict[Move, int] = {}
+        for move in probed:
+            risks[move] = self._threat_risk_after_move(
+                board,
+                move,
+                analyzer=analyzer,
+            )
+
+        analyses: list[ProofCandidateAnalysis] = []
+        for index, move in enumerate(probed):
+            now = time.perf_counter()
+            if now >= deadline:
+                analyses.append(
+                    ProofCandidateAnalysis(
+                        move=move,
+                        state=ProofState.UNKNOWN.value,
+                        completed=False,
+                        nodes=0,
+                        elapsed_seconds=0.0,
+                        cutoff_reason="proof_budget_exhausted",
+                        threat_risk=risks.get(move),
+                    )
+                )
+                continue
+
+            candidates_left = len(probed) - index
+            candidate_seconds = max(
+                0.05,
+                (deadline - now) / candidates_left,
+            )
+            candidate_search = ProofSearch(
+                budget=ProofBudget(
+                    max_nodes=self.config.proof_max_nodes,
+                    max_attacker_moves=(
+                        self.config.proof_max_attacker_moves
+                    ),
+                    max_quiet_frontiers=(
+                        self.config.proof_quiet_frontier_limit
+                    ),
+                    max_quiet_attacker_moves=(
+                        self.config.proof_quiet_attacker_moves
+                    ),
+                    deadline=min(deadline, now + candidate_seconds),
+                ),
+                analyzer=analyzer,
+                table=self._proof_table,
+                clock=time.perf_counter,
+            )
+            result = candidate_search.search_after_move(
+                board,
+                move=move,
+                mover=self.player,
+                attacker=self.opponent,
+                side_to_move=self.opponent,
+            )
+            self._counters.proof_nodes += result.nodes
+            analyses.append(
+                ProofCandidateAnalysis(
+                    move=move,
+                    state=result.state.value,
+                    completed=result.completed,
+                    nodes=result.nodes,
+                    elapsed_seconds=result.elapsed_seconds,
+                    cutoff_reason=result.cutoff_reason,
+                    principal_variation=result.principal_variation,
+                    threat_risk=risks.get(move),
+                )
+            )
+
+        self._proof_candidates = tuple(analyses)
+        return self._proof_root_result
+
+    def _proof_budget_seconds(self) -> float:
+        total = self.config.time_limit_seconds
+        remaining = self._time.remaining_seconds
+        if total is None or remaining is None or total < 4.0:
+            return 0.0
+        budget = min(
+            self.config.proof_max_seconds,
+            total * self.config.proof_time_fraction,
+            max(0.0, remaining - 0.1),
+        )
+        return budget if budget >= 0.1 else 0.0
+
+    def _new_threat_analyzer(self) -> ThreatAnalyzer:
+        return ThreatAnalyzer(
+            candidate_limit=16,
+            frontier_scan_limit=self.config.proof_frontier_scan_limit,
+            cache_enabled=self.config.proof_use_threat_cache,
+            profile_cache=self._threat_cache,
+            exact_cache=self._threat_exact_cache,
+            candidate_cache=self._threat_candidate_cache,
+        )
+
+    def _threat_risk_after_move(
+        self,
+        board: Board,
+        move: Move,
+        *,
+        analyzer: ThreatAnalyzer,
+    ) -> int:
+        """Return a deterministic UNKNOWN-ordering hint, never proof.
+
+        Candidate risk must not depend on how quickly the host reaches the
+        strict-proof deadline.  Exact frontier generation is intentionally
+        not used here: on slower machines it could consume the whole proof
+        slice and leave every candidate with ``None``.  Profiled forcing
+        candidates are much cheaper and their dependency scores still
+        measure the concrete next-threat pressure needed by root ordering.
+        """
+        if not board.is_empty(*move):
+            return 0
+
+        board.place(*move, self.player)
+        try:
+            batch = analyzer.generate_attack_candidates(
+                board,
+                self.opponent,
+            )
+        finally:
+            board.undo()
+
+        if not batch.generation_completed or not batch.candidates:
+            return 0
+        pressures = [
+            (
+                candidate.profile.tactical_rank
+                + candidate.dependency_score
+            )
+            for candidate in batch.candidates
+        ]
+        return (
+            max(pressures) * 10_000
+            + sum(pressures) * 10
+            + len(pressures)
+        )
+
+    def _filter_proven_losing_candidates(
+        self,
+        candidates: list[Move],
+    ) -> list[Move]:
+        states = {
+            item.move: item.state
+            for item in self._proof_candidates
+        }
+        survivors = [
+            move
+            for move in candidates
+            if states.get(move) != ProofState.PROVEN_WIN.value
+        ]
+        return survivors or candidates
+
+    def _apply_proof_tiebreak(
+        self,
+        result: RootResult,
+    ) -> RootResult:
+        """Apply strict safety first, then bounded risk near the PVS best.
+
+        Strict proof states may override any heuristic score.  UNKNOWN risk
+        is only an ordering hint, so it must not veto a materially stronger
+        PVS result.  Restrict risk arbitration to candidates within a fixed
+        score band of the best PVS candidate before comparing risk.
+        """
+        root_scores = dict(result.ranked_moves)
+        available = [
+            candidate
+            for candidate in self._proof_candidates
+            if candidate.move in root_scores
+        ]
+        if not available:
+            return result
+
+        safety_priority = {
+            ProofState.PROVEN_LOSS.value: 2,
+            ProofState.UNKNOWN.value: 1,
+            ProofState.PROVEN_WIN.value: 0,
+        }
+        best_safety = max(
+            safety_priority.get(candidate.state, 1)
+            for candidate in available
+        )
+        eligible = [
+            candidate
+            for candidate in available
+            if safety_priority.get(candidate.state, 1) == best_safety
+        ]
+
+        best_pvs_score = max(
+            root_scores[candidate.move]
+            for candidate in eligible
+        )
+        pvs_band = [
+            candidate
+            for candidate in eligible
+            if (
+                best_pvs_score - root_scores[candidate.move]
+                <= self.config.proof_risk_pvs_margin
+            )
+        ]
+
+        if (
+            best_safety
+            == safety_priority[ProofState.UNKNOWN.value]
+            and len(pvs_band) > 1
+            and all(
+                candidate.threat_risk is not None
+                for candidate in pvs_band
+            )
+        ):
+            lowest_risk = min(
+                int(candidate.threat_risk)
+                for candidate in pvs_band
+                if candidate.threat_risk is not None
+            )
+            pvs_choice = max(
+                pvs_band,
+                key=lambda candidate: root_scores[candidate.move],
+            )
+            pvs_risk = int(pvs_choice.threat_risk)
+            material_margin = max(100_000, lowest_risk // 20)
+            if pvs_risk - lowest_risk >= material_margin:
+                pvs_band = [
+                    candidate
+                    for candidate in pvs_band
+                    if candidate.threat_risk == lowest_risk
+                ]
+
+        chosen = max(
+            pvs_band,
+            key=lambda candidate: root_scores[candidate.move],
+        )
+        if chosen.move == result.move:
+            return result
+
+        variation_map = {
+            move: pv
+            for move, _, pv in result.ranked_variations
+        }
+        chosen_pv = variation_map.get(
+            chosen.move,
+            chosen.principal_variation or (chosen.move,),
+        )
+        reordered = (
+            (chosen.move, root_scores[chosen.move]),
+            *(
+                item
+                for item in result.ranked_moves
+                if item[0] != chosen.move
+            ),
+        )
+        reordered_variations = (
+            (chosen.move, root_scores[chosen.move], chosen_pv),
+            *(
+                item
+                for item in result.ranked_variations
+                if item[0] != chosen.move
+            ),
+        )
+        return RootResult(
+            move=chosen.move,
+            score=root_scores[chosen.move],
+            principal_variation=chosen_pv,
+            ranked_moves=reordered,
+            ranked_variations=reordered_variations,
+        )
+
+    def _is_unknown_risk_override(
+        self,
+        pvs_result: RootResult,
+        revised_result: RootResult,
+    ) -> bool:
+        """Return whether UNKNOWN risk, rather than proof, changed PVS."""
+        if revised_result.move == pvs_result.move:
+            return False
+        states = {
+            candidate.move: candidate.state
+            for candidate in self._proof_candidates
+        }
+        return (
+            states.get(pvs_result.move)
+            == ProofState.UNKNOWN.value
+            and states.get(revised_result.move)
+            == ProofState.UNKNOWN.value
+        )
+
+    def _maybe_run_risk_override_probe(
+        self,
+        board: Board,
+        pvs_result: RootResult,
+        risk_result: RootResult,
+        *,
+        completed_depth: int,
+        root_history: list[RootResult],
+    ) -> RootSafetyProbeResult | None:
+        """Require independent confirmation before UNKNOWN risk overrides PVS.
+
+        The original PVS result is always the fallback.  A missing budget,
+        timeout, insufficient depth, or unstable probe ranking therefore
+        preserves it instead of silently accepting a heuristic risk hint.
+        """
+        if not self.config.root_safety_enabled:
+            return None
+
+        proof_states = {
+            candidate.move: candidate.state
+            for candidate in self._proof_candidates
+        }
+        if (
+            proof_states.get(pvs_result.move)
+            != ProofState.UNKNOWN.value
+            or proof_states.get(risk_result.move)
+            != ProofState.UNKNOWN.value
+        ):
+            return None
+
+        root_scores = dict(pvs_result.ranked_moves)
+        if (
+            pvs_result.move not in root_scores
+            or risk_result.move not in root_scores
+        ):
+            return None
+
+        pvs_gap = (
+            root_scores[pvs_result.move]
+            - root_scores[risk_result.move]
+        )
+        budget = self._root_safety_budget_seconds()
+        if budget <= 0:
+            return RootSafetyProbeResult(
+                trigger="threat_risk_override",
+                pvs_gap=pvs_gap,
+                main_rank_stable=self._root_rank_is_stable(
+                    root_history
+                ),
+                completed_depth=0,
+                nodes=0,
+                candidates=(),
+            )
+
+        probe = self._run_root_safety_probe(
+            board,
+            [pvs_result.move, risk_result.move],
+            trigger="threat_risk_override",
+            pvs_gap=pvs_gap,
+            main_rank_stable=self._root_rank_is_stable(root_history),
+            completed_depth=completed_depth,
+            budget_seconds=budget,
+        )
+        if probe is not None:
+            return probe
+        return RootSafetyProbeResult(
+            trigger="threat_risk_override",
+            pvs_gap=pvs_gap,
+            main_rank_stable=self._root_rank_is_stable(root_history),
+            completed_depth=0,
+            nodes=0,
+            candidates=(),
+        )
+
+    def _finalize_risk_override(
+        self,
+        board: Board,
+        pvs_result: RootResult,
+        risk_result: RootResult,
+        *,
+        completed_depth: int,
+        root_history: list[RootResult],
+    ) -> RootResult:
+        """Apply a risk change only after a stable independent recheck."""
+        safety_probe = self._maybe_run_risk_override_probe(
+            board,
+            pvs_result,
+            risk_result,
+            completed_depth=completed_depth,
+            root_history=root_history,
+        )
+        if safety_probe is None:
+            self._root_safety_probe = None
+            self._root_safety_applied = False
+            return pvs_result
+
+        self._root_safety_probe = safety_probe
+        revised = self._apply_root_safety_probe(
+            pvs_result,
+            safety_probe,
+        )
+        self._root_safety_applied = (
+            revised.move != pvs_result.move
+        )
+        return revised
+
+    def _root_safety_trigger(
+        self,
+        result: RootResult,
+        root_history: list[RootResult],
+    ) -> str | None:
+        """Return why an incomplete near-tie needs an independent check."""
+        if not self.config.root_safety_enabled:
+            return None
+
+        proof_states = {
+            candidate.move: candidate.state
+            for candidate in self._proof_candidates
+        }
+        if (
+            proof_states.get(result.move)
+            == ProofState.PROVEN_LOSS.value
+        ):
+            # A strict result that the opponent cannot force a win has
+            # precedence over every bounded safety heuristic.
+            return None
+
+        ranked = sorted(
+            result.ranked_moves,
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        if len(ranked) < 2:
+            return None
+
+        pvs_gap = ranked[0][1] - ranked[1][1]
+        if pvs_gap > self.config.root_safety_score_margin:
+            return None
+        if pvs_gap <= self.config.root_safety_micro_margin:
+            return "micro_pvs_gap"
+        if not self._root_rank_is_stable(root_history):
+            return "root_rank_changed"
+        return None
+
+    @staticmethod
+    def _root_rank_is_stable(
+        root_history: list[RootResult],
+    ) -> bool:
+        if len(root_history) < 2:
+            return False
+        recent = root_history[-3:]
+        return all(
+            result.move == recent[-1].move
+            for result in recent[:-1]
+        )
+
+    def _root_safety_candidates(
+        self,
+        result: RootResult,
+    ) -> tuple[list[Move], int]:
+        ranked = sorted(
+            result.ranked_moves,
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        if len(ranked) < 2:
+            return [], 0
+
+        pvs_gap = ranked[0][1] - ranked[1][1]
+        best_score = ranked[0][1]
+        candidates = [
+            move
+            for move, score in ranked
+            if best_score - score
+            <= self.config.root_safety_score_margin
+        ][: self.config.root_safety_candidate_limit]
+        return candidates, pvs_gap
+
+    def _root_safety_budget_seconds(self) -> float:
+        total = self.config.time_limit_seconds
+        remaining = self._time.remaining_seconds
+        if total is None or remaining is None:
+            return 0.0
+
+        budget = min(
+            self.config.root_safety_max_seconds,
+            total * self.config.root_safety_time_fraction,
+            max(0.0, remaining - 0.05),
+        )
+        if budget < self.config.root_safety_min_seconds:
+            return 0.0
+        return budget
+
+    def _maybe_run_root_safety_probe(
+        self,
+        board: Board,
+        result: RootResult,
+        *,
+        completed_depth: int,
+        root_history: list[RootResult],
+    ) -> RootSafetyProbeResult | None:
+        """Recheck a close, unfinished decision with isolated search state."""
+        trigger = self._root_safety_trigger(result, root_history)
+        if trigger is None:
+            return None
+
+        candidates, pvs_gap = self._root_safety_candidates(result)
+        if len(candidates) < 2:
+            return None
+
+        budget = self._root_safety_budget_seconds()
+        if budget <= 0:
+            return None
+
+        return self._run_root_safety_probe(
+            board,
+            candidates,
+            trigger=trigger,
+            pvs_gap=pvs_gap,
+            main_rank_stable=self._root_rank_is_stable(root_history),
+            completed_depth=completed_depth,
+            budget_seconds=budget,
+        )
+
+    def _run_root_safety_probe(
+        self,
+        board: Board,
+        candidates: list[Move],
+        *,
+        trigger: str,
+        pvs_gap: int,
+        main_rank_stable: bool,
+        completed_depth: int,
+        budget_seconds: float,
+    ) -> RootSafetyProbeResult | None:
+        """Compare near-tied moves independently with full root windows.
+
+        The probe deliberately starts with fresh PVS history and a fresh
+        normal TT.  Every root move receives a full window, so the earlier
+        candidate cannot turn the following candidate into a zero-window
+        bound.  A slightly longer threat extension gives continuous forcing
+        replies priority, but the result remains heuristic and is never
+        promoted to a proof state.
+        """
+        probe = SearchAI(
+            player=self.player,
+            max_depth=self.config.max_depth,
+            time_limit_seconds=budget_seconds,
+            root_candidate_limit=max(2, len(candidates)),
+            branch_candidate_limit=self.config.branch_candidate_limit,
+            threat_extension_depth=(
+                self.config.threat_extension_depth
+                + self.config.root_safety_extension_bonus
+            ),
+            diagnostics=False,
+        )
+        probe.config = replace(
+            probe.config,
+            use_aspiration=False,
+            use_pvs=False,
+            vcf_max_attacker_moves=0,
+            root_safety_enabled=False,
+        )
+        probe._time = TimeManager.start(
+            budget_seconds,
+            soft_ratio=0.99,
+        )
+        probe._generation += 1
+        probe._counters = SearchCounters()
+
+        target_depth = min(
+            self.config.max_depth,
+            max(
+                self.config.root_safety_min_completed_depth,
+                completed_depth + 1,
+            ),
+        )
+        latest: tuple[RootSafetyCandidateAnalysis, ...] = ()
+        leader_history: list[Move] = []
+        probe_completed_depth = 0
+        original_priority = {
+            move: len(candidates) - index
+            for index, move in enumerate(candidates)
+        }
+
+        for depth in range(1, target_depth + 1):
+            ranked: list[RootSafetyCandidateAnalysis] = []
+            try:
+                for move in candidates:
+                    probe._check_timeout()
+                    board.place(*move, self.player)
+                    try:
+                        if board.check_win(*move):
+                            score = MATE_SCORE
+                            child_pv: tuple[Move, ...] = ()
+                        else:
+                            child_score, child_pv = probe._negamax(
+                                board,
+                                self.opponent,
+                                depth - 1,
+                                -INFINITY,
+                                INFINITY,
+                                ply=1,
+                                extension_depth=(
+                                    probe.config.threat_extension_depth
+                                ),
+                            )
+                            score = -child_score
+                    finally:
+                        board.undo()
+                    ranked.append(
+                        RootSafetyCandidateAnalysis(
+                            move=move,
+                            score=score,
+                            principal_variation=(move, *child_pv),
+                        )
+                    )
+            except SearchTimeout:
+                break
+
+            ranked.sort(
+                key=lambda candidate: (
+                    candidate.score,
+                    original_priority.get(candidate.move, 0),
+                ),
+                reverse=True,
+            )
+            latest = tuple(ranked)
+            probe_completed_depth = depth
+            leader_history.append(ranked[0].move)
+
+            if (
+                depth >= self.config.root_safety_min_completed_depth
+                and len(leader_history) >= 2
+                and leader_history[-1] == leader_history[-2]
+            ):
+                break
+
+        self._counters.root_safety_nodes += probe._counters.nodes
+        if not latest:
+            return None
+
+        return RootSafetyProbeResult(
+            trigger=trigger,
+            pvs_gap=pvs_gap,
+            main_rank_stable=main_rank_stable,
+            completed_depth=probe_completed_depth,
+            nodes=probe._counters.nodes,
+            candidates=latest,
+            leader_history=tuple(leader_history),
+        )
+
+    def _apply_root_safety_probe(
+        self,
+        result: RootResult,
+        probe: RootSafetyProbeResult,
+    ) -> RootResult:
+        """Use only a repeated probe leader; preserve original PVS scores."""
+        if (
+            not probe.rank_stable
+            or probe.completed_depth
+            < self.config.root_safety_min_completed_depth
+            or probe.best_move is None
+            or probe.best_move == result.move
+        ):
+            return result
+
+        root_scores = dict(result.ranked_moves)
+        if probe.best_move not in root_scores:
+            return result
+
+        chosen = probe.best_move
+        probe_variations = {
+            candidate.move: candidate.principal_variation
+            for candidate in probe.candidates
+        }
+        variation_map = {
+            move: pv
+            for move, _, pv in result.ranked_variations
+        }
+        chosen_pv = probe_variations.get(
+            chosen,
+            variation_map.get(chosen, (chosen,)),
+        )
+        reordered = (
+            (chosen, root_scores[chosen]),
+            *(
+                item
+                for item in result.ranked_moves
+                if item[0] != chosen
+            ),
+        )
+        reordered_variations = (
+            (chosen, root_scores[chosen], chosen_pv),
+            *(
+                item
+                for item in result.ranked_variations
+                if item[0] != chosen
+            ),
+        )
+        return RootResult(
+            move=chosen,
+            score=root_scores[chosen],
+            principal_variation=chosen_pv,
+            ranked_moves=reordered,
+            ranked_variations=reordered_variations,
+        )
 
     def _run_defense_vct_probe(
         self,
@@ -1778,30 +2776,17 @@ class SearchAI(ScoringAI):
         move: Move,
         player: int,
     ) -> ThreatProfile:
-        key = (
-            board.zobrist_hash,
-            move[0],
-            move[1],
-            player,
-        )
-        cached = self._threat_cache.get(key)
-        if cached is not None:
-            return cached
-
-        profile = analyze_move_threats(
+        return self._proof_analyzer.analyze_profile(
             board,
-            move[0],
-            move[1],
+            move,
             player,
         )
-        self._threat_cache[key] = profile
-        return profile
 
     def _static_score(self, board: Board, player: int) -> int:
         score = evaluate_board(board, player)
         return max(
-            -MATE_SCORE + 10_000,
-            min(MATE_SCORE - 10_000, score),
+            -HEURISTIC_SCORE_LIMIT,
+            min(HEURISTIC_SCORE_LIMIT, score),
         )
 
     def _position_key(self, board: Board, player: int) -> int:
@@ -1933,6 +2918,12 @@ class SearchAI(ScoringAI):
         return winning
 
     def _check_timeout(self) -> None:
+        if (
+            self._search_phase_deadline is not None
+            and time.perf_counter() >= self._search_phase_deadline
+        ):
+            self._search_phase_timeout_hit = True
+            raise SearchTimeout
         if self._time.hard_expired():
             raise SearchTimeout
 
@@ -2001,6 +2992,14 @@ class SearchAI(ScoringAI):
                 elapsed / self.config.time_limit_seconds,
             )
         )
+        proof_tt_delta = self._proof_table.stats().delta(
+            self._proof_table_start_stats
+        )
+        threat_stats = (
+            ThreatAnalyzerStats()
+            if self._proof_analyzer is None
+            else self._proof_analyzer.stats()
+        )
         self.last_analysis = DecisionAnalysis(
             selected_move=selected_move,
             reason=reason,
@@ -2050,5 +3049,101 @@ class SearchAI(ScoringAI):
                 ()
                 if self._defense_probe is None
                 else self._defense_probe.candidates
+            ),
+            proof_checked=(
+                self._proof_root_result is not None
+                or bool(self._proof_candidates)
+            ),
+            proof_state=(
+                "not_checked"
+                if self._proof_root_result is None
+                else self._proof_root_result.state.value
+            ),
+            proof_nodes=self._counters.proof_nodes,
+            proof_elapsed_seconds=(
+                (
+                    0.0
+                    if self._proof_root_result is None
+                    else self._proof_root_result.elapsed_seconds
+                )
+                + sum(
+                    candidate.elapsed_seconds
+                    for candidate in self._proof_candidates
+                )
+            ),
+            proof_best_move=(
+                None
+                if self._proof_root_result is None
+                else self._proof_root_result.best_move
+            ),
+            proof_principal_variation=(
+                ()
+                if self._proof_root_result is None
+                else self._proof_root_result.principal_variation
+            ),
+            proof_cutoff_reason=(
+                None
+                if self._proof_root_result is None
+                else self._proof_root_result.cutoff_reason
+            ),
+            proof_candidates=self._proof_candidates,
+            proof_tt_queries=proof_tt_delta.queries,
+            proof_tt_hits=proof_tt_delta.hits,
+            proof_tt_compatible_hits=(
+                proof_tt_delta.compatible_hits
+            ),
+            proof_tt_stores=proof_tt_delta.stores,
+            proof_tt_skipped_stores=proof_tt_delta.skipped_stores,
+            proof_tt_evictions=proof_tt_delta.evictions,
+            proof_tt_size=proof_tt_delta.size,
+            threat_candidate_batches=threat_stats.candidate_batches,
+            threat_exact_descriptions=(
+                threat_stats.exact_descriptions
+            ),
+            threat_frontier_batches=threat_stats.frontier_batches,
+            threat_frontier_descriptions=(
+                threat_stats.frontier_descriptions
+            ),
+            threat_cache_queries=threat_stats.cache_queries,
+            threat_cache_hits=threat_stats.cache_hits,
+            threat_cache_stores=threat_stats.cache_stores,
+            threat_cache_skips=threat_stats.cache_skips,
+            root_safety_checked=self._root_safety_probe is not None,
+            root_safety_applied=self._root_safety_applied,
+            root_safety_trigger=(
+                None
+                if self._root_safety_probe is None
+                else self._root_safety_probe.trigger
+            ),
+            root_safety_pvs_gap=(
+                None
+                if self._root_safety_probe is None
+                else self._root_safety_probe.pvs_gap
+            ),
+            root_safety_main_rank_stable=(
+                True
+                if self._root_safety_probe is None
+                else self._root_safety_probe.main_rank_stable
+            ),
+            root_safety_depth=(
+                0
+                if self._root_safety_probe is None
+                else self._root_safety_probe.completed_depth
+            ),
+            root_safety_nodes=self._counters.root_safety_nodes,
+            root_safety_best_move=(
+                None
+                if self._root_safety_probe is None
+                else self._root_safety_probe.best_move
+            ),
+            root_safety_leaders=(
+                ()
+                if self._root_safety_probe is None
+                else self._root_safety_probe.leader_history
+            ),
+            root_safety_candidates=(
+                ()
+                if self._root_safety_probe is None
+                else self._root_safety_probe.candidates
             ),
         )

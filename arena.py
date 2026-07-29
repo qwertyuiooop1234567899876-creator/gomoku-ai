@@ -20,12 +20,14 @@ from engine.evaluator import evaluate_board, render_evaluation_bar
 from engine.game import format_move, other_player, player_name
 from engine.records import GameRecorder, RecordPaths
 from engine.search import SearchAI
-
-ENGINE_VERSION = "0.8.5"
+from engine.version import ENGINE_VERSION
+from engine.yixin import YixinEngine, load_yixin_config
 
 
 class GomokuAI(Protocol):
     def choose_move(self, board: Board) -> tuple[int, int]: ...
+
+    def close(self) -> None: ...
 
 
 @dataclass(slots=True)
@@ -41,13 +43,15 @@ ENGINE_MENU = {
     "2": "tactical",
     "3": "scoring",
     "4": "search",
+    "5": "yixin",
 }
 
 ENGINE_LABELS = {
     "random": "RandomAI（随机基准）",
     "tactical": "TacticalAI（胜负与封堵）",
     "scoring": "ScoringAI（V0.6.2 评分）",
-    "search": "SearchAI（V0.8.5 防守分支 VCT 探针与前沿引导 PVS）",
+    "search": "SearchAI（V0.9.2 风险改选复核、AND/OR 证明与 PVS）",
+    "yixin": "YiXin（2017 Kernel 0.6.69 外部核心）",
 }
 
 
@@ -83,6 +87,15 @@ def create_ai(selection: AISelection, player: int) -> GomokuAI:
             top_n=5,
         )
 
+    if selection.engine_name == "yixin":
+        config = load_yixin_config().with_time_limit(
+            selection.time_limit_seconds
+        )
+        return YixinEngine(
+            player=player,
+            config=config,
+        )
+
     raise ValueError(f"未知引擎：{selection.engine_name}")
 
 
@@ -93,6 +106,14 @@ def engine_display_name(selection: AISelection) -> str:
             "SearchAI"
             f"(d={selection.max_depth},"
             f"t={selection.time_limit_seconds:g}s)"
+        )
+
+    if selection.engine_name == "yixin":
+        config = load_yixin_config()
+        return (
+            "YiXin"
+            f"(t={selection.time_limit_seconds:g}s,"
+            f"threads={config.thread_num})"
         )
 
     return {
@@ -106,6 +127,9 @@ def engine_file_token(selection: AISelection) -> str:
     if selection.engine_name == "search":
         time_text = f"{selection.time_limit_seconds:g}".replace(".", "p")
         return f"search-d{selection.max_depth}-t{time_text}"
+    if selection.engine_name == "yixin":
+        time_text = f"{selection.time_limit_seconds:g}".replace(".", "p")
+        return f"yixin-t{time_text}"
     return selection.engine_name
 
 
@@ -152,92 +176,102 @@ def play_game(
     print(f"白棋：{white_name}")
     print("=" * 50)
 
-    while not board.is_full():
-        ai = players[current_player]
-        evaluation_before = evaluate_board(board, WHITE)
+    try:
+        while not board.is_full():
+            ai = players[current_player]
+            evaluation_before = evaluate_board(board, WHITE)
 
-        think_started = time.perf_counter()
-        row, column = ai.choose_move(board)
-        think_seconds = time.perf_counter() - think_started
+            think_started = time.perf_counter()
+            row, column = ai.choose_move(board)
+            think_seconds = time.perf_counter() - think_started
 
-        if not board.is_inside(row, column):
-            raise RuntimeError(
-                f"{player_name(current_player)} 返回越界坐标："
-                f"({row}, {column})"
-            )
-        if not board.is_empty(row, column):
-            raise RuntimeError(
-                f"{player_name(current_player)} 返回已占用坐标："
-                f"{format_move(row, column)}"
-            )
-
-        board.place(row, column, current_player)
-        evaluation_after = evaluate_board(board, WHITE)
-        analysis = _analysis_to_dict(ai)
-        actor = engine_display_name(
-            black if current_player == BLACK else white
-        )
-
-        move_record = recorder.record_move(
-            player=current_player,
-            row=row,
-            column=column,
-            actor=actor,
-            think_seconds=think_seconds,
-            evaluation_before=evaluation_before,
-            evaluation_after=evaluation_after,
-            analysis=analysis,
-        )
-
-        reason = analysis["reason"] if analysis else "基础策略"
-        search_text = ""
-        if analysis and (
-            int(analysis.get("search_depth", 0)) > 0
-            or int(analysis.get("nodes", 0)) > 0
-        ):
-            search_text = (
-                f" 深度={analysis.get('search_depth', 0)}/"
-                f"{analysis.get('requested_depth', 0)}"
-                f" 节点={analysis.get('nodes', 0)}"
-                f" NPS={analysis.get('nps', 0)}"
-                f" 剪枝={analysis.get('cutoffs', 0)}"
-                f" TT={analysis.get('transposition_hits', 0)}"
-            )
-
-        print(
-            f"{move_record.number:3}. "
-            f"{player_name(current_player)} "
-            f"{format_move(row, column)} "
-            f"思考 {think_seconds:.3f}s "
-            f"原因：{reason}{search_text}"
-        )
-
-        if board.check_win(row, column):
-            winner = current_player
-            break
-
-        next_player = other_player(current_player)
-
-        if watch:
-            print()
-            print(board)
-            print()
-            print(recorder.render_score_sheet(last_rounds=8))
-            print()
-
-            if show_evaluation:
-                print(
-                    render_evaluation_bar(
-                        board,
-                        current_player=next_player,
-                    )
+            if not board.is_inside(row, column):
+                raise RuntimeError(
+                    f"{player_name(current_player)} 返回越界坐标："
+                    f"({row}, {column})"
                 )
+            if not board.is_empty(row, column):
+                raise RuntimeError(
+                    f"{player_name(current_player)} 返回已占用坐标："
+                    f"{format_move(row, column)}"
+                )
+
+            board.place(row, column, current_player)
+            evaluation_after = evaluate_board(board, WHITE)
+            analysis = _analysis_to_dict(ai)
+            actor = engine_display_name(
+                black if current_player == BLACK else white
+            )
+
+            move_record = recorder.record_move(
+                player=current_player,
+                row=row,
+                column=column,
+                actor=actor,
+                think_seconds=think_seconds,
+                evaluation_before=evaluation_before,
+                evaluation_after=evaluation_after,
+                analysis=analysis,
+            )
+
+            reason = analysis["reason"] if analysis else "基础策略"
+            search_text = ""
+            if analysis and (
+                int(analysis.get("search_depth", 0)) > 0
+                or int(analysis.get("nodes", 0)) > 0
+            ):
+                search_text = (
+                    f" 深度={analysis.get('search_depth', 0)}/"
+                    f"{analysis.get('requested_depth', 0)}"
+                    f" 节点={analysis.get('nodes', 0)}"
+                    f" NPS={analysis.get('nps', 0)}"
+                    f" 剪枝={analysis.get('cutoffs', 0)}"
+                    f" TT={analysis.get('transposition_hits', 0)}"
+                )
+
+            print(
+                f"{move_record.number:3}. "
+                f"{player_name(current_player)} "
+                f"{format_move(row, column)} "
+                f"思考 {think_seconds:.3f}s "
+                f"原因：{reason}{search_text}"
+            )
+
+            if board.check_win(row, column):
+                winner = current_player
+                break
+
+            next_player = other_player(current_player)
+
+            if watch:
+                print()
+                print(board)
+                print()
+                print(recorder.render_score_sheet(last_rounds=8))
                 print()
 
-            if delay_seconds > 0:
-                time.sleep(delay_seconds)
+                if show_evaluation:
+                    print(
+                        render_evaluation_bar(
+                            board,
+                            current_player=next_player,
+                        )
+                    )
+                    print()
 
-        current_player = next_player
+                if delay_seconds > 0:
+                    time.sleep(delay_seconds)
+
+            current_player = next_player
+    finally:
+        closed_ids: set[int] = set()
+        for ai in players.values():
+            if id(ai) in closed_ids:
+                continue
+            closed_ids.add(id(ai))
+            close = getattr(ai, "close", None)
+            if callable(close):
+                close()
 
     duration_seconds = time.perf_counter() - game_started
     result = result_text(winner)
@@ -257,7 +291,8 @@ def play_game(
     if save_record:
         prefix = (
             f"{engine_file_token(black)}-vs-"
-            f"{engine_file_token(white)}-v080"
+            f"{engine_file_token(white)}-"
+            f"v{ENGINE_VERSION.replace('.', '')}"
         )
         record_paths = recorder.save(
             board=board,
@@ -286,13 +321,15 @@ def _prompt_engine(
     print("  1  RandomAI   随机落子基准")
     print("  2  TacticalAI 立即胜负、封堵、邻近落子")
     print("  3  ScoringAI  V0.6.2 棋型评分与复合威胁")
-    print("  4  SearchAI   V0.8.5 防守分支 VCT 探针、前沿引导 PVS、VCF 与独立 100k TT")
+    print("  4  SearchAI   V0.9.2 风险改选复核、AND/OR 证明、PVS 与 VCF")
+    print("  5  YiXin      2017 Kernel 0.6.69 外部核心")
 
     default_number = {
         "random": "1",
         "tactical": "2",
         "scoring": "3",
         "search": "4",
+        "yixin": "5",
     }[current.engine_name]
 
     while True:
@@ -308,32 +345,39 @@ def _prompt_engine(
         if raw in VALID_ENGINES:
             engine_name = raw
             break
-        print("输入无效：请输入 1～4，或引擎英文名。")
+        print("输入无效：请输入 1～5，或引擎英文名。")
 
     selected = current.with_engine(engine_name)
-    if not selected.uses_search:
+    if not selected.uses_time_limit:
         return selected
 
-    while True:
-        raw_depth = input(
-            f"{side_text} SearchAI depth "
-            f"[{selected.max_depth}]（1～8）："
-        ).strip()
-        try:
-            depth = (
-                selected.max_depth
-                if raw_depth == ""
-                else int(raw_depth)
-            )
-            if not 1 <= depth <= 8:
-                raise ValueError
-            break
-        except ValueError:
-            print("输入无效：depth 必须是 1～8 的整数。")
+    depth = selected.max_depth
+    if selected.uses_search:
+        while True:
+            raw_depth = input(
+                f"{side_text} SearchAI depth "
+                f"[{selected.max_depth}]（1～8）："
+            ).strip()
+            try:
+                depth = (
+                    selected.max_depth
+                    if raw_depth == ""
+                    else int(raw_depth)
+                )
+                if not 1 <= depth <= 8:
+                    raise ValueError
+                break
+            except ValueError:
+                print("输入无效：depth 必须是 1～8 的整数。")
 
     while True:
+        engine_label = (
+            "SearchAI time-limit"
+            if selected.uses_search
+            else "YiXin 单步时间上限"
+        )
         raw_time = input(
-            f"{side_text} SearchAI time-limit "
+            f"{side_text} {engine_label} "
             f"[{selected.time_limit_seconds:g}] 秒（0.1～60）："
         ).strip()
         try:
@@ -349,7 +393,7 @@ def _prompt_engine(
             print("输入无效：time-limit 必须在 0.1～60 秒之间。")
 
     return AISelection(
-        engine_name="search",
+        engine_name=selected.engine_name,
         max_depth=depth,
         time_limit_seconds=time_limit,
     )
@@ -432,8 +476,9 @@ def choose_interactive_settings(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "V0.8.5 AI 对战台：Random/Tactical/Scoring/Search "
-            "可任意组合。无参数运行时进入交互菜单。"
+            f"V{ENGINE_VERSION} AI 对战台："
+            "Random/Tactical/Scoring/Search "
+            "以及 YiXin 可任意组合。无参数运行时进入交互菜单。"
         ),
     )
     parser.add_argument(
@@ -458,7 +503,7 @@ def parse_args() -> argparse.Namespace:
         "--time-limit",
         type=float,
         default=None,
-        help="兼容参数：同时设置双方 SearchAI time-limit。",
+        help="兼容参数：同时设置双方搜索引擎的单步时间上限。",
     )
     parser.add_argument("--black-depth", type=int, default=None)
     parser.add_argument("--black-time-limit", type=float, default=None)

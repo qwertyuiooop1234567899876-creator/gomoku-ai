@@ -5,6 +5,7 @@ from engine.ai import RandomAI, ScoringAI, TacticalAI
 from engine.arena_settings import AISelection
 from engine.board import BLACK, WHITE
 from engine.search import SearchAI
+from engine.yixin import YixinEngine
 
 
 class TestArenaFactory(unittest.TestCase):
@@ -25,6 +26,11 @@ class TestArenaFactory(unittest.TestCase):
             create_ai(AISelection("search"), WHITE),
             SearchAI,
         )
+        yixin = create_ai(AISelection("yixin"), WHITE)
+        try:
+            self.assertIsInstance(yixin, YixinEngine)
+        finally:
+            yixin.close()
 
     def test_search_sides_can_use_different_parameters(self) -> None:
         black = create_ai(
@@ -49,6 +55,13 @@ class TestArenaFactory(unittest.TestCase):
         )
 
         self.assertEqual("SearchAI(d=4,t=3.5s)", name)
+
+    def test_display_name_contains_yixin_parameters(self) -> None:
+        name = engine_display_name(
+            AISelection("yixin", 3, 10.0)
+        )
+
+        self.assertEqual("YiXin(t=10s,threads=2)", name)
 
 
 if __name__ == "__main__":

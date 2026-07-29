@@ -1,0 +1,200 @@
+import json
+import sys
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+from engine.board import BLACK, WHITE, Board
+from engine.yixin import (
+    YixinConfig,
+    YixinConfigurationError,
+    YixinEngine,
+    YixinSearchReport,
+    load_yixin_config,
+    save_yixin_config,
+)
+
+
+FAKE_ENGINE = """
+import sys
+
+log_path = sys.argv[1]
+board = []
+
+def log(line):
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write(line + "\\n")
+
+for raw in sys.stdin:
+    line = raw.strip()
+    log(line)
+    upper = line.upper()
+    if upper.startswith("START "):
+        print("MESSAGE fake yixin", flush=True)
+        print("OK", flush=True)
+    elif upper == "BOARD":
+        board = []
+    elif upper == "DONE":
+        occupied = {
+            tuple(int(value) for value in item.split(",")[:2])
+            for item in board
+        }
+        move = (7, 7) if (7, 7) not in occupied else (7, 6)
+        coordinate = "[H,8]" if move == (7, 7) else "[H,7]"
+        print(
+            "MESSAGE DETAIL DEPTH:12-26 VAL:141 "
+            "TIME:1250MS NODE:3M " + coordinate,
+            flush=True,
+        )
+        print(
+            "MESSAGE Speed: 2400 | Evaluation: 141",
+            flush=True,
+        )
+        print(
+            "MESSAGE Bestline: " + coordinate + " [G,8]",
+            flush=True,
+        )
+        print(f"{move[0]},{move[1]}", flush=True)
+    elif upper == "END":
+        break
+    elif "," in line and line.count(",") == 2:
+        board.append(line)
+"""
+
+
+class TestYixinConfiguration(unittest.TestCase):
+    def test_default_settings_match_confirmed_profile(self) -> None:
+        config = YixinConfig()
+
+        self.assertEqual(2, config.thread_num)
+        self.assertEqual(6, config.thread_split_depth)
+        self.assertEqual(21, config.hash_size)
+        self.assertEqual(2, config.caution_factor)
+        self.assertEqual(0, config.checkmate)
+        self.assertFalse(config.pondering)
+
+    def test_round_trip_preserves_optional_limits(self) -> None:
+        config = YixinConfig(
+            executable_path="custom/engine.exe",
+            launch_arguments=("--fake",),
+            timeout_turn_seconds=3.5,
+            max_depth=18,
+            max_node=2_000_000,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "yixin.json"
+            save_yixin_config(config, path)
+            loaded = load_yixin_config(path)
+
+        self.assertEqual(config, loaded)
+
+    def test_bad_hash_size_is_rejected(self) -> None:
+        with self.assertRaises(YixinConfigurationError):
+            YixinConfig(hash_size=0)
+
+
+class TestYixinReportParser(unittest.TestCase):
+    def test_detail_summary_and_bestline_are_parsed(self) -> None:
+        report = YixinSearchReport()
+        report.consume(
+            "MESSAGE DETAIL DEPTH:13-26 VAL:-115 "
+            "TIME:6352MS NODE:5M [G,9]"
+        )
+        report.consume(
+            "MESSAGE Speed: 802 | Evaluation: -115"
+        )
+        report.consume(
+            "MESSAGE Bestline: [G,9] [H,10] [I,11]"
+        )
+
+        self.assertEqual(13, report.depth)
+        self.assertEqual(26, report.selective_depth)
+        self.assertEqual(-115, report.evaluation)
+        self.assertEqual(6352, report.elapsed_ms)
+        self.assertEqual(5_000_000, report.nodes)
+        self.assertEqual(802, report.speed)
+        self.assertEqual(["G9", "H10", "I11"], report.bestline)
+
+    def test_white_perspective_is_normalized(self) -> None:
+        report = YixinSearchReport(
+            move=(7, 7),
+            evaluation=120,
+        )
+
+        black = report.to_analysis_dict(
+            player=BLACK,
+            requested_seconds=10.0,
+        )
+        white = report.to_analysis_dict(
+            player=WHITE,
+            requested_seconds=10.0,
+        )
+
+        self.assertEqual(-120, black["evaluation_white"])
+        self.assertEqual(120, white["evaluation_white"])
+
+
+class TestYixinProtocolClient(unittest.TestCase):
+    def _config(
+        self,
+        script_path: Path,
+        log_path: Path,
+    ) -> YixinConfig:
+        return YixinConfig(
+            executable_path=sys.executable,
+            launch_arguments=(str(script_path), str(log_path)),
+            timeout_turn_seconds=1.0,
+            startup_timeout_seconds=1.0,
+            response_grace_seconds=1.0,
+        )
+
+    def test_board_protocol_returns_legal_moves_and_diagnostics(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script_path = root / "fake_yixin.py"
+            log_path = root / "commands.txt"
+            script_path.write_text(
+                textwrap.dedent(FAKE_ENGINE),
+                encoding="utf-8",
+            )
+            engine = YixinEngine(
+                player=BLACK,
+                config=self._config(script_path, log_path),
+            )
+            board = Board()
+            try:
+                self.assertEqual((7, 7), engine.choose_move(board))
+                self.assertEqual([], board.move_history)
+                self.assertEqual(12, engine.last_report.depth)
+                self.assertEqual(["H8", "G8"], engine.last_report.bestline)
+
+                board.place(7, 7, BLACK)
+                self.assertEqual((6, 7), engine.choose_move(board))
+            finally:
+                engine.close()
+
+            commands = log_path.read_text(encoding="utf-8")
+
+        self.assertIn("START 15", commands)
+        self.assertIn("INFO thread_num 2", commands)
+        self.assertIn("INFO checkmate 0", commands)
+        self.assertIn("BOARD", commands)
+        self.assertIn("7,7,1", commands)
+        self.assertIn("END", commands)
+
+    def test_missing_executable_fails_before_launch(self) -> None:
+        engine = YixinEngine(
+            player=WHITE,
+            config=YixinConfig(
+                executable_path="definitely-missing-engine.exe"
+            ),
+        )
+        with self.assertRaises(YixinConfigurationError):
+            engine.start()
+
+
+if __name__ == "__main__":
+    unittest.main()
