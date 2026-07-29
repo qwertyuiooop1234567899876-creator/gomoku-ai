@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title YiXin Protocol Smoke Test V0.10.2
+title YiXin Protocol Smoke Test V0.10.3
 
 if not exist "yixin_smoke_test.py" goto no_program
 if not exist "yixin\engine.exe" goto no_engine

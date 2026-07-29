@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from engine.board import BLACK, Board
+from engine.board import BLACK, WHITE, Board
 from engine.yixin import (
     YixinEngine,
     YixinError,
@@ -25,9 +25,24 @@ def main() -> int:
             f"hash={config.hash_size}, "
             f"checkmate={config.checkmate}"
         )
-        engine = YixinEngine(player=BLACK, config=config)
+        board = Board()
+        board.place(7, 7, BLACK)
+        engine = YixinEngine(player=WHITE, config=config)
         try:
-            row, column = engine.choose_move(Board())
+            first_move = engine.choose_move(board)
+            board.place(*first_move, WHITE)
+            opponent_move = next(
+                move
+                for move in (
+                    (6, 6),
+                    (6, 8),
+                    (8, 6),
+                    (8, 8),
+                )
+                if board.is_empty(*move)
+            )
+            board.place(*opponent_move, BLACK)
+            second_move = engine.choose_move(board)
             report = engine.last_report
         finally:
             engine.close()
@@ -35,7 +50,21 @@ def main() -> int:
         print(f"YiXin smoke test failed: {error}", file=sys.stderr)
         return 2
 
-    print(f"Move: {chr(ord('A') + column)}{row + 1}")
+    first_row, first_column = first_move
+    opponent_row, opponent_column = opponent_move
+    second_row, second_column = second_move
+    print(
+        "First move (white): "
+        f"{chr(ord('A') + first_column)}{first_row + 1}"
+    )
+    print(
+        "Simulated opponent move: "
+        f"{chr(ord('A') + opponent_column)}{opponent_row + 1}"
+    )
+    print(
+        "Second move (white): "
+        f"{chr(ord('A') + second_column)}{second_row + 1}"
+    )
     if report is not None:
         print(
             "Search: "

@@ -21,10 +21,34 @@ import sys
 
 log_path = sys.argv[1]
 board = []
+position = {}
 
 def log(line):
     with open(log_path, "a", encoding="utf-8") as handle:
         handle.write(line + "\\n")
+
+def play():
+    move = next(
+        candidate
+        for candidate in ((7, 7), (7, 6), (6, 7), (8, 7))
+        if candidate not in position
+    )
+    position[move] = 1
+    coordinate = f"[{chr(ord('A') + move[0])},{move[1] + 1}]"
+    print(
+        "MESSAGE DETAIL DEPTH:12-26 VAL:141 "
+        "TIME:1250MS NODE:3M " + coordinate,
+        flush=True,
+    )
+    print(
+        "MESSAGE Speed: 2400 | Evaluation: 141",
+        flush=True,
+    )
+    print(
+        "MESSAGE Bestline: " + coordinate + " [G,8]",
+        flush=True,
+    )
+    print(f"{move[0]},{move[1]}", flush=True)
 
 for raw in sys.stdin:
     line = raw.strip()
@@ -33,33 +57,41 @@ for raw in sys.stdin:
     if upper.startswith("START "):
         print("MESSAGE fake yixin", flush=True)
         print("OK", flush=True)
+    elif upper == "RESTART":
+        board = []
+        position = {}
+        print("OK", flush=True)
+    elif upper.startswith("TURN "):
+        x, y = (
+            int(value)
+            for value in line.split(maxsplit=1)[1].split(",")
+        )
+        if (x, y) in position:
+            print(
+                f"ERROR opponents's move [{x},{y}]",
+                flush=True,
+            )
+        else:
+            position[(x, y)] = 2
+            play()
     elif upper == "BOARD":
         board = []
     elif upper == "DONE":
-        occupied = {
-            tuple(int(value) for value in item.split(",")[:2])
-            for item in board
-        }
-        move = next(
-            candidate
-            for candidate in ((7, 7), (7, 6), (6, 7), (8, 7))
-            if candidate not in occupied
-        )
-        coordinate = f"[{chr(ord('A') + move[0])},{move[1] + 1}]"
-        print(
-            "MESSAGE DETAIL DEPTH:12-26 VAL:141 "
-            "TIME:1250MS NODE:3M " + coordinate,
-            flush=True,
-        )
-        print(
-            "MESSAGE Speed: 2400 | Evaluation: 141",
-            flush=True,
-        )
-        print(
-            "MESSAGE Bestline: " + coordinate + " [G,8]",
-            flush=True,
-        )
-        print(f"{move[0]},{move[1]}", flush=True)
+        rejected = False
+        for item in board:
+            x, y, field = (int(value) for value in item.split(","))
+            coordinate = (x, y)
+            if coordinate in position:
+                print(
+                    f"ERROR duplicate move [{x},{y}]",
+                    flush=True,
+                )
+                rejected = True
+                break
+            position[coordinate] = field
+        if rejected:
+            continue
+        play()
     elif upper == "END":
         break
     elif "," in line and line.count(",") == 2:
@@ -176,18 +208,84 @@ class TestYixinProtocolClient(unittest.TestCase):
                 self.assertEqual(["H8", "G8"], engine.last_report.bestline)
 
                 board.place(7, 7, BLACK)
-                self.assertEqual((6, 7), engine.choose_move(board))
+                board.place(6, 7, WHITE)
+                self.assertEqual((7, 6), engine.choose_move(board))
             finally:
                 engine.close()
 
-            commands = log_path.read_text(encoding="utf-8")
+            commands = log_path.read_text(encoding="utf-8").splitlines()
 
         self.assertIn("START 15", commands)
         self.assertIn("INFO thread_num 2", commands)
         self.assertIn("INFO checkmate 0", commands)
-        self.assertIn("BOARD", commands)
-        self.assertIn("7,7,1", commands)
+        self.assertEqual(1, commands.count("BOARD"))
+        self.assertEqual(0, commands.count("RESTART"))
+        self.assertIn("TURN 7,6", commands)
         self.assertIn("END", commands)
+
+    def test_changed_board_restarts_before_full_resync(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script_path = root / "fake_yixin.py"
+            log_path = root / "commands.txt"
+            script_path.write_text(
+                textwrap.dedent(FAKE_ENGINE),
+                encoding="utf-8",
+            )
+            engine = YixinEngine(
+                player=BLACK,
+                config=self._config(script_path, log_path),
+            )
+            try:
+                self.assertEqual((7, 7), engine.choose_move(Board()))
+
+                changed = Board()
+                changed.place(0, 0, BLACK)
+                changed.place(0, 1, WHITE)
+                self.assertEqual((7, 7), engine.choose_move(changed))
+            finally:
+                engine.close()
+
+            commands = log_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(2, commands.count("BOARD"))
+        self.assertEqual(1, commands.count("RESTART"))
+        first_board = commands.index("BOARD")
+        restart = commands.index("RESTART")
+        second_board = commands.index("BOARD", first_board + 1)
+        self.assertLess(first_board, restart)
+        self.assertLess(restart, second_board)
+
+    def test_white_yixin_uses_turn_after_first_response(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script_path = root / "fake_yixin.py"
+            log_path = root / "commands.txt"
+            script_path.write_text(
+                textwrap.dedent(FAKE_ENGINE),
+                encoding="utf-8",
+            )
+            engine = YixinEngine(
+                player=WHITE,
+                config=self._config(script_path, log_path),
+            )
+            board = Board()
+            board.place(7, 7, BLACK)
+            try:
+                move = engine.choose_move(board)
+                self.assertEqual((6, 7), move)
+                board.place(*move, WHITE)
+                board.place(7, 6, BLACK)
+                self.assertEqual((7, 8), engine.choose_move(board))
+            finally:
+                engine.close()
+
+            commands = log_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(1, commands.count("BOARD"))
+        self.assertEqual(0, commands.count("RESTART"))
+        self.assertEqual(1, commands.count("7,7,2"))
+        self.assertIn("TURN 6,7", commands)
 
     def test_board_players_are_relative_to_white_yixin(
         self,
@@ -207,15 +305,17 @@ class TestYixinProtocolClient(unittest.TestCase):
             board = Board()
             board.place(7, 7, BLACK)
             board.place(7, 6, WHITE)
+            board.place(6, 7, BLACK)
             try:
-                self.assertEqual((6, 7), engine.choose_move(board))
+                self.assertEqual((7, 8), engine.choose_move(board))
             finally:
                 engine.close()
 
-            commands = log_path.read_text(encoding="utf-8")
+            commands = log_path.read_text(encoding="utf-8").splitlines()
 
         self.assertIn("7,7,2", commands)
         self.assertIn("6,7,1", commands)
+        self.assertIn("7,6,2", commands)
         self.assertNotIn("7,7,1", commands)
 
     def test_missing_executable_fails_before_launch(self) -> None:

@@ -491,6 +491,7 @@ class YixinEngine:
         self._lines: queue.Queue[str | object] = queue.Queue()
         self._write_lock = threading.Lock()
         self._closed = False
+        self._synced_history: tuple[tuple[int, int, int], ...] | None = None
 
     @property
     def is_running(self) -> bool:
@@ -633,6 +634,29 @@ class YixinEngine:
                     f"YiXin 拒绝 START：{line}"
                 )
 
+    def _restart_position(self) -> None:
+        self._send("RESTART")
+        deadline = (
+            time.monotonic() + self.config.startup_timeout_seconds
+        )
+        received: list[str] = []
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise YixinTimeoutError(
+                    "YiXin 没有确认 RESTART。"
+                    f"已收到：{received[-5:]}"
+                )
+            line = self._next_line(remaining).strip()
+            if line:
+                received.append(line)
+            if line.upper() == "OK":
+                return
+            if line.upper().startswith(("ERROR", "UNKNOWN")):
+                raise YixinProtocolError(
+                    f"YiXin 拒绝 RESTART：{line}"
+                )
+
     def _drain_completed_output(self) -> None:
         while True:
             try:
@@ -650,6 +674,24 @@ class YixinEngine:
             self._send(f"{column},{row},{protocol_player}")
         self._send("DONE")
 
+    def _send_position(self, board: Board) -> None:
+        history = tuple(board.move_history)
+        synced = self._synced_history
+        if (
+            synced is not None
+            and len(history) == len(synced) + 1
+            and history[: len(synced)] == synced
+            and history[-1][2] != self.player
+        ):
+            row, column, _player = history[-1]
+            self._send(f"TURN {column},{row}")
+            return
+
+        if synced is not None:
+            self._restart_position()
+            self._synced_history = None
+        self._send_board(board)
+
     def choose_move(self, board: Board) -> tuple[int, int]:
         if board.size != self.config.board_size:
             raise YixinConfigurationError(
@@ -660,7 +702,7 @@ class YixinEngine:
 
         self.start()
         self._drain_completed_output()
-        self._send_board(board)
+        self._send_position(board)
 
         report = YixinSearchReport()
         timeout_seconds = (
@@ -707,6 +749,10 @@ class YixinEngine:
                 self.last_analysis = report.to_analysis_dict(
                     player=self.player,
                     requested_seconds=self.config.timeout_turn_seconds,
+                )
+                self._synced_history = (
+                    *tuple(board.move_history),
+                    (row, column, self.player),
                 )
                 return row, column
 
