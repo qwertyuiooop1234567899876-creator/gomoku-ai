@@ -40,8 +40,12 @@ for raw in sys.stdin:
             tuple(int(value) for value in item.split(",")[:2])
             for item in board
         }
-        move = (7, 7) if (7, 7) not in occupied else (7, 6)
-        coordinate = "[H,8]" if move == (7, 7) else "[H,7]"
+        move = next(
+            candidate
+            for candidate in ((7, 7), (7, 6), (6, 7), (8, 7))
+            if candidate not in occupied
+        )
+        coordinate = f"[{chr(ord('A') + move[0])},{move[1] + 1}]"
         print(
             "MESSAGE DETAIL DEPTH:12-26 VAL:141 "
             "TIME:1250MS NODE:3M " + coordinate,
@@ -184,6 +188,35 @@ class TestYixinProtocolClient(unittest.TestCase):
         self.assertIn("BOARD", commands)
         self.assertIn("7,7,1", commands)
         self.assertIn("END", commands)
+
+    def test_board_players_are_relative_to_white_yixin(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script_path = root / "fake_yixin.py"
+            log_path = root / "commands.txt"
+            script_path.write_text(
+                textwrap.dedent(FAKE_ENGINE),
+                encoding="utf-8",
+            )
+            engine = YixinEngine(
+                player=WHITE,
+                config=self._config(script_path, log_path),
+            )
+            board = Board()
+            board.place(7, 7, BLACK)
+            board.place(7, 6, WHITE)
+            try:
+                self.assertEqual((6, 7), engine.choose_move(board))
+            finally:
+                engine.close()
+
+            commands = log_path.read_text(encoding="utf-8")
+
+        self.assertIn("7,7,2", commands)
+        self.assertIn("6,7,1", commands)
+        self.assertNotIn("7,7,1", commands)
 
     def test_missing_executable_fails_before_launch(self) -> None:
         engine = YixinEngine(

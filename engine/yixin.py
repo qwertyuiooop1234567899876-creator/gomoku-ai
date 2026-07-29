@@ -646,7 +646,8 @@ class YixinEngine:
     def _send_board(self, board: Board) -> None:
         self._send("BOARD")
         for row, column, player in board.move_history:
-            self._send(f"{column},{row},{player}")
+            protocol_player = 1 if player == self.player else 2
+            self._send(f"{column},{row},{protocol_player}")
         self._send("DONE")
 
     def choose_move(self, board: Board) -> tuple[int, int]:
