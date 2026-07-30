@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku SearchAI vs YiXin V0.10.3
+title Gomoku SearchAI vs YiXin V0.11.0
 
 echo ========================================
 echo      SearchAI vs YiXin Auto CVC
@@ -29,7 +29,7 @@ goto run_game
 
 :run_game
 set "PYTHONUTF8=1"
-%PY_CMD% -X utf8 arena.py --black search --white yixin --black-depth 8 --black-time-limit 60 --white-time-limit 10 --watch
+%PY_CMD% -X utf8 arena.py --black search --white yixin --black-depth 8 --black-time-limit 60 --white-time-limit 10 --watch --evaluation
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.
 

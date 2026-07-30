@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from engine.board import BLACK, WHITE, Board
+from engine.evaluator import PositionEvaluation, render_evaluation_bar
 from engine.game import format_move
 
 
@@ -73,6 +74,7 @@ class YixinConfig:
     launch_arguments: tuple[str, ...] = ()
     board_size: int = 15
     timeout_turn_seconds: float = 10.0
+    evaluation_time_seconds: float = 2.0
     startup_timeout_seconds: float = 5.0
     response_grace_seconds: float = 5.0
     thread_num: int = 2
@@ -97,6 +99,10 @@ class YixinConfig:
         if not 0.1 <= self.timeout_turn_seconds <= 3600.0:
             raise YixinConfigurationError(
                 "YiXin timeout_turn_seconds 必须在 0.1～3600 秒之间。"
+            )
+        if not 0.1 <= self.evaluation_time_seconds <= 60.0:
+            raise YixinConfigurationError(
+                "YiXin evaluation_time_seconds 必须在 0.1～60 秒之间。"
             )
         if not 0.1 <= self.startup_timeout_seconds <= 60.0:
             raise YixinConfigurationError(
@@ -183,6 +189,7 @@ class YixinConfig:
             "launch_arguments": list(self.launch_arguments),
             "board_size": self.board_size,
             "timeout_turn_seconds": self.timeout_turn_seconds,
+            "evaluation_time_seconds": self.evaluation_time_seconds,
             "startup_timeout_seconds": self.startup_timeout_seconds,
             "response_grace_seconds": self.response_grace_seconds,
             "thread_num": self.thread_num,
@@ -239,6 +246,12 @@ def load_yixin_config(
                 payload.get(
                     "timeout_turn_seconds",
                     defaults.timeout_turn_seconds,
+                )
+            ),
+            evaluation_time_seconds=float(
+                payload.get(
+                    "evaluation_time_seconds",
+                    defaults.evaluation_time_seconds,
                 )
             ),
             startup_timeout_seconds=float(
@@ -818,3 +831,146 @@ class YixinEngine:
             self.close()
         except Exception:
             pass
+
+
+class YixinPositionEvaluator:
+    """用独立短时 YiXin 搜索为界面评价当前局面。"""
+
+    def __init__(
+        self,
+        *,
+        config: YixinConfig | None = None,
+        base_directory: str | Path | None = None,
+    ) -> None:
+        selected = config or YixinConfig()
+        self.config = selected.with_time_limit(
+            selected.evaluation_time_seconds
+        )
+        self.base_directory = (
+            Path(base_directory)
+            if base_directory is not None
+            else Path.cwd()
+        )
+        self.last_evaluation: PositionEvaluation | None = None
+        self._last_key: (
+            tuple[int, tuple[tuple[int, int, int], ...]] | None
+        ) = None
+        self._configuration_error: str | None = None
+
+    @classmethod
+    def from_settings(
+        cls,
+        path: str | Path = DEFAULT_YIXIN_SETTINGS_PATH,
+        *,
+        base_directory: str | Path | None = None,
+    ) -> "YixinPositionEvaluator":
+        try:
+            config = load_yixin_config(path)
+        except YixinConfigurationError as error:
+            evaluator = cls(base_directory=base_directory)
+            evaluator._configuration_error = str(error)
+            return evaluator
+        return cls(
+            config=config,
+            base_directory=base_directory,
+        )
+
+    def evaluate(
+        self,
+        board: Board,
+        current_player: int,
+    ) -> PositionEvaluation:
+        if current_player not in (BLACK, WHITE):
+            raise ValueError("current_player 必须是 BLACK 或 WHITE。")
+        if board.is_full():
+            raise ValueError("棋盘已满，不需要 YiXin 局面评价。")
+        if self._configuration_error is not None:
+            raise YixinConfigurationError(self._configuration_error)
+
+        key = (current_player, tuple(board.move_history))
+        if key == self._last_key and self.last_evaluation is not None:
+            return self.last_evaluation
+
+        engine = YixinEngine(
+            player=current_player,
+            config=self.config,
+            base_directory=self.base_directory,
+        )
+        try:
+            engine.choose_move(board)
+            report = engine.last_report
+            if report is None or report.evaluation is None:
+                raise YixinProtocolError(
+                    "YiXin 已返回落子，但没有返回局面评价。"
+                )
+
+            score_white = (
+                report.evaluation
+                if current_player == WHITE
+                else -report.evaluation
+            )
+            evaluation = PositionEvaluation(
+                source="YiXin",
+                score_white=score_white,
+                raw_score=report.evaluation,
+                depth=report.depth,
+                selective_depth=report.selective_depth,
+                elapsed_seconds=report.elapsed_ms / 1000.0,
+                best_move=report.move,
+                bestline=tuple(report.bestline),
+            )
+        finally:
+            engine.close()
+
+        self._last_key = key
+        self.last_evaluation = evaluation
+        return evaluation
+
+    def evaluate_for_display(
+        self,
+        board: Board,
+        current_player: int,
+    ) -> PositionEvaluation:
+        """把 YiXin 故障转换为可显示状态，不中断正在进行的对局。"""
+        try:
+            return self.evaluate(board, current_player)
+        except YixinError as error:
+            evaluation = PositionEvaluation(
+                source="YiXin",
+                score_white=None,
+                error=str(error),
+            )
+            self._last_key = (
+                current_player,
+                tuple(board.move_history),
+            )
+            self.last_evaluation = evaluation
+            return evaluation
+
+
+def render_yixin_evaluation_bar(
+    evaluator: YixinPositionEvaluator,
+    board: Board,
+    current_player: int,
+    *,
+    width: int = 24,
+) -> str:
+    """以规则终局为最高优先级，其余局面交给 YiXin 评价。"""
+    evaluation: PositionEvaluation | None = None
+    if not board.is_full():
+        is_finished = False
+        if board.move_history:
+            last_row, last_column, _last_player = board.move_history[-1]
+            is_finished = board.check_win(last_row, last_column)
+        if not is_finished:
+            evaluation = evaluator.evaluate_for_display(
+                board,
+                current_player,
+            )
+
+    return render_evaluation_bar(
+        board,
+        current_player=current_player,
+        width=width,
+        position_evaluation=evaluation,
+    )

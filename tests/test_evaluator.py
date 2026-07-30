@@ -2,6 +2,7 @@ import unittest
 
 from engine.board import BLACK, WHITE, Board
 from engine.evaluator import (
+    PositionEvaluation,
     analyze_move_threats,
     evaluate_board,
     evaluate_move,
@@ -9,6 +10,7 @@ from engine.evaluator import (
     find_winning_moves,
     render_evaluation_bar,
     score_to_percentage,
+    yixin_score_to_percentage,
 )
 
 
@@ -109,7 +111,15 @@ class TestEvaluator(unittest.TestCase):
             score_to_percentage(1_000_000_000),
             100.0,
         )
-    
+
+    def test_yixin_display_mapping_has_decisive_bounds(self) -> None:
+        """YiXin 的 ±10000 必须显示为已证明的两端结果。"""
+        self.assertEqual(0.0, yixin_score_to_percentage(-10_000))
+        self.assertEqual(50.0, yixin_score_to_percentage(0))
+        self.assertEqual(100.0, yixin_score_to_percentage(10_000))
+        self.assertLess(yixin_score_to_percentage(-115), 50.0)
+        self.assertGreater(yixin_score_to_percentage(115), 50.0)
+
     def test_pattern_priority_in_all_directions(self) -> None:
         """横、竖及两种斜线都应识别活三、活四和五连。"""
         directions = {
@@ -241,6 +251,49 @@ class TestEvaluator(unittest.TestCase):
 
         self.assertIn("黑棋一步取胜", bar)
         self.assertIn("2 个胜点", bar)
+
+    def test_evaluation_bar_uses_yixin_score_and_metadata(self) -> None:
+        """外部评价存在时，不再使用静态棋型分生成评分条。"""
+        board = Board()
+        board.place(7, 7, BLACK)
+
+        bar = render_evaluation_bar(
+            board,
+            current_player=WHITE,
+            position_evaluation=PositionEvaluation(
+                source="YiXin",
+                score_white=-115,
+                raw_score=115,
+                depth=13,
+                selective_depth=27,
+                elapsed_seconds=2.0,
+            ),
+        )
+
+        self.assertIn("YiXin：黑棋 +115", bar)
+        self.assertIn("深度 13-27", bar)
+        self.assertIn("2.000s", bar)
+        self.assertIn("形势条非胜率", bar)
+
+    def test_unavailable_yixin_does_not_fall_back_to_static_score(
+        self,
+    ) -> None:
+        board = Board()
+        board.place(7, 7, BLACK)
+
+        bar = render_evaluation_bar(
+            board,
+            current_player=WHITE,
+            position_evaluation=PositionEvaluation(
+                source="YiXin",
+                score_white=None,
+                error="核心未启动",
+            ),
+        )
+
+        self.assertIn("YiXin评价不可用：核心未启动", bar)
+        self.assertIn("黑 X   -- ", bar)
+        self.assertIn("  --  白 O", bar)
 
     def test_mirrored_broken_patterns_score_equally(self) -> None:
         """断点棋型及其镜像必须获得相同静态分数。"""

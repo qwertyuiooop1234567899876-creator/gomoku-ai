@@ -10,8 +10,10 @@ from engine.yixin import (
     YixinConfig,
     YixinConfigurationError,
     YixinEngine,
+    YixinPositionEvaluator,
     YixinSearchReport,
     load_yixin_config,
+    render_yixin_evaluation_bar,
     save_yixin_config,
 )
 
@@ -109,6 +111,7 @@ class TestYixinConfiguration(unittest.TestCase):
         self.assertEqual(2, config.caution_factor)
         self.assertEqual(0, config.checkmate)
         self.assertFalse(config.pondering)
+        self.assertEqual(2.0, config.evaluation_time_seconds)
 
     def test_round_trip_preserves_optional_limits(self) -> None:
         config = YixinConfig(
@@ -327,6 +330,75 @@ class TestYixinProtocolClient(unittest.TestCase):
         )
         with self.assertRaises(YixinConfigurationError):
             engine.start()
+
+
+class TestYixinPositionEvaluator(unittest.TestCase):
+    def _config(
+        self,
+        script_path: Path,
+        log_path: Path,
+    ) -> YixinConfig:
+        return YixinConfig(
+            executable_path=sys.executable,
+            launch_arguments=(str(script_path), str(log_path)),
+            timeout_turn_seconds=10.0,
+            evaluation_time_seconds=0.5,
+            startup_timeout_seconds=1.0,
+            response_grace_seconds=1.0,
+        )
+
+    def test_position_evaluation_is_white_normalized_and_cached(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script_path = root / "fake_yixin.py"
+            log_path = root / "commands.txt"
+            script_path.write_text(
+                textwrap.dedent(FAKE_ENGINE),
+                encoding="utf-8",
+            )
+            evaluator = YixinPositionEvaluator(
+                config=self._config(script_path, log_path),
+            )
+            board = Board()
+            board.place(0, 0, WHITE)
+            grid_before = [row.copy() for row in board.grid]
+            history_before = board.move_history.copy()
+
+            first = evaluator.evaluate(board, BLACK)
+            second = evaluator.evaluate(board, BLACK)
+            commands = log_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertIs(first, second)
+        self.assertEqual(-141, first.score_white)
+        self.assertEqual(141, first.raw_score)
+        self.assertEqual(12, first.depth)
+        self.assertEqual(26, first.selective_depth)
+        self.assertEqual(("H8", "G8"), first.bestline)
+        self.assertEqual(grid_before, board.grid)
+        self.assertEqual(history_before, board.move_history)
+        self.assertEqual(1, commands.count("START 15"))
+        self.assertIn("INFO timeout_turn 500", commands)
+
+    def test_missing_core_is_rendered_without_static_fallback(self) -> None:
+        evaluator = YixinPositionEvaluator(
+            config=YixinConfig(
+                executable_path="definitely-missing-engine.exe",
+                evaluation_time_seconds=0.5,
+            ),
+        )
+        board = Board()
+        board.place(7, 7, BLACK)
+
+        bar = render_yixin_evaluation_bar(
+            evaluator,
+            board,
+            WHITE,
+        )
+
+        self.assertIn("YiXin评价不可用", bar)
+        self.assertIn("黑 X   -- ", bar)
 
 
 if __name__ == "__main__":

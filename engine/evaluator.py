@@ -12,6 +12,27 @@ FORCED_WIN_SCORE = 50_000_000
 DOUBLE_THREE_SCORE = 12_000_000
 FOUR_SCORE = 1_000_000
 OPEN_THREE_SCORE = 100_000
+YIXIN_DECISIVE_SCORE = 10_000
+YIXIN_DISPLAY_SCALE = 400.0
+
+
+@dataclass(frozen=True, slots=True)
+class PositionEvaluation:
+    """供界面显示的独立局面评价，不参与 SearchAI 选点。"""
+
+    source: str
+    score_white: int | None
+    raw_score: int | None = None
+    depth: int = 0
+    selective_depth: int = 0
+    elapsed_seconds: float = 0.0
+    best_move: Move | None = None
+    bestline: tuple[str, ...] = ()
+    error: str | None = None
+
+    @property
+    def available(self) -> bool:
+        return self.score_white is not None and self.error is None
 
 
 # 只维护一个方向的基础棋型，镜像会自动生成。
@@ -608,6 +629,23 @@ def score_to_percentage(
     return max(0.0, min(100.0, percentage))
 
 
+def yixin_score_to_percentage(
+    score_white: int,
+    *,
+    scale: float = YIXIN_DISPLAY_SCALE,
+) -> float:
+    """把 YiXin 原始评价映射为形势条位置；结果不是胜率。"""
+    if scale <= 0:
+        raise ValueError("scale 必须大于 0。")
+    if score_white >= YIXIN_DECISIVE_SCORE:
+        return 100.0
+    if score_white <= -YIXIN_DECISIVE_SCORE:
+        return 0.0
+
+    percentage = 50.0 + 50.0 * math.tanh(score_white / scale)
+    return max(0.0, min(100.0, percentage))
+
+
 def format_evaluation_score(score: int) -> str:
     """把白棋视角分数转换为可读文字。"""
     if score > 0:
@@ -638,12 +676,49 @@ def _infer_current_player(board: Board) -> int:
     return BLACK if len(board.move_history) % 2 == 0 else WHITE
 
 
+def _format_external_evaluation(
+    evaluation: PositionEvaluation,
+) -> str:
+    if evaluation.error is not None:
+        return f"{evaluation.source}评价不可用：{evaluation.error}"
+    if evaluation.score_white is None:
+        return f"{evaluation.source}没有返回有效评价"
+
+    if evaluation.score_white >= YIXIN_DECISIVE_SCORE:
+        advantage = "白棋已证明胜势"
+    elif evaluation.score_white <= -YIXIN_DECISIVE_SCORE:
+        advantage = "黑棋已证明胜势"
+    elif evaluation.score_white > 0:
+        advantage = f"白棋 +{evaluation.score_white:,}"
+    elif evaluation.score_white < 0:
+        advantage = f"黑棋 +{abs(evaluation.score_white):,}"
+    else:
+        advantage = "大致均衡"
+
+    details: list[str] = []
+    if evaluation.depth > 0:
+        depth = str(evaluation.depth)
+        if evaluation.selective_depth > 0:
+            depth += f"-{evaluation.selective_depth}"
+        details.append(f"深度 {depth}")
+    if evaluation.elapsed_seconds > 0:
+        details.append(f"{evaluation.elapsed_seconds:.3f}s")
+
+    suffix = f"；{'，'.join(details)}" if details else ""
+    return (
+        f"{evaluation.source}：{advantage}"
+        f"（原始评价{suffix}；形势条非胜率）"
+    )
+
+
 def render_evaluation_bar(
     board: Board,
     current_player: int | None = None,
     width: int = 24,
+    *,
+    position_evaluation: PositionEvaluation | None = None,
 ) -> str:
-    """生成考虑行棋权和一步胜点的终端局面评分条。"""
+    """生成局面评分条；可由独立 YiXin 评价替代静态棋型分。"""
     if width < 10:
         raise ValueError("评分条宽度不能小于 10。")
 
@@ -653,18 +728,32 @@ def render_evaluation_bar(
     if current_player not in (BLACK, WHITE):
         raise ValueError("current_player 必须是 BLACK 或 WHITE。")
 
+    uses_external_score = False
+
     # 已经结束的棋局优先于所有静态棋型。
     if board.move_history:
         last_row, last_column, last_player = board.move_history[-1]
         if board.check_win(last_row, last_column):
             score = _signed_score_for_player(last_player, WIN_SCORE)
             status = f"{_player_text(last_player)}已获胜"
+        elif board.is_full():
+            score = 0
+            status = "棋盘已满，平局"
+        elif position_evaluation is not None:
+            score = position_evaluation.score_white
+            status = _format_external_evaluation(position_evaluation)
+            uses_external_score = position_evaluation.available
         else:
             score = evaluate_board(board, WHITE)
             status = format_evaluation_score(score)
     else:
-        score = 0
-        status = "大致均衡"
+        if position_evaluation is not None:
+            score = position_evaluation.score_white
+            status = _format_external_evaluation(position_evaluation)
+            uses_external_score = position_evaluation.available
+        else:
+            score = 0
+            status = "大致均衡（空棋盘）"
 
     if not (
         board.move_history
@@ -682,6 +771,7 @@ def render_evaluation_bar(
                 current_player,
                 WIN_SCORE,
             )
+            uses_external_score = False
             status = (
                 f"{_player_text(current_player)}一步取胜 "
                 f"({len(current_wins)} 个胜点)"
@@ -691,42 +781,60 @@ def render_evaluation_bar(
                 opponent,
                 WIN_SCORE,
             )
+            uses_external_score = False
             status = (
                 f"{_player_text(opponent)}双胜点，当前方无法全堵"
             )
         elif len(opponent_wins) == 1:
             forced_block = opponent_wins[0]
 
-            # 对方只有一个立即胜点时，当前方并未必败。
-            # 先模拟唯一正确封堵，再评价封堵后的局面。
-            board.place(
-                forced_block[0],
-                forced_block[1],
-                current_player,
-            )
+            if position_evaluation is not None:
+                status = (
+                    f"{_player_text(current_player)}唯一应手："
+                    f"{_format_move(forced_block)}；"
+                    f"{_format_external_evaluation(position_evaluation)}"
+                )
+            else:
+                # 兼容旧调用：没有外部评价时，继续试算唯一封堵。
+                board.place(
+                    forced_block[0],
+                    forced_block[1],
+                    current_player,
+                )
 
-            try:
-                score = evaluate_board(board, WHITE)
-            finally:
-                board.undo()
+                try:
+                    score = evaluate_board(board, WHITE)
+                finally:
+                    board.undo()
 
-            status = (
-                f"{_player_text(current_player)}唯一应手："
-                f"{_format_move(forced_block)}；以下为封堵后评价"
-            )
+                status = (
+                    f"{_player_text(current_player)}唯一应手："
+                    f"{_format_move(forced_block)}；以下为封堵后评价"
+                )
 
-    white_percentage = score_to_percentage(score)
-    black_percentage = 100.0 - white_percentage
+    if score is None:
+        black_text = white_text = "  -- "
+        black_cells = width // 2
+        white_cells = width - black_cells
+    else:
+        white_percentage = (
+            yixin_score_to_percentage(score)
+            if uses_external_score
+            else score_to_percentage(score)
+        )
+        black_percentage = 100.0 - white_percentage
+        black_text = f"{black_percentage:5.1f}%"
+        white_text = f"{white_percentage:5.1f}%"
 
-    black_cells = round(width * black_percentage / 100)
-    black_cells = max(0, min(width, black_cells))
-    white_cells = width - black_cells
+        black_cells = round(width * black_percentage / 100)
+        black_cells = max(0, min(width, black_cells))
+        white_cells = width - black_cells
 
     bar = "█" * black_cells + "░" * white_cells
 
     return (
         f"局面评价：{status}\n"
-        f"黑 X {black_percentage:5.1f}% "
+        f"黑 X {black_text} "
         f"[{bar}] "
-        f"{white_percentage:5.1f}% 白 O"
+        f"{white_text} 白 O"
     )

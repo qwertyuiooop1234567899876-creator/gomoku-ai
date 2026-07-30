@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 
 from engine.board import BLACK, WHITE, Board
-from engine.evaluator import evaluate_board, render_evaluation_bar
+from engine.evaluator import evaluate_board
 from engine.game import (
     format_move,
     other_player,
@@ -18,6 +18,10 @@ from engine.settings import (
     save_search_settings,
 )
 from engine.version import ENGINE_VERSION
+from engine.yixin import (
+    YixinPositionEvaluator,
+    render_yixin_evaluation_bar,
+)
 
 
 def choose_human_player() -> int:
@@ -231,6 +235,7 @@ def main() -> None:
         search_settings,
     )
     recorder = create_recorder(human_player)
+    position_evaluator = YixinPositionEvaluator.from_settings()
     current_player = BLACK
     game_started = time.perf_counter()
 
@@ -247,13 +252,24 @@ def main() -> None:
         f"time-limit={search_settings.time_limit_seconds:g}s。"
     )
     print("电脑使用 VCF、VCT-lite、PVS、Zobrist 置换表和统一时间管理。")
+    print(
+        "评分条使用独立 YiXin 局面评价，"
+        f"每次最多 {position_evaluator.config.timeout_turn_seconds:g}s；"
+        "不参与 SearchAI 选点。"
+    )
     print("输入 H 查看指令，U 悔棋，R 重开，M 棋谱，Q 退出。")
 
     while True:
         print()
         print(board)
         print()
-        print(render_evaluation_bar(board, current_player))
+        print(
+            render_yixin_evaluation_bar(
+                position_evaluator,
+                board,
+                current_player,
+            )
+        )
         print()
         print(recorder.render_score_sheet(last_rounds=8))
         print()
@@ -414,7 +430,13 @@ def main() -> None:
             print()
             print(board)
             print()
-            print(render_evaluation_bar(board, current_player))
+            print(
+                render_yixin_evaluation_bar(
+                    position_evaluator,
+                    board,
+                    current_player,
+                )
+            )
             print()
             result = f"{player_name(current_player)}获胜"
             print(f"{result}！")
@@ -430,7 +452,13 @@ def main() -> None:
             print()
             print(board)
             print()
-            print(render_evaluation_bar(board, current_player))
+            print(
+                render_yixin_evaluation_bar(
+                    position_evaluator,
+                    board,
+                    current_player,
+                )
+            )
             print()
             print("棋盘已满，本局平局。")
             save_and_report(

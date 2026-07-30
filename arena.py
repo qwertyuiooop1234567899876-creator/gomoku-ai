@@ -17,12 +17,17 @@ from engine.arena_settings import (
     save_arena_settings,
 )
 from engine.board import BLACK, WHITE, Board
-from engine.evaluator import evaluate_board, render_evaluation_bar
+from engine.evaluator import evaluate_board
 from engine.game import format_move, other_player, player_name
 from engine.records import GameRecorder, RecordPaths
 from engine.search import SearchAI
 from engine.version import ENGINE_VERSION
-from engine.yixin import YixinEngine, load_yixin_config
+from engine.yixin import (
+    YixinEngine,
+    YixinPositionEvaluator,
+    load_yixin_config,
+    render_yixin_evaluation_bar,
+)
 
 
 class GomokuAI(Protocol):
@@ -177,6 +182,11 @@ def play_game(
         BLACK: create_ai(black, BLACK),
         WHITE: create_ai(white, WHITE),
     }
+    position_evaluator = (
+        YixinPositionEvaluator.from_settings()
+        if watch and show_evaluation
+        else None
+    )
     recorder = GameRecorder(
         mode="CVC",
         black_name=black_name,
@@ -191,6 +201,12 @@ def play_game(
     print(f"Gomoku AI Arena V{ENGINE_VERSION}")
     print(f"黑棋：{black_name}")
     print(f"白棋：{white_name}")
+    if position_evaluator is not None:
+        print(
+            "评价条：独立 YiXin "
+            f"{position_evaluator.config.timeout_turn_seconds:g}s/"
+            "局面（不参与双方选点）"
+        )
     print("=" * 50)
 
     try:
@@ -268,10 +284,13 @@ def play_game(
                 print()
 
                 if show_evaluation:
+                    if position_evaluator is None:
+                        raise RuntimeError("YiXin 评价器未初始化。")
                     print(
-                        render_evaluation_bar(
+                        render_yixin_evaluation_bar(
+                            position_evaluator,
                             board,
-                            current_player=next_player,
+                            next_player,
                         )
                     )
                     print()
@@ -442,7 +461,7 @@ def choose_interactive_settings(
     white = _prompt_engine("白棋", current.white)
     watch = _prompt_bool("每手显示棋盘", current.watch)
     show_evaluation = _prompt_bool(
-        "同时显示评价条",
+        "同时显示 YiXin 评价条",
         current.show_evaluation,
     )
 
@@ -484,7 +503,7 @@ def choose_interactive_settings(
     print(f"  白棋：{engine_display_name(selected.white)}")
     print(
         f"  观看={selected.watch}，"
-        f"评价条={selected.show_evaluation}，"
+        f"YiXin评价条={selected.show_evaluation}，"
         f"延迟={selected.delay_seconds:g}s"
     )
     return selected
@@ -534,7 +553,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--evaluation",
         action="store_true",
-        help="观看模式下显示评价条。",
+        help="观看模式下显示独立 YiXin 评价条。",
     )
     parser.add_argument(
         "--delay",
