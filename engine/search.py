@@ -18,8 +18,8 @@ from engine.evaluator import (
     ThreatProfile,
     evaluate_board,
     evaluate_move,
-    evaluate_player,
     find_winning_moves,
+    is_winning_move,
     other_side,
 )
 from engine.time_manager import TimeManager
@@ -292,7 +292,7 @@ class RootSafetyProbeResult:
 
 class SearchAI(ScoringAI):
     """
-    V0.9.2 搜索 AI。
+    V0.12.0 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -304,6 +304,8 @@ class SearchAI(ScoringAI):
     defense-VCT 探针：用更深的威胁延伸比较不同封堵端点，并在
     普通 PVS 分数接近时作为战术优先级裁决，处理 L7/H11 一类
     “都能挡住眼前棋形，但其中一边会放出长 VCT”的局面。
+    V0.12.0 保持相同搜索树和候选顺序，将一步胜点、四方向威胁
+    画像和候选棋型增益改为不修改棋盘的局部线计算。
     """
 
     def __init__(
@@ -2636,16 +2638,6 @@ class SearchAI(ScoringAI):
         center = (board.size - 1) / 2
         scored: list[tuple[Move, int, int, int, int]] = []
         opponent = other_side(player)
-        own_before = (
-            evaluate_player(board, player)
-            if full_evaluation
-            else None
-        )
-        opponent_before = (
-            evaluate_player(board, opponent)
-            if full_evaluation
-            else None
-        )
 
         for move in dict.fromkeys(moves):
             self._check_timeout()
@@ -2662,8 +2654,6 @@ class SearchAI(ScoringAI):
                     move[0],
                     move[1],
                     player,
-                    own_before=own_before,
-                    opponent_before=opponent_before,
                     own_profile=self._analyze_cached(
                         board,
                         move,
@@ -2909,12 +2899,8 @@ class SearchAI(ScoringAI):
         winning: list[Move] = []
         for row, column in candidates:
             self._check_timeout()
-            board.place(row, column, player)
-            try:
-                if board.check_win(row, column):
-                    winning.append((row, column))
-            finally:
-                board.undo()
+            if is_winning_move(board, row, column, player):
+                winning.append((row, column))
         return winning
 
     def _check_timeout(self) -> None:

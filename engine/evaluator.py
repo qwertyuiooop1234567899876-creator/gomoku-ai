@@ -1,6 +1,7 @@
 import math
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 
 from engine.board import BLACK, DIRECTIONS, EMPTY, WHITE, Board
 
@@ -227,6 +228,7 @@ def _iter_lines(board: Board) -> Iterator[list[int]]:
             yield line
 
 
+@lru_cache(maxsize=65_536)
 def _score_line(text: str) -> int:
     """强棋型优先且不让同一段字符被重复计分。"""
     occupied = [False] * len(text)
@@ -282,172 +284,138 @@ def _center_bonus(board: Board, row: int, column: int) -> int:
     return max(0, int(100 - distance_squared * 2))
 
 
-def _direction_positions(
+_OUTSIDE = -1
+_LOCAL_LINE_RADIUS = 4
+_LOCAL_ANCHOR_INDEX = _LOCAL_LINE_RADIUS
+
+
+def _local_direction_line(
     board: Board,
     row: int,
     column: int,
+    player: int,
     direction: Direction,
-    radius: int = 4,
-) -> Iterator[Move]:
-    """生成同一直线上、可能参与五连的附近位置。"""
+) -> list[int]:
+    """Build the only nine cells that can participate in an anchor five."""
     row_step, column_step = direction
-
-    for offset in range(-radius, radius + 1):
+    line: list[int] = []
+    for offset in range(-_LOCAL_LINE_RADIUS, _LOCAL_LINE_RADIUS + 1):
+        candidate_row = row + offset * row_step
+        candidate_column = column + offset * column_step
         if offset == 0:
-            continue
-
-        candidate = (
-            row + offset * row_step,
-            column + offset * column_step,
-        )
-
-        if board.is_inside(*candidate):
-            yield candidate
+            line.append(player)
+        elif board.is_inside(candidate_row, candidate_column):
+            line.append(board.grid[candidate_row][candidate_column])
+        else:
+            line.append(_OUTSIDE)
+    return line
 
 
-def _winning_segment(
-    board: Board,
-    row: int,
-    column: int,
+def _line_move_wins(
+    line: list[int],
+    candidate_index: int,
     player: int,
-    direction: Direction,
-) -> set[Move]:
-    """返回穿过指定棋子的连续同色线段。"""
-    row_step, column_step = direction
-    segment: set[Move] = {(row, column)}
-
-    current_row = row + row_step
-    current_column = column + column_step
-    while (
-        board.is_inside(current_row, current_column)
-        and board.grid[current_row][current_column] == player
-    ):
-        segment.add((current_row, current_column))
-        current_row += row_step
-        current_column += column_step
-
-    current_row = row - row_step
-    current_column = column - column_step
-    while (
-        board.is_inside(current_row, current_column)
-        and board.grid[current_row][current_column] == player
-    ):
-        segment.add((current_row, current_column))
-        current_row -= row_step
-        current_column -= column_step
-
-    return segment
-
-
-def _winning_moves_in_direction(
-    board: Board,
-    anchor: Move,
-    player: int,
-    direction: Direction,
-) -> set[Move]:
-    """寻找下一手能在指定方向形成、且包含 anchor 的五连点。"""
-    winning_moves: set[Move] = set()
-
-    for candidate in _direction_positions(
-        board,
-        anchor[0],
-        anchor[1],
-        direction,
-    ):
-        if not board.is_empty(*candidate):
-            continue
-
-        board.place(*candidate, player)
-
-        try:
-            segment = _winning_segment(
-                board,
-                candidate[0],
-                candidate[1],
-                player,
-                direction,
-            )
-
-            if len(segment) >= 5 and anchor in segment:
-                winning_moves.add(candidate)
-        finally:
-            board.undo()
-
-    return winning_moves
-
-
-def _creates_open_three_in_direction(
-    board: Board,
-    anchor: Move,
-    player: int,
-    direction: Direction,
 ) -> bool:
-    """判断该方向是否存在一步发展成双胜点活四的走法。"""
-    for extension in _direction_positions(
-        board,
-        anchor[0],
-        anchor[1],
-        direction,
-    ):
-        if not board.is_empty(*extension):
+    """Return whether one empty line cell completes an anchor-containing five."""
+    if line[candidate_index] != EMPTY:
+        return False
+
+    left = candidate_index - 1
+    while left >= 0 and line[left] == player:
+        left -= 1
+
+    right = candidate_index + 1
+    while right < len(line) and line[right] == player:
+        right += 1
+
+    return (
+        right - left - 1 >= 5
+        and left < _LOCAL_ANCHOR_INDEX < right
+    )
+
+
+def _line_winning_indices(
+    line: list[int],
+    player: int,
+) -> tuple[int, ...]:
+    return tuple(
+        index
+        for index, cell in enumerate(line)
+        if cell == EMPTY and _line_move_wins(line, index, player)
+    )
+
+
+def _line_anchor_is_win(line: list[int], player: int) -> bool:
+    left = _LOCAL_ANCHOR_INDEX - 1
+    while left >= 0 and line[left] == player:
+        left -= 1
+
+    right = _LOCAL_ANCHOR_INDEX + 1
+    while right < len(line) and line[right] == player:
+        right += 1
+
+    return right - left - 1 >= 5
+
+
+def _line_creates_open_three(line: list[int], player: int) -> bool:
+    """Check one-ply development into two anchor-containing win points."""
+    for extension_index, cell in enumerate(line):
+        if cell != EMPTY:
             continue
-
-        board.place(*extension, player)
-
+        line[extension_index] = player
         try:
-            winning_moves = _winning_moves_in_direction(
-                board,
-                anchor,
-                player,
-                direction,
-            )
-
-            if len(winning_moves) >= 2:
+            if len(_line_winning_indices(line, player)) >= 2:
                 return True
         finally:
-            board.undo()
-
+            line[extension_index] = EMPTY
     return False
 
 
-def _analyze_placed_move(
+def _analyze_hypothetical_move(
     board: Board,
     row: int,
     column: int,
     player: int,
 ) -> ThreatProfile:
-    """分析已经临时放在棋盘上的一颗棋。"""
-    anchor = (row, column)
+    """Analyze one empty move using four compact lines without board mutation."""
     all_winning_moves: set[Move] = set()
     open_four_directions = 0
     four_directions = 0
     open_three_directions = 0
+    immediate_win = False
 
     for direction in DIRECTIONS:
-        winning_moves = _winning_moves_in_direction(
+        line = _local_direction_line(
             board,
-            anchor,
+            row,
+            column,
             player,
             direction,
         )
+        winning_indices = _line_winning_indices(line, player)
+        immediate_win = immediate_win or _line_anchor_is_win(line, player)
 
-        if winning_moves:
+        if winning_indices:
             four_directions += 1
-            all_winning_moves.update(winning_moves)
+            row_step, column_step = direction
+            all_winning_moves.update(
+                (
+                    row
+                    + (index - _LOCAL_ANCHOR_INDEX) * row_step,
+                    column
+                    + (index - _LOCAL_ANCHOR_INDEX) * column_step,
+                )
+                for index in winning_indices
+            )
 
-            if len(winning_moves) >= 2:
+            if len(winning_indices) >= 2:
                 open_four_directions += 1
 
-        elif _creates_open_three_in_direction(
-            board,
-            anchor,
-            player,
-            direction,
-        ):
+        elif _line_creates_open_three(line, player):
             open_three_directions += 1
 
     return ThreatProfile(
-        immediate_win=board.check_win(row, column),
+        immediate_win=immediate_win,
         open_four_directions=open_four_directions,
         four_directions=four_directions,
         open_three_directions=open_three_directions,
@@ -461,23 +429,18 @@ def analyze_move_threats(
     column: int,
     player: int,
 ) -> ThreatProfile:
-    """临时落子并统计这一子同时制造的四方向威胁。"""
+    """统计这一子同时制造的四方向威胁，不修改棋盘。"""
     if player not in (BLACK, WHITE):
         raise ValueError("玩家只能是 BLACK 或 WHITE。")
     if not board.is_empty(row, column):
         raise ValueError("只能分析空位置。")
 
-    board.place(row, column, player)
-
-    try:
-        return _analyze_placed_move(
-            board,
-            row,
-            column,
-            player,
-        )
-    finally:
-        board.undo()
+    return _analyze_hypothetical_move(
+        board,
+        row,
+        column,
+        player,
+    )
 
 
 def find_winning_moves(
@@ -490,44 +453,37 @@ def find_winning_moves(
     winning_moves: list[Move] = []
 
     for row, column in moves:
-        if not _could_be_winning_move(
-            board,
-            row,
-            column,
-            player,
-        ):
-            continue
-        board.place(row, column, player)
-
-        try:
-            if board.check_win(row, column):
-                winning_moves.append((row, column))
-        finally:
-            board.undo()
+        if is_winning_move(board, row, column, player):
+            winning_moves.append((row, column))
 
     return winning_moves
 
 
-def _could_be_winning_move(
+def is_winning_move(
     board: Board,
     row: int,
     column: int,
     player: int,
 ) -> bool:
-    """Cheap necessary condition before simulating a winning move."""
+    """Return whether an empty move wins, without mutating the board."""
+    if player not in (BLACK, WHITE):
+        raise ValueError("玩家只能是 BLACK 或 WHITE。")
+    if not board.is_empty(row, column):
+        return False
+
     for row_step, column_step in DIRECTIONS:
-        friendly = 0
-        for offset in range(-4, 5):
-            if offset == 0:
-                continue
-            candidate_row = row + offset * row_step
-            candidate_column = column + offset * column_step
-            if (
+        total = 1
+        for sign in (-1, 1):
+            candidate_row = row + sign * row_step
+            candidate_column = column + sign * column_step
+            while (
                 board.is_inside(candidate_row, candidate_column)
                 and board.grid[candidate_row][candidate_column] == player
             ):
-                friendly += 1
-        if friendly >= 4:
+                total += 1
+                candidate_row += sign * row_step
+                candidate_column += sign * column_step
+        if total >= 5:
             return True
     return False
 
@@ -548,6 +504,70 @@ def _profile_bonus(profile: ThreatProfile) -> int:
         profile.four_directions * FOUR_SCORE
         + profile.open_three_directions * OPEN_THREE_SCORE
     )
+
+
+def _collect_line_through(
+    board: Board,
+    row: int,
+    column: int,
+    direction: Direction,
+) -> tuple[list[int], int]:
+    """Return one complete board line and the anchor index within it."""
+    row_step, column_step = direction
+    start_row = row
+    start_column = column
+    anchor_index = 0
+
+    while board.is_inside(
+        start_row - row_step,
+        start_column - column_step,
+    ):
+        start_row -= row_step
+        start_column -= column_step
+        anchor_index += 1
+
+    return (
+        _collect_line(
+            board,
+            start_row,
+            start_column,
+            row_step,
+            column_step,
+        ),
+        anchor_index,
+    )
+
+
+def _move_pattern_gains(
+    board: Board,
+    row: int,
+    column: int,
+    player: int,
+    opponent: int,
+) -> tuple[int, int]:
+    """Compute exact full-board score deltas from the four affected lines."""
+    player_gain = 0
+    opponent_gain = 0
+
+    for direction in DIRECTIONS:
+        line, anchor_index = _collect_line_through(
+            board,
+            row,
+            column,
+            direction,
+        )
+        player_before = _score_line(_line_to_text(line, player))
+        opponent_before = _score_line(_line_to_text(line, opponent))
+
+        line[anchor_index] = player
+        player_after = _score_line(_line_to_text(line, player))
+        line[anchor_index] = opponent
+        opponent_after = _score_line(_line_to_text(line, opponent))
+
+        player_gain += player_after - player_before
+        opponent_gain += opponent_after - opponent_before
+
+    return max(0, player_gain), max(0, opponent_gain)
 
 
 def evaluate_move(
@@ -571,11 +591,6 @@ def evaluate_move(
         raise ValueError("只能评价空位置。")
 
     opponent = other_side(player)
-    if own_before is None:
-        own_before = evaluate_player(board, player)
-    if opponent_before is None:
-        opponent_before = evaluate_player(board, opponent)
-
     if own_profile is None:
         own_profile = analyze_move_threats(
             board,
@@ -591,20 +606,16 @@ def evaluate_move(
             opponent,
         )
 
-    board.place(row, column, player)
-    try:
-        own_after = evaluate_player(board, player)
-    finally:
-        board.undo()
-
-    board.place(row, column, opponent)
-    try:
-        opponent_after = evaluate_player(board, opponent)
-    finally:
-        board.undo()
-
-    attack_gain = max(0, own_after - own_before)
-    defense_gain = max(0, opponent_after - opponent_before)
+    # ``own_before`` and ``opponent_before`` remain accepted for API
+    # compatibility.  Only four complete lines can change after this move, so
+    # their exact deltas replace two whole-board rescans per candidate.
+    attack_gain, defense_gain = _move_pattern_gains(
+        board,
+        row,
+        column,
+        player,
+        opponent,
+    )
 
     return int(
         attack_gain
