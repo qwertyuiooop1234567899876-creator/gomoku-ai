@@ -111,6 +111,35 @@ class RootSafetyCandidateAnalysis:
 
 
 @dataclass(frozen=True, slots=True)
+class RootVCFCandidateAnalysis:
+    """根候选落子后，对手有界 VCF 生存检查结果。"""
+
+    move: Move
+    status: str
+    completed: bool
+    nodes: int
+    elapsed_seconds: float
+    principal_variation: tuple[Move, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "move": list(self.move),
+            "coordinate": format_move(*self.move),
+            "status": self.status,
+            "completed": self.completed,
+            "nodes": self.nodes,
+            "elapsed_seconds": self.elapsed_seconds,
+            "principal_variation": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.principal_variation
+            ],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionAnalysis:
     selected_move: Move
     reason: str
@@ -180,6 +209,14 @@ class DecisionAnalysis:
     root_safety_candidates: tuple[
         RootSafetyCandidateAnalysis, ...
     ] = ()
+    root_vcf_checked: bool = False
+    root_vcf_complete: bool = False
+    root_vcf_nodes: int = 0
+    root_vcf_baseline_line: tuple[Move, ...] = ()
+    root_vcf_candidates: tuple[
+        RootVCFCandidateAnalysis, ...
+    ] = ()
+    mate_scores_quarantined: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -315,6 +352,21 @@ class DecisionAnalysis:
                 candidate.to_dict()
                 for candidate in self.root_safety_candidates
             ],
+            "root_vcf_checked": self.root_vcf_checked,
+            "root_vcf_complete": self.root_vcf_complete,
+            "root_vcf_nodes": self.root_vcf_nodes,
+            "root_vcf_baseline_line": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.root_vcf_baseline_line
+            ],
+            "root_vcf_candidates": [
+                candidate.to_dict()
+                for candidate in self.root_vcf_candidates
+            ],
+            "mate_scores_quarantined": self.mate_scores_quarantined,
         }
 
 

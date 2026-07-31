@@ -39,6 +39,10 @@ _EVALUATION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _SPEED_PATTERN = re.compile(r"SPEED:\s*(\d+)", re.IGNORECASE)
+_REALTIME_BEST_PATTERN = re.compile(
+    r"REALTIME\s+BEST\s*:?\s*(\d+)\s*,\s*(\d+)",
+    re.IGNORECASE,
+)
 _BRACKET_COORDINATE_PATTERN = re.compile(
     r"\[\s*([A-Z])\s*,?\s*(\d+)\s*\]",
     re.IGNORECASE,
@@ -359,6 +363,7 @@ class YixinSearchReport:
     """一次 YiXin 搜索的结构化输出。"""
 
     move: tuple[int, int] | None = None
+    realtime_move: tuple[int, int] | None = None
     depth: int = 0
     selective_depth: int = 0
     evaluation: int | None = None
@@ -375,11 +380,35 @@ class YixinSearchReport:
             return None
         return format_move(*self.move)
 
+    @property
+    def realtime_coordinate(self) -> str | None:
+        if self.realtime_move is None:
+            return None
+        return format_move(*self.realtime_move)
+
+    @property
+    def completed_best_coordinate(self) -> str | None:
+        return self.bestline[0] if self.bestline else None
+
+    @property
+    def evaluation_aligned_with_move(self) -> bool | None:
+        completed = self.completed_best_coordinate
+        returned = self.coordinate
+        if completed is None or returned is None:
+            return None
+        return returned == completed
+
     def consume(self, line: str) -> None:
         normalized = line.strip()
         if not normalized:
             return
         self.raw_lines.append(normalized)
+
+        realtime_match = _REALTIME_BEST_PATTERN.search(normalized)
+        if realtime_match:
+            column = int(realtime_match.group(1))
+            row = int(realtime_match.group(2))
+            self.realtime_move = (row, column)
 
         detail_match = _DETAIL_PATTERN.search(normalized)
         if detail_match:
@@ -430,6 +459,9 @@ class YixinSearchReport:
                 else -self.evaluation
             )
         elapsed_seconds = self.elapsed_ms / 1000.0
+        completed_best = self.completed_best_coordinate
+        evaluation_coordinate = completed_best
+        top_coordinate = completed_best or self.coordinate
         return {
             "engine_name": "yixin",
             "engine_version": "2017-kernel-0.6.69",
@@ -456,6 +488,13 @@ class YixinSearchReport:
             "evaluation_perspective": "side_to_move",
             "evaluation_white": evaluation_white,
             "best_coordinate": self.coordinate,
+            "returned_coordinate": self.coordinate,
+            "realtime_coordinate": self.realtime_coordinate,
+            "completed_best_coordinate": completed_best,
+            "evaluation_coordinate": evaluation_coordinate,
+            "evaluation_aligned_with_returned_move": (
+                self.evaluation_aligned_with_move
+            ),
             "bestline": list(self.bestline),
             "raw_protocol_lines": list(self.raw_lines),
             "protocol_errors": list(self.protocol_errors),
@@ -466,13 +505,13 @@ class YixinSearchReport:
             "top_candidates": (
                 [
                     {
-                        "coordinate": self.coordinate,
+                        "coordinate": top_coordinate,
                         "score": self.evaluation or 0,
-                        "own_threat": "YiXin",
+                        "own_threat": "YiXin 完成层",
                         "opponent_threat": "外部评价",
                     }
                 ]
-                if self.coordinate is not None
+                if top_coordinate is not None
                 else []
             ),
         }

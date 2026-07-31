@@ -375,6 +375,46 @@ class GameRecorder:
                             f"{suffix}"
                         )
 
+                if move.analysis.get("root_vcf_checked", False):
+                    baseline = move.analysis.get(
+                        "root_vcf_baseline_line",
+                        [],
+                    )
+                    baseline_text = " -> ".join(
+                        item.get("coordinate", "?")
+                        for item in baseline
+                    )
+                    lines.append(
+                        "     "
+                        f"root_vcf=checked "
+                        f"complete:"
+                        f"{move.analysis.get('root_vcf_complete', False)} "
+                        f"nodes:"
+                        f"{move.analysis.get('root_vcf_nodes', 0):,} "
+                        f"baseline:{baseline_text or '?'}"
+                    )
+                    for rank, candidate in enumerate(
+                        move.analysis.get("root_vcf_candidates", []),
+                        start=1,
+                    ):
+                        pv = candidate.get("principal_variation", [])
+                        pv_text = " -> ".join(
+                            item.get("coordinate", "?")
+                            for item in pv
+                        )
+                        suffix = f" pv={pv_text}" if pv_text else ""
+                        lines.append(
+                            "     "
+                            f"root_vcf#{rank} "
+                            f"{candidate.get('coordinate', '?'):4} "
+                            f"status:"
+                            f"{candidate.get('status', 'unknown')} "
+                            f"complete:"
+                            f"{candidate.get('completed', False)} "
+                            f"nodes:{candidate.get('nodes', 0):,}"
+                            f"{suffix}"
+                        )
+
                 search_depth = move.analysis.get("search_depth", 0)
                 if search_depth > 0:
                     lines.append(

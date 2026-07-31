@@ -155,6 +155,36 @@ class TestYixinReportParser(unittest.TestCase):
         self.assertEqual(802, report.speed)
         self.assertEqual(["G9", "H10", "I11"], report.bestline)
 
+    def test_returned_move_is_separate_from_completed_bestline(
+        self,
+    ) -> None:
+        report = YixinSearchReport(move=(8, 7), evaluation=10_000)
+        report.consume("MESSAGE REALTIME BEST 7,8")
+        report.consume("MESSAGE Bestline: [I,8] [G,7]")
+
+        self.assertEqual("H9", report.coordinate)
+        self.assertEqual("H9", report.realtime_coordinate)
+        self.assertEqual("I8", report.completed_best_coordinate)
+        self.assertFalse(report.evaluation_aligned_with_move)
+
+        analysis = report.to_analysis_dict(
+            player=WHITE,
+            requested_seconds=10.0,
+        )
+        self.assertEqual("H9", analysis["returned_coordinate"])
+        self.assertEqual(
+            "I8",
+            analysis["completed_best_coordinate"],
+        )
+        self.assertEqual("I8", analysis["evaluation_coordinate"])
+        self.assertFalse(
+            analysis["evaluation_aligned_with_returned_move"]
+        )
+        self.assertEqual(
+            "I8",
+            analysis["top_candidates"][0]["coordinate"],
+        )
+
     def test_white_perspective_is_normalized(self) -> None:
         report = YixinSearchReport(
             move=(7, 7),

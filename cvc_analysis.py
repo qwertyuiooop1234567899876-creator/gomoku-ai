@@ -39,6 +39,8 @@ class PositionAssessment:
     ply: int
     side_to_move: int
     recommended_move: str | None
+    completed_best_move: str | None
+    evaluation_aligned: bool
     evaluation_raw: int | None
     evaluation_white: int | None
     depth: int
@@ -56,7 +58,10 @@ class MoveAssessment:
     player_name: str
     actual_move: str
     recommended_move: str | None
+    completed_best_move_before: str | None
     matches_recommendation: bool
+    evaluation_aligned_before: bool
+    evaluation_aligned_after: bool
     evaluation_before_white: int | None
     evaluation_after_white: int | None
     loss_for_mover: int | None
@@ -138,6 +143,11 @@ def _evaluate_position(
         ply=ply,
         side_to_move=side_to_move,
         recommended_move=report.coordinate,
+        completed_best_move=report.completed_best_coordinate,
+        evaluation_aligned=(
+            report.evaluation is not None
+            and report.evaluation_aligned_with_move is True
+        ),
         evaluation_raw=report.evaluation,
         evaluation_white=evaluation_white,
         depth=report.depth,
@@ -165,6 +175,8 @@ def _terminal_assessment(
         ply=ply,
         side_to_move=side_to_move,
         recommended_move=None,
+        completed_best_move=None,
+        evaluation_aligned=True,
         evaluation_raw=None,
         evaluation_white=evaluation_white,
         depth=0,
@@ -307,19 +319,34 @@ def analyze_cvc_payload(
             )
 
         matches = current.recommended_move == actual_coordinate
-        classification, loss = classify_move(
-            matches_recommendation=matches,
-            before_white=current.evaluation_white,
-            after_white=following.evaluation_white,
-            player=player,
-        )
+        if (
+            current.evaluation_aligned
+            and following.evaluation_aligned
+        ):
+            classification, loss = classify_move(
+                matches_recommendation=matches,
+                before_white=current.evaluation_white,
+                after_white=following.evaluation_white,
+                player=player,
+            )
+        else:
+            classification, loss = "评价不可比", None
         assessment = MoveAssessment(
             number=number,
             player=player,
             player_name="BLACK" if player == BLACK else "WHITE",
             actual_move=actual_coordinate,
             recommended_move=current.recommended_move,
+            completed_best_move_before=(
+                current.completed_best_move
+            ),
             matches_recommendation=matches,
+            evaluation_aligned_before=(
+                current.evaluation_aligned
+            ),
+            evaluation_aligned_after=(
+                following.evaluation_aligned
+            ),
             evaluation_before_white=current.evaluation_white,
             evaluation_after_white=following.evaluation_white,
             loss_for_mover=loss,
@@ -353,7 +380,7 @@ def analyze_cvc_payload(
         reverse=True,
     )
     return {
-        "analysis_format_version": "1.0",
+        "analysis_format_version": "1.1",
         "analyzer_engine_version": ENGINE_VERSION,
         "source": {
             "mode": payload.get("mode"),
@@ -409,6 +436,10 @@ def render_analysis_text(
         f"YiXin SHA256: {executable_sha256 or 'unavailable'}",
         "",
         "逐手分析（评价统一为白棋视角，正数利白、负数利黑）：",
+        (
+            "“推荐”是 YiXin 最终返回着；只有它与最后完成层"
+            "主变化首着一致时，评价才参与损失计算。"
+        ),
         "手数  方  实战  推荐  评价前→评价后  损失  判定",
     ]
     for move in result["moves"]:
@@ -435,9 +466,27 @@ def render_analysis_text(
                 "     YiXin线："
                 + " → ".join(str(item) for item in bestline)
             )
+        if not move.get("evaluation_aligned_before", True):
+            lines.append(
+                "     评价未对齐：最终返回 "
+                f"{move.get('recommended_move') or '?'}；"
+                "完成层首选 "
+                f"{move.get('completed_best_move_before') or '?'}；"
+                "本手不计算损失。"
+            )
 
     decisive = result.get("first_decisive_blunder")
+    unaligned_count = sum(
+        1
+        for move in result["moves"]
+        if not move.get("evaluation_aligned_before", True)
+    )
     lines.extend(["", "关键结论："])
+    if unaligned_count:
+        lines.append(
+            f"- 有 {unaligned_count} 个局面的最终返回着与完成层"
+            "首选不一致，相关着法已排除出损失和败着统计。"
+        )
     if decisive is None:
         lines.append("- 本次分析范围内未发现评价直接进入必败带的一手。")
     else:

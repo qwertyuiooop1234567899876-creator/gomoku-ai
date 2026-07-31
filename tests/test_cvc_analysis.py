@@ -164,6 +164,49 @@ class TestCVCAnalysis(unittest.TestCase):
         self.assertIn("首个断崖败着：第 1 手 H8", text)
         self.assertIn("YiXin 推荐 G8", text)
 
+    def test_mismatched_return_and_completed_line_are_not_scored(
+        self,
+    ) -> None:
+        payload = {
+            "mode": "CVC",
+            "black": "SearchAI",
+            "white": "YiXin",
+            "result": "未结束",
+            "moves": [
+                {"player": BLACK, "row": 7, "column": 7}
+            ],
+        }
+        analyzer = FakeAnalyzer(
+            [
+                report((8, 7), -10_000, "I8", "G7"),
+                report((6, 7), -70, "H7"),
+            ]
+        )
+
+        result = analyze_cvc_payload(payload, analyzer)
+        move = result["moves"][0]
+
+        self.assertEqual("H9", move["recommended_move"])
+        self.assertEqual(
+            "I8",
+            move["completed_best_move_before"],
+        )
+        self.assertFalse(move["evaluation_aligned_before"])
+        self.assertIsNone(move["loss_for_mover"])
+        self.assertEqual("评价不可比", move["classification"])
+        self.assertIsNone(result["first_decisive_blunder"])
+        self.assertEqual([], result["largest_losses"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            text = render_analysis_text(
+                result,
+                source_path=Path(directory) / "game.json",
+                config=YixinConfig(),
+                executable_sha256="abc",
+            )
+        self.assertIn("最终返回 H9；完成层首选 I8", text)
+        self.assertIn("已排除出损失和败着统计", text)
+
 
 if __name__ == "__main__":
     unittest.main()
