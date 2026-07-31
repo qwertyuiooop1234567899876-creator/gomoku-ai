@@ -237,3 +237,47 @@ def is_unknown_risk_override(
         and proof_states.get(revised_result.move)
         == ProofState.UNKNOWN.value
     )
+
+
+def promote_root_move(
+    result: RootResult,
+    move: Move,
+    *,
+    score: int,
+    principal_variation: tuple[Move, ...] | None = None,
+) -> RootResult:
+    """Promote one safety-approved move without inventing PVS evidence."""
+    variation_map = {
+        candidate: variation
+        for candidate, _, variation in result.ranked_variations
+    }
+    chosen_pv = (
+        principal_variation
+        or variation_map.get(move)
+        or (move,)
+    )
+    ranked_scores = dict(result.ranked_moves)
+    ranked_scores.setdefault(move, score)
+    reordered = (
+        (move, ranked_scores[move]),
+        *(
+            item
+            for item in result.ranked_moves
+            if item[0] != move
+        ),
+    )
+    reordered_variations = (
+        (move, ranked_scores[move], chosen_pv),
+        *(
+            item
+            for item in result.ranked_variations
+            if item[0] != move
+        ),
+    )
+    return RootResult(
+        move=move,
+        score=ranked_scores[move],
+        principal_variation=chosen_pv,
+        ranked_moves=reordered,
+        ranked_variations=reordered_variations,
+    )

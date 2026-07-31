@@ -148,6 +148,8 @@ class RootVCFSafetyScanner:
     intercept_fraction: float = 0.25
     minimum_candidate_seconds: float = 0.01
     candidate_limit: int | None = None
+    exhaustive_rescue_enabled: bool = False
+    rescue_survivor_threshold: int = 1
     clock: Clock = time.perf_counter
 
     def scan(
@@ -191,6 +193,36 @@ class RootVCFSafetyScanner:
             opponent=opponent,
             global_deadline=global_deadline,
         )
+        rescue_scanned = False
+        rescue_checked = 0
+        if self._should_scan_global_rescues(
+            baseline_line,
+            analyses,
+            global_deadline=global_deadline,
+        ):
+            rescue_scanned = True
+            already_scanned = set(ordered)
+            remaining = [
+                move
+                for move in board.get_legal_moves()
+                if move not in already_scanned
+            ]
+            rescue_checked = len(remaining)
+            rescue_analyses = self._scan_candidates(
+                board,
+                remaining,
+                mover=mover,
+                opponent=opponent,
+                global_deadline=global_deadline,
+            )
+            analyses.extend(rescue_analyses)
+            discovered = [
+                candidate.move
+                for candidate in rescue_analyses
+                if candidate.status
+                == RootCandidateSafety.SURVIVES_VCF_SCAN.value
+            ]
+            merged = list(dict.fromkeys((*merged, *discovered)))
         return RootVCFScanResult(
             original_candidates=tuple(candidates),
             candidates=tuple(merged),
@@ -198,7 +230,28 @@ class RootVCFSafetyScanner:
             analyses=tuple(analyses),
             nodes=self.node_count() - start_nodes,
             elapsed_seconds=self.clock() - started_at,
+            exhaustive_rescue_scanned=rescue_scanned,
+            rescue_candidates_checked=rescue_checked,
         )
+
+    def _should_scan_global_rescues(
+        self,
+        baseline_line: tuple[Move, ...],
+        analyses: list[RootVCFCandidateAnalysis],
+        *,
+        global_deadline: float | None,
+    ) -> bool:
+        if not self.exhaustive_rescue_enabled or not baseline_line:
+            return False
+        if global_deadline is not None and self.clock() >= global_deadline:
+            return False
+        if not analyses or not all(item.completed for item in analyses):
+            return False
+        survivors = sum(
+            item.status == RootCandidateSafety.SURVIVES_VCF_SCAN.value
+            for item in analyses
+        )
+        return survivors <= self.rescue_survivor_threshold
 
     @staticmethod
     def _global_deadline(

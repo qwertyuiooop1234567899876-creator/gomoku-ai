@@ -291,12 +291,30 @@ class GameRecorder:
                             "     "
                             f"proof#{rank} "
                             f"{candidate.get('coordinate', '?'):4} "
+                            f"phase={candidate.get('phase', 'initial')} "
                             f"state={candidate.get('state', 'unknown')} "
                             f"complete={candidate.get('completed', False)} "
                             f"nodes={candidate.get('nodes', 0):,} "
                             f"risk={candidate.get('threat_risk', None)} "
                             f"cutoff={candidate.get('cutoff_reason', None)}"
                             f"{suffix}"
+                        )
+
+                    if move.analysis.get("final_proof_checked", False):
+                        rejected = move.analysis.get(
+                            "final_proof_rejected_moves",
+                            [],
+                        )
+                        rejected_text = ",".join(
+                            item.get("coordinate", "?")
+                            for item in rejected
+                        )
+                        lines.append(
+                            "     "
+                            "final_proof=checked "
+                            f"selected:"
+                            f"{move.analysis.get('final_proof_selected_coordinate', '?')} "
+                            f"rejected:{rejected_text or '?'}"
                         )
 
                 if move.analysis.get("defense_vct_checked", False):
@@ -391,6 +409,10 @@ class GameRecorder:
                         f"{move.analysis.get('root_vcf_complete', False)} "
                         f"nodes:"
                         f"{move.analysis.get('root_vcf_nodes', 0):,} "
+                        f"rescue_scan:"
+                        f"{move.analysis.get('root_vcf_exhaustive_rescue_scanned', False)} "
+                        f"rescue_checked:"
+                        f"{move.analysis.get('root_vcf_rescue_candidates_checked', 0):,} "
                         f"baseline:{baseline_text or '?'}"
                     )
                     for rank, candidate in enumerate(

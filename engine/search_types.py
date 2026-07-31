@@ -89,6 +89,11 @@ class SearchConfig:
     proof_frontier_scan_limit: int = 24
     proof_risk_pvs_margin: int = 20_000
     proof_use_threat_cache: bool = True
+    proof_final_check_enabled: bool = True
+    proof_final_time_fraction: float = 0.14
+    proof_final_max_seconds: float = 8.0
+    proof_final_min_seconds: float = 0.25
+    proof_final_candidate_limit: int = 4
     root_safety_enabled: bool = True
     root_safety_candidate_limit: int = 2
     root_safety_score_margin: int = 20_000
@@ -193,6 +198,21 @@ class SearchConfig:
             raise ValueError("proof_frontier_scan_limit 必须大于 0。")
         if self.proof_risk_pvs_margin < 0:
             raise ValueError("proof_risk_pvs_margin 不能小于 0。")
+        if not 0 < self.proof_final_time_fraction < 0.5:
+            raise ValueError(
+                "proof_final_time_fraction 必须在 0～0.5 之间。"
+            )
+        if self.proof_final_max_seconds <= 0:
+            raise ValueError("proof_final_max_seconds 必须大于 0。")
+        if self.proof_final_min_seconds <= 0:
+            raise ValueError("proof_final_min_seconds 必须大于 0。")
+        if self.proof_final_min_seconds > self.proof_final_max_seconds:
+            raise ValueError(
+                "proof_final_min_seconds 不能大于 "
+                "proof_final_max_seconds。"
+            )
+        if self.proof_final_candidate_limit < 1:
+            raise ValueError("proof_final_candidate_limit 必须大于 0。")
         if self.root_safety_candidate_limit < 2:
             raise ValueError("root_safety_candidate_limit 不能小于 2。")
         if self.root_safety_score_margin < 0:
@@ -356,6 +376,8 @@ class RootVCFScanResult:
     analyses: tuple[RootVCFCandidateAnalysis, ...]
     nodes: int
     elapsed_seconds: float
+    exhaustive_rescue_scanned: bool = False
+    rescue_candidates_checked: int = 0
 
     @property
     def complete(self) -> bool:

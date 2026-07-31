@@ -16,6 +16,7 @@ from engine.threats import (
     ThreatFrontier,
     ThreatKind,
 )
+from engine.vcf import VCFSearch
 
 Clock = Callable[[], float]
 
@@ -26,6 +27,10 @@ class ProofState(str, Enum):
     PROVEN_WIN = "proven_win"
     PROVEN_LOSS = "proven_loss"
     UNKNOWN = "unknown"
+
+
+class _ProofCutoff(RuntimeError):
+    """Internal control flow for a VCF oracle stopped by the proof budget."""
 
 
 def combine_or_states(
@@ -70,6 +75,8 @@ class ProofBudget:
     max_attacker_moves: int = 4
     max_quiet_frontiers: int = 0
     max_quiet_attacker_moves: int = 1
+    vcf_max_attacker_moves: int = 5
+    use_vcf_oracle: bool = False
     max_nodes_per_candidate: int | None = None
     max_seconds_per_candidate: float | None = None
     deadline: float | None = None
@@ -83,6 +90,8 @@ class ProofBudget:
             raise ValueError("max_quiet_frontiers 不能小于 0。")
         if self.max_quiet_attacker_moves < 0:
             raise ValueError("max_quiet_attacker_moves 不能小于 0。")
+        if self.vcf_max_attacker_moves < 0:
+            raise ValueError("vcf_max_attacker_moves 不能小于 0。")
         if (
             self.max_nodes_per_candidate is not None
             and self.max_nodes_per_candidate < 1
@@ -103,6 +112,8 @@ class ProofBudget:
         max_attacker_moves: int = 4,
         max_quiet_frontiers: int = 0,
         max_quiet_attacker_moves: int = 1,
+        vcf_max_attacker_moves: int = 5,
+        use_vcf_oracle: bool = False,
         max_nodes_per_candidate: int | None = None,
         max_seconds_per_candidate: float | None = None,
         clock: Clock = time.monotonic,
@@ -114,6 +125,8 @@ class ProofBudget:
             max_attacker_moves=max_attacker_moves,
             max_quiet_frontiers=max_quiet_frontiers,
             max_quiet_attacker_moves=max_quiet_attacker_moves,
+            vcf_max_attacker_moves=vcf_max_attacker_moves,
+            use_vcf_oracle=use_vcf_oracle,
             max_nodes_per_candidate=max_nodes_per_candidate,
             max_seconds_per_candidate=max_seconds_per_candidate,
             deadline=clock() + seconds,
@@ -562,6 +575,41 @@ class ProofSearch:
                 required_defenses=defender_wins,
             )
 
+        # A concrete VCF line is already a strict winning certificate.  Use
+        # it before the much more expensive exact threat descriptions.  A
+        # miss is deliberately *not* proof of safety: normal AND/OR search
+        # continues, while a budget interruption remains UNKNOWN.
+        if (
+            not defender_wins
+            and self.budget.use_vcf_oracle
+            and self.budget.vcf_max_attacker_moves > 0
+        ):
+            try:
+                vcf_line = self._find_vcf_witness(board, attacker)
+            except _ProofCutoff:
+                return _NodeResult(
+                    state=ProofState.UNKNOWN,
+                    complete=False,
+                    cutoff_reason=(
+                        self._budget_cutoff_reason() or "vcf_interrupted"
+                    ),
+                )
+            if vcf_line:
+                used_attacker_moves = (len(vcf_line) + 1) // 2
+                self._max_attacker_ply = max(
+                    self._max_attacker_ply,
+                    self.budget.max_attacker_moves
+                    - remaining_attacker_moves
+                    + used_attacker_moves,
+                )
+                return _NodeResult(
+                    state=ProofState.PROVEN_WIN,
+                    complete=True,
+                    best_move=vcf_line[0],
+                    principal_variation=vcf_line,
+                    linear_plan=vcf_line,
+                )
+
         if len(defender_wins) == 1:
             # Every other attacker move loses immediately, so this singleton
             # block is a complete OR set for the current node. The block is
@@ -809,6 +857,62 @@ class ProofSearch:
                     linear_plan=linear_plan,
                 )
         return None
+
+    def _find_vcf_witness(
+        self,
+        board: Board,
+        attacker: int,
+    ) -> tuple[Move, ...] | None:
+        """Return one fully replayable VCF certificate, if cheaply found.
+
+        Candidate generation may be selective because only a returned line is
+        used as proof.  Failing to find a line never proves a loss and falls
+        through to the conservative threat-space search.
+        """
+
+        search = VCFSearch(
+            position_key=lambda position, _player: position.zobrist_hash,
+            forcing_candidates=self._vcf_candidates,
+            check_timeout=self._check_vcf_budget,
+            count_node=self._count_vcf_node,
+        )
+        return search.find(
+            board,
+            attacker,
+            self.budget.vcf_max_attacker_moves,
+        )
+
+    def _vcf_candidates(
+        self,
+        board: Board,
+        attacker: int,
+    ) -> list[Move]:
+        batch = self.analyzer.generate_attack_candidates(
+            board,
+            attacker,
+            stop_requested=self._deadline_reached,
+        )
+        if not batch.generation_completed:
+            raise _ProofCutoff
+        vcf_kinds = {
+            ThreatKind.FIVE,
+            ThreatKind.DOUBLE_FOUR,
+            ThreatKind.OPEN_FOUR,
+            ThreatKind.FOUR_THREE,
+            ThreatKind.FOUR,
+        }
+        return [
+            candidate.move
+            for candidate in batch.candidates
+            if candidate.kind in vcf_kinds
+        ]
+
+    def _check_vcf_budget(self) -> None:
+        if self._budget_cutoff_reason() is not None:
+            raise _ProofCutoff
+
+    def _count_vcf_node(self) -> None:
+        self._nodes += 1
 
     def _search_and_node(
         self,

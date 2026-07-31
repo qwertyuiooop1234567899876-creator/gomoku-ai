@@ -55,7 +55,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.12.5 搜索 AI。
+    V0.13.0 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -81,6 +81,11 @@ class SearchAI(ScoringAI):
     的攻击落点并入根候选，并在高密度威胁前沿保留安静活三反击。
     V0.12.5 补全防守候选来源，并让 VCF 拦截证据覆盖整条交替
     线路，同时继续遵守固定根候选上限。
+    V0.13.0 在严格 AND/OR 证明中加入 VCF 胜势证书优先收口，
+    使跨阶段强制链能在完整防守集上快速得出严格结论；
+    PVS 最终首选必须接受独立 Proof 复核，已证败着会从证明
+    主线生成通用拦截候选。晚盘只剩单个 VCF 存活点时，根安全
+    通道会扫描全部合法着，补齐远端救援点。
     """
 
     def __init__(
@@ -137,6 +142,9 @@ class SearchAI(ScoringAI):
         ] = {}
         self._search_phase_deadline: float | None = None
         self._search_phase_timeout_hit = False
+        self._final_proof_checked = False
+        self._final_proof_rejected: tuple[Move, ...] = ()
+        self._final_proof_selected: Move | None = None
 
     def choose_move(self, board: Board) -> Move:
         """按硬战术、VCF、限时迭代加深的顺序选择落点。"""
@@ -250,6 +258,8 @@ class SearchAI(ScoringAI):
             outcome.root_candidates_expanded
         )
 
+        best_result = self._run_final_proof_audit(board, best_result)
+
         reason = (
             f"{tactical_reason}（完成深度 {completed_depth}）"
             if completed_depth > 0
@@ -277,6 +287,10 @@ class SearchAI(ScoringAI):
                     reason += "；风险改选未获确认，保留 PVS 首选"
                 else:
                     reason += "；决胜节点复核保持原候选"
+        if self._final_proof_rejected:
+            reason += "；最终首选 Proof 复核已淘汰可证败着"
+        elif self._final_proof_checked:
+            reason += "；最终首选已经 Proof 复核"
         self._save_search_analysis(
             selected_move=best_result.move,
             reason=reason,
@@ -333,6 +347,9 @@ class SearchAI(ScoringAI):
         self._root_heuristic_score_cache.clear()
         self._search_phase_deadline = None
         self._search_phase_timeout_hit = False
+        self._final_proof_checked = False
+        self._final_proof_rejected = ()
+        self._final_proof_selected = None
         self._proof_table_start_stats = self._proof_table.stats()
         self._proof_analyzer = self._new_threat_analyzer()
         self._decay_history()
@@ -501,26 +518,24 @@ class SearchAI(ScoringAI):
 
             self._search_phase_deadline = None
             self._search_phase_timeout_hit = False
+            reserve = self._final_proof_reserve_seconds()
             if completed_depth > 0 and self._root_safety_trigger(
                 best_result,
                 root_history,
             ) is not None:
-                reserve = self._root_safety_budget_seconds()
-                if (
-                    reserve > 0
-                    and self._time.hard_deadline is not None
-                ):
-                    self._search_phase_deadline = (
-                        self._time.hard_deadline - reserve
-                    )
-                    if (
-                        time.perf_counter()
-                        >= self._search_phase_deadline
-                    ):
-                        self._interrupted_depth = depth
-                        search_completed = False
-                        stop_reason = "root_safety_reserve"
-                        break
+                reserve = max(
+                    reserve,
+                    self._root_safety_budget_seconds(),
+                )
+            if reserve > 0 and self._time.hard_deadline is not None:
+                self._search_phase_deadline = (
+                    self._time.hard_deadline - reserve
+                )
+                if time.perf_counter() >= self._search_phase_deadline:
+                    self._interrupted_depth = depth
+                    search_completed = False
+                    stop_reason = "verification_reserve"
+                    break
 
             try:
                 if (
@@ -606,7 +621,7 @@ class SearchAI(ScoringAI):
                 self._interrupted_depth = depth
                 search_completed = False
                 stop_reason = (
-                    "root_safety_reserve"
+                    "verification_reserve"
                     if self._search_phase_timeout_hit
                     else "hard_deadline"
                 )
@@ -928,6 +943,7 @@ class SearchAI(ScoringAI):
                 self.config.root_vcf_safety_intercept_fraction
             ),
             candidate_limit=self.config.root_candidate_limit,
+            exhaustive_rescue_enabled=True,
         )
         return scanner.scan(
             board,
@@ -1040,6 +1056,7 @@ class SearchAI(ScoringAI):
                     ),
                     max_quiet_frontiers=0,
                     max_quiet_attacker_moves=0,
+                    use_vcf_oracle=True,
                     deadline=root_deadline,
                 ),
                 analyzer=analyzer,
@@ -1105,6 +1122,7 @@ class SearchAI(ScoringAI):
                     max_quiet_attacker_moves=(
                         self.config.proof_quiet_attacker_moves
                     ),
+                    use_vcf_oracle=True,
                     deadline=min(deadline, now + candidate_seconds),
                 ),
                 analyzer=analyzer,
@@ -1146,6 +1164,237 @@ class SearchAI(ScoringAI):
             max(0.0, remaining - 0.1),
         )
         return budget if budget >= 0.1 else 0.0
+
+    def _final_proof_reserve_seconds(self) -> float:
+        total = self.config.time_limit_seconds
+        if (
+            not self.config.proof_final_check_enabled
+            or total is None
+            or total < 4.0
+        ):
+            return 0.0
+        reserve = min(
+            self.config.proof_final_max_seconds,
+            total * self.config.proof_final_time_fraction,
+        )
+        return (
+            reserve
+            if reserve >= self.config.proof_final_min_seconds
+            else 0.0
+        )
+
+    def _final_proof_budget_seconds(self) -> float:
+        reserve = self._final_proof_reserve_seconds()
+        remaining = self._time.remaining_seconds
+        if reserve <= 0 or remaining is None:
+            return 0.0
+        return max(0.0, min(reserve, remaining - 0.02))
+
+    def _run_final_proof_audit(
+        self,
+        board: Board,
+        result: RootResult,
+    ) -> RootResult:
+        """Strictly recheck the move that will actually be returned.
+
+        Earlier proof slices are scheduled before PVS and therefore cannot
+        know its eventual leader.  This reserved pass follows the real final
+        order.  A proved opponent win rejects the candidate; UNKNOWN remains
+        eligible.  Points from the losing certificate are inserted as generic
+        interception candidates, so the recovery is property-based rather
+        than tied to one recorded coordinate.
+        """
+        seconds = self._final_proof_budget_seconds()
+        if seconds < self.config.proof_final_min_seconds:
+            return result
+
+        deadline = time.perf_counter() + seconds
+        self._final_proof_checked = True
+        proof_by_move = {
+            candidate.move: candidate
+            for candidate in self._proof_candidates
+        }
+        root_vcf_by_move = (
+            {}
+            if self._root_vcf_scan is None
+            else {
+                candidate.move: candidate
+                for candidate in self._root_vcf_scan.analyses
+            }
+        )
+        queue = [
+            result.move,
+            *(
+                move
+                for move, _score in result.ranked_moves
+                if move != result.move
+            ),
+        ]
+        seen: set[Move] = set()
+        rejected: list[Move] = []
+        selected: Move | None = None
+        checks = 0
+
+        while (
+            queue
+            and checks < self.config.proof_final_candidate_limit
+            and time.perf_counter() < deadline
+        ):
+            move = queue.pop(0)
+            if move in seen or not board.is_empty(*move):
+                continue
+            seen.add(move)
+
+            vcf_analysis = root_vcf_by_move.get(move)
+            if (
+                vcf_analysis is not None
+                and vcf_analysis.status
+                == root_safety.RootCandidateSafety.PROVEN_LOSS.value
+            ):
+                rejected.append(move)
+                self._prepend_certificate_intercepts(
+                    queue,
+                    board,
+                    vcf_analysis.principal_variation,
+                    seen,
+                )
+                continue
+
+            known = proof_by_move.get(move)
+            if (
+                known is not None
+                and known.state == ProofState.PROVEN_WIN.value
+            ):
+                rejected.append(move)
+                self._prepend_certificate_intercepts(
+                    queue,
+                    board,
+                    known.principal_variation,
+                    seen,
+                )
+                continue
+            if (
+                known is not None
+                and known.state == ProofState.PROVEN_LOSS.value
+            ):
+                selected = move
+                break
+
+            checks += 1
+            candidate_search = ProofSearch(
+                budget=ProofBudget(
+                    max_nodes=self.config.proof_max_nodes,
+                    max_attacker_moves=(
+                        self.config.proof_max_attacker_moves
+                    ),
+                    max_quiet_frontiers=(
+                        self.config.proof_quiet_frontier_limit
+                    ),
+                    max_quiet_attacker_moves=(
+                        self.config.proof_quiet_attacker_moves
+                    ),
+                    use_vcf_oracle=True,
+                    deadline=deadline,
+                ),
+                analyzer=self._proof_analyzer,
+                table=self._proof_table,
+                clock=time.perf_counter,
+            )
+            proof = candidate_search.search_after_move(
+                board,
+                move=move,
+                mover=self.player,
+                attacker=self.opponent,
+                side_to_move=self.opponent,
+            )
+            self._counters.proof_nodes += proof.nodes
+            analysis = ProofCandidateAnalysis(
+                move=move,
+                state=proof.state.value,
+                completed=proof.completed,
+                nodes=proof.nodes,
+                elapsed_seconds=proof.elapsed_seconds,
+                cutoff_reason=proof.cutoff_reason,
+                principal_variation=proof.principal_variation,
+                threat_risk=(
+                    None if known is None else known.threat_risk
+                ),
+                phase="final_selection",
+            )
+            self._upsert_proof_candidate(analysis)
+            proof_by_move[move] = analysis
+            self._final_proof_checked = True
+
+            if proof.state is ProofState.PROVEN_WIN:
+                rejected.append(move)
+                self._prepend_certificate_intercepts(
+                    queue,
+                    board,
+                    proof.principal_variation,
+                    seen,
+                )
+                continue
+
+            # PROVEN_LOSS is strict safety evidence; UNKNOWN is still safer
+            # than any candidate already proved to lose.
+            selected = move
+            break
+
+        self._final_proof_rejected = tuple(dict.fromkeys(rejected))
+        if selected is None:
+            selected = next(
+                (
+                    move
+                    for move in queue
+                    if move not in seen and board.is_empty(*move)
+                ),
+                result.move,
+            )
+        self._final_proof_selected = selected
+        if selected == result.move:
+            return result
+
+        scores = dict(result.ranked_moves)
+        return root_policy.promote_root_move(
+            result,
+            selected,
+            score=scores.get(
+                selected,
+                self._heuristic_root_score(board, selected),
+            ),
+        )
+
+    @staticmethod
+    def _prepend_certificate_intercepts(
+        queue: list[Move],
+        board: Board,
+        line: tuple[Move, ...],
+        seen: set[Move],
+    ) -> None:
+        attacker_points = line[::2]
+        defender_points = line[1::2]
+        additions = [
+            move
+            for move in (*attacker_points, *defender_points)
+            if move not in seen and board.is_empty(*move)
+        ]
+        if additions:
+            queue[:0] = [
+                *dict.fromkeys(additions),
+            ]
+
+    def _upsert_proof_candidate(
+        self,
+        analysis: ProofCandidateAnalysis,
+    ) -> None:
+        self._proof_candidates = (
+            analysis,
+            *(
+                candidate
+                for candidate in self._proof_candidates
+                if candidate.move != analysis.move
+            ),
+        )
 
     def _new_threat_analyzer(self) -> ThreatAnalyzer:
         return ThreatAnalyzer(
@@ -1470,9 +1719,15 @@ class SearchAI(ScoringAI):
         return root_safety.candidates(self.config, result)
 
     def _root_safety_budget_seconds(self) -> float:
+        remaining = self._time.remaining_seconds
+        if remaining is not None:
+            remaining = max(
+                0.0,
+                remaining - self._final_proof_reserve_seconds(),
+            )
         return root_safety.budget_seconds(
             self.config,
-            remaining_seconds=self._time.remaining_seconds,
+            remaining_seconds=remaining,
         )
 
     def _maybe_run_root_safety_probe(
@@ -3219,6 +3474,9 @@ class SearchAI(ScoringAI):
             proof_tt_skipped_stores=proof_tt_delta.skipped_stores,
             proof_tt_evictions=proof_tt_delta.evictions,
             proof_tt_size=proof_tt_delta.size,
+            final_proof_checked=self._final_proof_checked,
+            final_proof_selected_move=self._final_proof_selected,
+            final_proof_rejected_moves=self._final_proof_rejected,
             threat_candidate_batches=threat_stats.candidate_batches,
             threat_exact_descriptions=(
                 threat_stats.exact_descriptions
@@ -3276,6 +3534,16 @@ class SearchAI(ScoringAI):
                 else self._root_vcf_scan.complete
             ),
             root_vcf_nodes=self._counters.root_vcf_nodes,
+            root_vcf_exhaustive_rescue_scanned=(
+                False
+                if self._root_vcf_scan is None
+                else self._root_vcf_scan.exhaustive_rescue_scanned
+            ),
+            root_vcf_rescue_candidates_checked=(
+                0
+                if self._root_vcf_scan is None
+                else self._root_vcf_scan.rescue_candidates_checked
+            ),
             root_vcf_baseline_line=(
                 ()
                 if self._root_vcf_scan is None
