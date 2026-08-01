@@ -13,12 +13,68 @@ from dataclasses import dataclass
 
 from engine.ai import Move
 from engine.board import Board
-from engine.evaluator import find_winning_moves, other_side
+from engine.evaluator import (
+    _find_winning_moves_python,
+    find_winning_moves,
+    other_side,
+)
 
 PositionKey = Callable[[Board, int], int]
 ForcingCandidates = Callable[[Board, int], list[Move]]
 CheckTimeout = Callable[[], None]
 CountNode = Callable[[], None]
+
+
+def validate_vcf_certificate(
+    board: Board,
+    attacker: int,
+    line: tuple[Move, ...],
+) -> bool:
+    """Strictly replay a VCF witness and always restore the board.
+
+    Native code is only an accelerator.  Its result becomes proof evidence
+    after this independent Python replay confirms every forced block and the
+    terminal win/double-win condition.
+    """
+    if not line:
+        return False
+    defender = other_side(attacker)
+    placed = 0
+    index = 0
+    try:
+        while index < len(line):
+            attack_move = line[index]
+            if not board.is_empty(*attack_move):
+                return False
+            board.place(*attack_move, attacker)
+            placed += 1
+            if board.check_win(*attack_move):
+                return index == len(line) - 1
+
+            attack_wins = tuple(
+                _find_winning_moves_python(board, attacker)
+            )
+            if len(attack_wins) >= 2:
+                return index == len(line) - 1
+            if len(attack_wins) != 1:
+                return False
+            if _find_winning_moves_python(board, defender):
+                return False
+            if index + 1 >= len(line):
+                return False
+
+            forced_block = line[index + 1]
+            if forced_block != attack_wins[0] or not board.is_empty(*forced_block):
+                return False
+            board.place(*forced_block, defender)
+            placed += 1
+            if board.check_win(*forced_block):
+                return False
+            index += 2
+        return False
+    finally:
+        for _ in range(placed):
+            board.undo()
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .vscode/
 records/
+native/bin/
 
 # Local search preferences
 search_settings.json

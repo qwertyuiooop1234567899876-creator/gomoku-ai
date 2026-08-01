@@ -7,6 +7,7 @@ from enum import Enum
 
 from engine.board import BLACK, WHITE, Board
 from engine.evaluator import find_winning_moves, other_side
+from engine.native_core import native_core
 from engine.threats import (
     DefenseRefutation,
     Move,
@@ -16,7 +17,7 @@ from engine.threats import (
     ThreatFrontier,
     ThreatKind,
 )
-from engine.vcf import VCFSearch
+from engine.vcf import VCFSearch, validate_vcf_certificate
 
 Clock = Callable[[], float]
 
@@ -869,6 +870,60 @@ class ProofSearch:
         used as proof.  Failing to find a line never proves a loss and falls
         through to the conservative threat-space search.
         """
+
+        # Native VCF is a witness accelerator, never a proof authority.  A
+        # returned line is independently replayed below.  A selective miss
+        # has no proof meaning and returns to the conservative AND/OR search;
+        # repeating the same unsuccessful bounded VCF tree in Python only
+        # consumes the final-audit deadline.  The Python VCF implementation
+        # remains the unchanged fallback whenever NativeCore is unavailable.
+        if native_core.available and self._clock in {
+            time.monotonic,
+            time.perf_counter,
+        }:
+            node_limits = [self.budget.max_nodes]
+            node_limits.extend(self._candidate_node_limits)
+            remaining_nodes = max(0, min(node_limits) - self._nodes)
+            deadlines = [
+                deadline
+                for deadline in (
+                    self.budget.deadline,
+                    *self._candidate_deadlines,
+                )
+                if deadline is not None
+            ]
+            timeout_seconds = (
+                None
+                if not deadlines
+                else max(0.0, min(deadlines) - self._clock())
+            )
+            if remaining_nodes <= 0 or timeout_seconds == 0.0:
+                raise _ProofCutoff
+            native = native_core.find_vcf(
+                board,
+                attacker,
+                self.budget.vcf_max_attacker_moves,
+                max_nodes=remaining_nodes,
+                timeout_seconds=timeout_seconds,
+                candidate_limit=self.analyzer.candidate_limit,
+            )
+            if native is not None:
+                if native.cutoff:
+                    self._nodes += native.nodes
+                    raise _ProofCutoff
+                if native.found and validate_vcf_certificate(
+                    board,
+                    attacker,
+                    native.line,
+                ):
+                    self._nodes += native.nodes
+                    return native.line
+                if not native.found:
+                    return None
+                # An invalid native witness is never accepted. Fall through
+                # to the independent reference implementation so a native
+                # defect cannot suppress an otherwise discoverable witness.
+                self._check_vcf_budget()
 
         search = VCFSearch(
             position_key=lambda position, _player: position.zobrist_hash,

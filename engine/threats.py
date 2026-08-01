@@ -18,6 +18,7 @@ from engine.evaluator import (
     find_winning_moves,
     other_side,
 )
+from engine.native_core import native_core
 
 Move = tuple[int, int]
 Direction = tuple[int, int]
@@ -404,6 +405,56 @@ class ThreatAnalyzer:
         self._cache_store(self._profile_cache, key, profile)
         return profile
 
+    def analyze_profiles(
+        self,
+        board: Board,
+        moves: Iterable[Move],
+        player: int,
+    ) -> dict[Move, ThreatProfile]:
+        """Analyze a move batch while preserving the per-position cache."""
+        ordered = tuple(moves)
+        results: dict[Move, ThreatProfile] = {}
+        missing: list[Move] = []
+        for move in ordered:
+            key = (board.zobrist_hash, move[0], move[1], player)
+            cached = self._cache_get(self._profile_cache, key)
+            if cached is None:
+                missing.append(move)
+            else:
+                results[move] = cached
+
+        native_profiles = None
+        if missing:
+            try:
+                native_profiles = native_core.analyze_moves(
+                    board,
+                    missing,
+                    player,
+                )
+            except RuntimeError:
+                native_profiles = None
+        if native_profiles is None:
+            profiles = [
+                analyze_move_threats(board, *move, player)
+                for move in missing
+            ]
+        else:
+            profiles = [
+                ThreatProfile(
+                    immediate_win=profile.immediate_win,
+                    open_four_directions=profile.open_four_directions,
+                    four_directions=profile.four_directions,
+                    open_three_directions=profile.open_three_directions,
+                    winning_moves=profile.winning_moves,
+                )
+                for profile in native_profiles
+            ]
+        for move, profile in zip(missing, profiles, strict=True):
+            key = (board.zobrist_hash, move[0], move[1], player)
+            self._cache_store(self._profile_cache, key, profile)
+            results[move] = profile
+        return {move: results[move] for move in ordered}
+
     def describe_move(
         self,
         board: Board,
@@ -690,8 +741,29 @@ class ThreatAnalyzer:
 
         defender = other_side(attacker)
         counter_win_set = set(counter_wins)
+        continuation_blocks = tuple(
+            (
+                continuation,
+                frozenset(
+                    (
+                        continuation.move,
+                        *continuation.winning_points,
+                    )
+                ),
+            )
+            for continuation in continuations
+        )
         required: list[Move] = []
         refutations: list[DefenseRefutation] = []
+        try:
+            counter_support = native_core.counter_support_mask(
+                board,
+                legal_replies,
+                defender,
+                minimum=3,
+            )
+        except RuntimeError:
+            counter_support = None
 
         for index, move in enumerate(legal_replies):
             if self._stopped(stop_requested):
@@ -711,13 +783,18 @@ class ThreatAnalyzer:
                 continue
 
             direct_refutation = None
-            if (
-                not counter_win_set
-                and not self._could_create_immediate_counter(
+            could_create_counter = (
+                self._could_create_immediate_counter(
                     board,
                     move,
                     defender,
                 )
+                if counter_support is None
+                else counter_support[index]
+            )
+            if (
+                not counter_win_set
+                and not could_create_counter
             ):
                 direct_refutation = next(
                     (
@@ -731,11 +808,8 @@ class ThreatAnalyzer:
                                 continuation.winning_points
                             ),
                         )
-                        for continuation in continuations
-                        if move not in {
-                            continuation.move,
-                            *continuation.winning_points,
-                        }
+                        for continuation, blocked_moves in continuation_blocks
+                        if move not in blocked_moves
                     ),
                     None,
                 )
@@ -935,6 +1009,7 @@ class ThreatAnalyzer:
         immediate = set(find_winning_moves(board, player))
         ordered_moves = self._relevant_moves(board, immediate)
         profiled: list[ThreatCandidate] = []
+        supported_moves: list[Move] = []
 
         for move in ordered_moves:
             if self._stopped(stop_requested):
@@ -954,7 +1029,18 @@ class ThreatAnalyzer:
                 )
             ):
                 continue
-            profile = self.analyze_profile(board, move, player)
+            supported_moves.append(move)
+
+        profiles = self.analyze_profiles(board, supported_moves, player)
+        for move in supported_moves:
+            if self._stopped(stop_requested):
+                self._cache_skips += 1
+                return ThreatCandidateBatch(
+                    candidates=(),
+                    coverage_complete=False,
+                    generation_completed=False,
+                )
+            profile = profiles[move]
             kind = classify_threat(profile)
             if kind in _FORCING_KINDS:
                 dependency_score = self._future_threat_score(
@@ -1375,26 +1461,31 @@ class ThreatAnalyzer:
         unrelated threats that were already present elsewhere.
         """
         line_candidates = self._line_candidates(board, move)
+        before_profiles = self.analyze_profiles(
+            board,
+            line_candidates,
+            player,
+        )
         before_ranks = {
-            continuation: self.analyze_profile(
-                board,
-                continuation,
-                player,
-            ).tactical_rank
-            for continuation in line_candidates
+            continuation: profile.tactical_rank
+            for continuation, profile in before_profiles.items()
         }
 
         board.place(*move, player)
         try:
             improvements: list[int] = []
-            for continuation in line_candidates:
-                if not board.is_empty(*continuation):
-                    continue
-                rank = self.analyze_profile(
-                    board,
-                    continuation,
-                    player,
-                ).tactical_rank
+            remaining = tuple(
+                continuation
+                for continuation in line_candidates
+                if board.is_empty(*continuation)
+            )
+            after_profiles = self.analyze_profiles(
+                board,
+                remaining,
+                player,
+            )
+            for continuation, profile in after_profiles.items():
+                rank = profile.tactical_rank
                 if rank > before_ranks.get(continuation, 0):
                     improvements.append(rank)
         finally:

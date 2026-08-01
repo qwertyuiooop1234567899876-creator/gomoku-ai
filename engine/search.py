@@ -55,7 +55,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.13.0 搜索 AI。
+    V0.14.0 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -86,6 +86,10 @@ class SearchAI(ScoringAI):
     PVS 最终首选必须接受独立 Proof 复核，已证败着会从证明
     主线生成通用拦截候选。晚盘只剩单个 VCF 存活点时，根安全
     通道会扫描全部合法着，补齐远端救援点。
+    V0.14.0 保留Python调度和严格Proof三态，将一步胜点、局部威胁
+    画像、防守反击支撑以及VCF证书搜索迁移到无第三方依赖的C++
+    NativeCore。所有原生VCF结果必须经Python逐手重放后才能作为
+    证明；未编译原生库时自动回退到V0.13.0参考实现。
     """
 
     def __init__(

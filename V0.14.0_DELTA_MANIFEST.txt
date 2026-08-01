@@ -1,0 +1,26 @@
+V0.14.0 NativeCore增量包文件清单（基于V0.13.0 + Hotfix 1）
+==========================================================
+
+.gitignore
+V0.14.0_BENCHMARK_RESULTS.json
+V0.14.0_DELTA_MANIFEST.txt
+V0.14.0_RELEASE_NOTES.txt
+build_native.bat
+build_native.py
+engine/evaluator.py
+engine/native_core.py
+engine/proof_search.py
+engine/search.py
+engine/threats.py
+engine/vcf.py
+engine/version.py
+native/CMakeLists.txt
+native/gomoku_native.cpp
+native_benchmark.py
+tests/test_records.py
+tests/test_v090_integration.py
+tests/test_v0140_native_core.py
+
+共19个文件。native/bin中的动态库是当前系统的本机构建产物，不进入
+跨平台增量包；Windows安装后运行build_native.bat生成
+native/bin/gomoku_native.dll。
