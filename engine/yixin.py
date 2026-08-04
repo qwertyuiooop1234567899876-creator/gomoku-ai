@@ -351,11 +351,40 @@ def yixin_executable_sha256(
     return digest.hexdigest()
 
 
+def _yixin_display_coordinate(
+    display_column: str,
+    display_row: str,
+) -> str | None:
+    """Convert YiXin DETAIL/BESTLINE coordinates to record coordinates.
+
+    Numeric Gomocup responses use ``x,y``.  YiXin's human-readable bracket
+    coordinates use a board display rotated 90 degrees counter-clockwise from
+    our records, so those two protocol forms must not share a conversion.
+    """
+    display_column_index = ord(display_column.upper()) - ord("A")
+    display_row_index = int(display_row) - 1
+    if not (
+        0 <= display_column_index < 15
+        and 0 <= display_row_index < 15
+    ):
+        return None
+    record_row = display_column_index
+    record_column = 14 - display_row_index
+    return format_move(record_row, record_column)
+
+
 def _coordinate_tokens(line: str) -> list[str]:
-    return [
-        f"{column.upper()}{row}"
-        for column, row in _BRACKET_COORDINATE_PATTERN.findall(line)
-    ]
+    coordinates: list[str] = []
+    for display_column, display_row in (
+        _BRACKET_COORDINATE_PATTERN.findall(line)
+    ):
+        coordinate = _yixin_display_coordinate(
+            display_column,
+            display_row,
+        )
+        if coordinate is not None:
+            coordinates.append(coordinate)
+    return coordinates
 
 
 @dataclass(slots=True)

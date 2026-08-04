@@ -1172,6 +1172,7 @@ class ThreatAnalyzer:
         *,
         frontier_limit: int = 12,
         continuation_limit: int = 12,
+        scan_all_relevant: bool = False,
         stop_requested: StopPredicate | None = None,
     ) -> tuple[ThreatFrontier, ...]:
         """Find quiet or single-threat moves that create future threats.
@@ -1191,6 +1192,8 @@ class ThreatAnalyzer:
 
         relevant_moves = self._relevant_moves(board, ())
         if (
+            not scan_all_relevant
+            and
             self.frontier_scan_limit is not None
             and len(relevant_moves) > self.frontier_scan_limit
         ):
@@ -1210,25 +1213,30 @@ class ThreatAnalyzer:
             ]
 
         frontiers: list[ThreatFrontier] = []
+        base_profiles = self.analyze_profiles(
+            board,
+            relevant_moves,
+            player,
+        )
         for move in relevant_moves:
             if self._stopped(stop_requested):
                 break
 
-            base_profile = self.analyze_profile(board, move, player)
+            base_profile = base_profiles[move]
             base_kind = classify_threat(base_profile)
             if base_profile.forced_win:
                 continue
 
-            before_ranks: dict[Move, int] = {}
             line_candidates = self._line_candidates(board, move)
-            for continuation in line_candidates:
-                if self._stopped(stop_requested):
-                    break
-                before_ranks[continuation] = self.analyze_profile(
-                    board,
-                    continuation,
-                    player,
-                ).tactical_rank
+            before_profiles = self.analyze_profiles(
+                board,
+                line_candidates,
+                player,
+            )
+            before_ranks = {
+                continuation: profile.tactical_rank
+                for continuation, profile in before_profiles.items()
+            }
             if self._stopped(stop_requested):
                 break
 
@@ -1237,16 +1245,19 @@ class ThreatAnalyzer:
                 improved: list[
                     tuple[Move, ThreatKind, int]
                 ] = []
-                for continuation in line_candidates:
-                    if self._stopped(stop_requested):
-                        break
-                    if not board.is_empty(*continuation):
-                        continue
-                    profile = self.analyze_profile(
-                        board,
-                        continuation,
-                        player,
-                    )
+                playable_continuations = tuple(
+                    continuation
+                    for continuation in line_candidates
+                    if board.is_empty(*continuation)
+                )
+                continuation_profiles = self.analyze_profiles(
+                    board,
+                    playable_continuations,
+                    player,
+                )
+                for continuation, profile in (
+                    continuation_profiles.items()
+                ):
                     if (
                         profile.tactical_rank >= 40
                         and profile.tactical_rank

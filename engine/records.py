@@ -311,7 +311,10 @@ class GameRecorder:
                         )
                         lines.append(
                             "     "
-                            "final_proof=checked "
+                            "final_proof="
+                            f"{move.analysis.get('final_proof_state', 'unknown')} "
+                            f"complete:"
+                            f"{move.analysis.get('final_proof_completed', False)} "
                             f"selected:"
                             f"{move.analysis.get('final_proof_selected_coordinate', '?')} "
                             f"rejected:{rejected_text or '?'}"

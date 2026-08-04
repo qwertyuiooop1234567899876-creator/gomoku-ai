@@ -103,12 +103,36 @@ class SearchConfig:
     root_safety_min_seconds: float = 0.75
     root_safety_extension_bonus: int = 2
     root_safety_min_completed_depth: int = 3
+    root_sibling_probe_time_fraction: float = 0.20
+    root_sibling_probe_max_seconds: float = 12.0
+    root_sibling_probe_min_seconds: float = 2.0
+    root_dynamic_review_enabled: bool = True
+    root_dynamic_review_pvs_limit: int = 3
+    root_dynamic_review_candidate_limit: int = 8
+    root_dynamic_review_finalist_limit: int = 4
+    root_dynamic_review_time_fraction: float = 0.80
+    root_dynamic_review_max_seconds: float = 30.0
+    root_dynamic_review_min_seconds: float = 2.0
+    root_dynamic_review_min_completed_depth: int = 5
+    root_dynamic_review_structure_margin: int = 3_000
     root_vcf_safety_enabled: bool = True
     root_vcf_safety_max_attacker_moves: int = 5
     root_vcf_safety_time_fraction: float = 0.08
     root_vcf_safety_max_seconds: float = 3.0
     root_vcf_safety_min_seconds: float = 0.05
     root_vcf_safety_intercept_fraction: float = 0.25
+    root_quiet_prevention_limit: int = 3
+    root_quiet_prevention_min_rank: int = 80
+    root_quiet_sibling_prevention_limit: int = 1
+    root_quiet_sibling_min_continuations: int = 3
+    root_offensive_continuation_limit: int = 4
+    root_offensive_continuation_min_continuations: int = 4
+    root_quiet_prevention_min_depth: int = 4
+    root_frontier_truth_score_margin: int = 30_000
+    root_forcing_counterattack_min_depth: int = 4
+    root_survival_scan_limit: int = 16
+    root_survival_min_depth: int = 4
+    root_unverified_advantage_threshold: int = 900_000
 
     def __post_init__(self) -> None:
         if self.max_depth < 1:
@@ -249,6 +273,48 @@ class SearchConfig:
             raise ValueError(
                 "root_safety_min_completed_depth 不能小于 2。"
             )
+        if not 0 < self.root_sibling_probe_time_fraction < 0.5:
+            raise ValueError(
+                "root_sibling_probe_time_fraction 必须在 0～0.5 之间。"
+            )
+        if self.root_sibling_probe_max_seconds <= 0:
+            raise ValueError(
+                "root_sibling_probe_max_seconds 必须大于 0。"
+            )
+        if self.root_sibling_probe_min_seconds <= 0:
+            raise ValueError(
+                "root_sibling_probe_min_seconds 必须大于 0。"
+            )
+        if (
+            self.root_sibling_probe_min_seconds
+            > self.root_sibling_probe_max_seconds
+        ):
+            raise ValueError(
+                "root_sibling_probe_min_seconds 不能大于最大值。"
+            )
+        if self.root_dynamic_review_pvs_limit < 1:
+            raise ValueError("root_dynamic_review_pvs_limit 必须大于 0。")
+        if self.root_dynamic_review_candidate_limit < 2:
+            raise ValueError("root_dynamic_review_candidate_limit 不能小于 2。")
+        if not 2 <= self.root_dynamic_review_finalist_limit <= (
+            self.root_dynamic_review_candidate_limit
+        ):
+            raise ValueError("root_dynamic_review_finalist_limit 范围无效。")
+        if not 0 < self.root_dynamic_review_time_fraction < 1:
+            raise ValueError("root_dynamic_review_time_fraction 必须在 0～1 之间。")
+        if self.root_dynamic_review_max_seconds <= 0:
+            raise ValueError("root_dynamic_review_max_seconds 必须大于 0。")
+        if self.root_dynamic_review_min_seconds <= 0:
+            raise ValueError("root_dynamic_review_min_seconds 必须大于 0。")
+        if (
+            self.root_dynamic_review_min_seconds
+            > self.root_dynamic_review_max_seconds
+        ):
+            raise ValueError("root_dynamic_review_min_seconds 不能大于最大值。")
+        if self.root_dynamic_review_min_completed_depth < 2:
+            raise ValueError("root_dynamic_review_min_completed_depth 不能小于 2。")
+        if self.root_dynamic_review_structure_margin < 0:
+            raise ValueError("root_dynamic_review_structure_margin 不能小于 0。")
         if self.root_vcf_safety_max_attacker_moves < 1:
             raise ValueError(
                 "root_vcf_safety_max_attacker_moves 必须大于 0。"
@@ -276,6 +342,46 @@ class SearchConfig:
         if not 0 < self.root_vcf_safety_intercept_fraction < 1:
             raise ValueError(
                 "root_vcf_safety_intercept_fraction 必须在 0～1 之间。"
+            )
+        if self.root_quiet_prevention_limit < 0:
+            raise ValueError("root_quiet_prevention_limit 不能小于 0。")
+        if self.root_quiet_prevention_min_rank < 1:
+            raise ValueError(
+                "root_quiet_prevention_min_rank 必须大于 0。"
+            )
+        if self.root_quiet_sibling_prevention_limit < 0:
+            raise ValueError(
+                "root_quiet_sibling_prevention_limit 不能小于 0。"
+            )
+        if self.root_quiet_sibling_min_continuations < 2:
+            raise ValueError(
+                "root_quiet_sibling_min_continuations 不能小于 2。"
+            )
+        if self.root_offensive_continuation_limit < 0:
+            raise ValueError("root_offensive_continuation_limit 不能小于 0。")
+        if self.root_offensive_continuation_min_continuations < 2:
+            raise ValueError(
+                "root_offensive_continuation_min_continuations 不能小于 2。"
+            )
+        if self.root_quiet_prevention_min_depth < 1:
+            raise ValueError(
+                "root_quiet_prevention_min_depth 必须大于 0。"
+            )
+        if self.root_frontier_truth_score_margin < 0:
+            raise ValueError(
+                "root_frontier_truth_score_margin 不能小于 0。"
+            )
+        if self.root_survival_scan_limit < 1:
+            raise ValueError("root_survival_scan_limit 必须大于 0。")
+        if self.root_survival_min_depth < 1:
+            raise ValueError("root_survival_min_depth 必须大于 0。")
+        if self.root_unverified_advantage_threshold < 1:
+            raise ValueError(
+                "root_unverified_advantage_threshold 必须大于 0。"
+            )
+        if self.root_forcing_counterattack_min_depth < 1:
+            raise ValueError(
+                "root_forcing_counterattack_min_depth 必须大于 0。"
             )
 
 
@@ -327,6 +433,7 @@ class IterativeSearchOutcome:
     search_completed: bool
     stop_reason: str
     root_candidates_expanded: bool
+    root_expansion_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -353,9 +460,13 @@ class RootSafetyProbeResult:
     nodes: int
     candidates: tuple[RootSafetyCandidateAnalysis, ...]
     leader_history: tuple[Move, ...] = ()
+    approved_move: Move | None = None
+    selection_basis: str = "equal_window"
 
     @property
     def best_move(self) -> Move | None:
+        if self.approved_move is not None:
+            return self.approved_move
         return self.candidates[0].move if self.candidates else None
 
     @property

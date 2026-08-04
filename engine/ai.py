@@ -96,12 +96,14 @@ class RootSafetyCandidateAnalysis:
     move: Move
     score: int
     principal_variation: tuple[Move, ...] = ()
+    frontier_balance: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "move": list(self.move),
             "coordinate": format_move(*self.move),
             "score": self.score,
+            "frontier_balance": self.frontier_balance,
             "principal_variation": [
                 {
                     "move": list(move),
@@ -109,6 +111,20 @@ class RootSafetyCandidateAnalysis:
                 }
                 for move in self.principal_variation
             ],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SearchPhaseTiming:
+    """Wall-clock time attributed to one top-level decision phase."""
+
+    phase: str
+    elapsed_seconds: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "phase": self.phase,
+            "elapsed_seconds": self.elapsed_seconds,
         }
 
 
@@ -192,6 +208,8 @@ class DecisionAnalysis:
     proof_tt_evictions: int = 0
     proof_tt_size: int = 0
     final_proof_checked: bool = False
+    final_proof_state: str = "not_checked"
+    final_proof_completed: bool = False
     final_proof_selected_move: Move | None = None
     final_proof_rejected_moves: tuple[Move, ...] = ()
     threat_candidate_batches: int = 0
@@ -224,6 +242,8 @@ class DecisionAnalysis:
         RootVCFCandidateAnalysis, ...
     ] = ()
     mate_scores_quarantined: bool = False
+    phase_timings: tuple[SearchPhaseTiming, ...] = ()
+    root_safety_selection_basis: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -318,6 +338,8 @@ class DecisionAnalysis:
             "proof_tt_evictions": self.proof_tt_evictions,
             "proof_tt_size": self.proof_tt_size,
             "final_proof_checked": self.final_proof_checked,
+            "final_proof_state": self.final_proof_state,
+            "final_proof_completed": self.final_proof_completed,
             "final_proof_selected_move": (
                 None
                 if self.final_proof_selected_move is None
@@ -398,6 +420,12 @@ class DecisionAnalysis:
                 for candidate in self.root_vcf_candidates
             ],
             "mate_scores_quarantined": self.mate_scores_quarantined,
+            "phase_timings": [
+                timing.to_dict() for timing in self.phase_timings
+            ],
+            "root_safety_selection_basis": (
+                self.root_safety_selection_basis
+            ),
         }
 
 

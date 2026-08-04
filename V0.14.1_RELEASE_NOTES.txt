@@ -1,0 +1,57 @@
+Gomoku AI V0.14.1 Root Candidate Completeness
+================================================
+
+定位
+----
+V0.14.1 是基于 V0.14.0 NativeCore Hotfix 1 的棋力修复版。
+它不迁移完整 PVS，也不放宽严格 Proof 的三态语义和最终8秒审计预算。
+
+修复内容
+--------
+1. 对手威胁前沿模式下，深度不少于4时保留己方冲四反击点。
+   这类着法能用被迫应手争取节奏，不能在 PVS 前被静态截断。
+2. 对全体相关合法点扫描安静威胁前沿，保留最强的预防性占点。
+   扫描使用批量 ThreatProfile；NativeCore 可用时走原生批处理。
+3. 所有补回点仍受固定 root_candidate_limit 约束，最终选择仍交给 PVS、
+   Proof 与根策略，不把候选证据冒充必胜或安全证明。
+4. 初始 Proof 与最终 Proof 审计共用 proof_max_seconds 总上限。
+   60秒配置下由原来的“初始最多15秒 + 最终最多8秒”改为
+   “初始最多7秒 + 最终最多8秒”，避免 UNKNOWN 重复吞掉两个时间片。
+5. 修正 YiXin CVC 复盘的完成层评价对齐：最终返回着与完成层首着不同时，
+   仍可使用完成层局面分数比较前后局面；未对齐的 Mate 带必须在下一局面
+   同方向保持，瞬时 ±10000 波动不进入败着与损失统计。
+
+实战回归
+--------
+- 对弈 YiXin：黑第19手前，F6 已进入根候选；原败着 H5 可被正式复盘为
+  从 +227 跌入白方 +10000，损失 9773。
+- SearchAI 自对弈：黑第31手前，H4 已进入根候选；原败着 M5 可被正式
+  复盘为从 +95 跌入白方 +10000，损失 9905。
+- 两个局面均包含180度旋转镜像测试，禁止在引擎中硬编码坐标。
+- 深度2～3不启用长威胁补偿，避免冲四候选造成浅层地平线回退。
+
+验证结果
+--------
+- NativeCore 模式：Ran 235 tests / OK
+- 纯 Python 回退：Ran 235 tests / OK (skipped=5 NativeCore-only)
+- black15_L10：Python 3.929s，Native 0.689s，5.70x，proven_win
+- black51_H4：Python 11.415s，Native 1.179s，9.68x，proven_win
+- 两处新增根候选准备耗时约 0.03s（本地 Linux 测试环境）
+
+安装
+----
+将增量 ZIP 放到现有 V0.14.0 项目根目录后覆盖解压。此次没有修改 C++，
+不需要重新编译 DLL，也不要运行 build_native.bat。
+
+PowerShell 验证：
+
+  python -c "from engine.native_core import native_core_status; print(native_core_status())"
+  python -m unittest tests.test_v0141_root_completeness tests.test_cvc_analysis -v
+  python -m unittest discover -v
+  python native_benchmark.py --repeat 3
+
+完整回归必须显示：
+
+  Ran 235 tests
+  OK
+

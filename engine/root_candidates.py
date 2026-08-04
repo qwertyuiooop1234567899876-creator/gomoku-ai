@@ -17,6 +17,7 @@ from engine.search_types import (
     MATE_SCORE,
     RootResult,
 )
+from engine.threats import ThreatFrontier, ThreatKind
 
 
 class CandidateSource(str, Enum):
@@ -25,6 +26,7 @@ class CandidateSource(str, Enum):
     ACTIVE_COUNTERATTACK = "active_counterattack"
     MANDATORY_DEFENSE = "mandatory_defense"
     THREAT_FRONTIER = "threat_frontier"
+    OFFENSIVE_CONTINUATION = "offensive_continuation"
     VCF_INTERCEPT = "vcf_intercept"
     ROOT_EXPANSION = "root_expansion"
 
@@ -107,6 +109,22 @@ def active_counterattack_moves(
     ]
 
 
+def forcing_counterattack_moves(
+    profiles: dict[Move, ThreatProfile],
+) -> list[Move]:
+    """Keep tempo-gaining fours during opponent-frontier defense.
+
+    A single four is not itself a forced win, but it obliges an immediate
+    reply.  Dropping it before PVS can remove the only move that both gains a
+    tempo and breaks a longer opponent threat chain.
+    """
+    return [
+        move
+        for move, profile in profiles.items()
+        if not profile.forced_win and profile.four_directions >= 1
+    ]
+
+
 def merge_unique(*groups: Iterable[Move]) -> list[Move]:
     return list(
         dict.fromkeys(
@@ -161,16 +179,136 @@ def frontier_defense_moves(
     ordinary_moves: Iterable[Move],
     counterattack_moves: Iterable[Move],
     limit: int,
+    forcing_counterattack_moves: Iterable[Move] = (),
+    prevention_moves: Iterable[Move] = (),
+    offensive_continuation_moves: Iterable[Move] = (),
 ) -> list[Move]:
     """Build a complete but capped frontier-defense root set."""
     frontier = tuple(frontier_moves)
     ordinary = tuple(ordinary_moves)
     counterattacks = tuple(counterattack_moves)
+    forcing_counterattacks = tuple(forcing_counterattack_moves)
+    prevention = tuple(prevention_moves)
+    offensive_continuations = tuple(offensive_continuation_moves)
     return merge_with_required(
-        ordered_groups=(frontier, ordinary, counterattacks),
-        required_groups=(frontier, counterattacks),
+        ordered_groups=(
+            frontier,
+            ordinary,
+            forcing_counterattacks,
+            prevention,
+            counterattacks,
+            offensive_continuations,
+        ),
+        required_groups=(
+            frontier,
+            forcing_counterattacks,
+            prevention,
+            counterattacks,
+        ),
         limit=limit,
     )
+
+
+def quiet_frontier_sibling_prevention_moves(
+    *,
+    frontiers: Iterable[ThreatFrontier],
+    anchor_moves: Iterable[Move],
+    strong_rank: int,
+    minimum_continuations: int,
+    limit: int,
+) -> list[Move]:
+    """Keep bounded quiet alternatives linked to a strong root anchor.
+
+    A lower-rank quiet gain can still matter when it fans out into several
+    continuations and shares one of those continuation nodes with a stronger
+    gain point that is already an active root move.  This is candidate-only
+    evidence: it never upgrades the sibling to a proof result.
+    """
+    if limit <= 0:
+        return []
+
+    ordered_frontiers = tuple(frontiers)
+    by_gain = {
+        frontier.gain_move: frontier
+        for frontier in ordered_frontiers
+    }
+    anchors = [
+        frontier
+        for move in anchor_moves
+        if (frontier := by_gain.get(move)) is not None
+        and frontier.continuation_ranks
+        and max(frontier.continuation_ranks) >= strong_rank
+    ]
+    if not anchors:
+        return []
+
+    anchor_continuations = [
+        set(frontier.continuations) for frontier in anchors
+    ]
+    anchor_gains = {frontier.gain_move for frontier in anchors}
+    candidates: list[tuple[int, int, int, int, Move]] = []
+    for order, frontier in enumerate(ordered_frontiers):
+        if (
+            frontier.gain_move in anchor_gains
+            or frontier.kind is not ThreatKind.QUIET
+            or len(frontier.continuations) < minimum_continuations
+            or not frontier.continuation_ranks
+            or max(frontier.continuation_ranks) >= strong_rank
+        ):
+            continue
+        continuation_set = set(frontier.continuations)
+        overlap = sum(
+            len(continuation_set & anchor_set)
+            for anchor_set in anchor_continuations
+        )
+        if overlap <= 0:
+            continue
+        candidates.append(
+            (
+                overlap,
+                len(frontier.continuations),
+                max(frontier.continuation_ranks),
+                -order,
+                frontier.gain_move,
+            )
+        )
+
+    candidates.sort(reverse=True)
+    return [item[-1] for item in candidates[:limit]]
+
+
+def offensive_continuation_bridges(
+    *,
+    own_frontiers: Iterable[ThreatFrontier],
+    opponent_frontiers: Iterable[ThreatFrontier],
+    strong_rank: int,
+    minimum_continuations: int,
+) -> list[Move]:
+    """Return quiet gain points shared by attack and defense networks.
+
+    A bridge fans out into several own continuations while occupying one of
+    the continuation points of an opponent high-rank frontier.  It is only a
+    candidate-completeness hint and never a proof result.
+    """
+
+    opponent_continuations = {
+        continuation
+        for frontier in opponent_frontiers
+        if (
+            frontier.continuation_ranks
+            and max(frontier.continuation_ranks) >= strong_rank
+        )
+        for continuation in frontier.continuations
+    }
+    return [
+        frontier.gain_move
+        for frontier in own_frontiers
+        if (
+            frontier.kind is ThreatKind.QUIET
+            and len(frontier.continuations) >= minimum_continuations
+            and frontier.gain_move in opponent_continuations
+        )
+    ]
 
 
 def with_sources(

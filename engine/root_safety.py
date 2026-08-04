@@ -485,12 +485,21 @@ def apply_probe(
     probe: RootSafetyProbeResult,
 ) -> RootResult:
     """Use only a repeated probe leader; preserve original PVS scores."""
+    structurally_approved = (
+        probe.trigger == "dynamic_remaining_review"
+        and probe.selection_basis == "frontier_balance"
+        and probe.approved_move is not None
+    )
     if (
-        not probe.rank_stable
-        or probe.completed_depth < config.root_safety_min_completed_depth
-        or probe.best_move is None
-        or probe.best_move == result.move
+        not structurally_approved
+        and (
+            not probe.rank_stable
+            or probe.completed_depth
+            < config.root_safety_min_completed_depth
+        )
     ):
+        return result
+    if probe.best_move is None or probe.best_move == result.move:
         return result
 
     root_scores = dict(result.ranked_moves)

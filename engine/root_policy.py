@@ -12,13 +12,13 @@ from collections.abc import Callable, Sequence
 from engine.ai import Move, ProofCandidateAnalysis
 from engine.proof_search import ProofState
 from engine.search_types import (
-    HEURISTIC_SCORE_LIMIT,
     MATE_SCORE,
     RootResult,
     SearchConfig,
 )
 
 HeuristicScore = Callable[[Move], int]
+PRESERVE_ORDER_HEURISTIC_MARGIN = 2_000
 
 
 def is_mate_like_score(score: int) -> bool:
@@ -43,8 +43,18 @@ def quarantine_unproven_scores(
     proof_states: dict[Move, str],
     heuristic_score: HeuristicScore,
     preserve_order: bool = False,
+    preserved_order: Sequence[Move] | None = None,
+    preserve_order_margin: int = PRESERVE_ORDER_HEURISTIC_MARGIN,
 ) -> tuple[RootResult, bool]:
-    """Move selective PVS mate values onto one bounded comparison scale."""
+    """Move selective PVS mate values onto one real heuristic scale.
+
+    ``preserve_order`` may retain the tactical frontier order only inside a
+    small ordinary-score margin.  ``preserved_order`` is the pre-search
+    threat-evidence order; the already searched ``ranked_moves`` order may be
+    contaminated by the very selective mate values being quarantined and is
+    therefore only a fallback.  An unproved mate must never keep numeric
+    dominance by being mapped to another oversized score band.
+    """
     variations = {
         move: pv
         for move, _, pv in result.ranked_variations
@@ -52,6 +62,10 @@ def quarantine_unproven_scores(
     original_priority = {
         move: len(result.ranked_moves) - index
         for index, (move, _) in enumerate(result.ranked_moves)
+    }
+    tactical_priority = {
+        move: len(preserved_order) - index
+        for index, move in enumerate(preserved_order or ())
     }
     quarantine_required = any(
         not has_strict_mate_evidence(
@@ -69,19 +83,13 @@ def quarantine_unproven_scores(
             score,
             proof_states.get(move),
         )
-        if not has_strict_evidence:
-            if preserve_order:
-                distance = MATE_SCORE - abs(score)
-                score = (
-                    HEURISTIC_SCORE_LIMIT - distance
-                    if score > 0
-                    else -HEURISTIC_SCORE_LIMIT + distance
-                )
-            else:
-                score = heuristic_score(move)
-        elif not preserve_order and not is_mate_like_score(score):
+        if not (
+            has_strict_evidence and is_mate_like_score(score)
+        ):
             # Once one move contaminated the result, compare every
-            # non-terminal move on the same bounded scale.
+            # non-terminal move on the same bounded scale.  This applies in
+            # frontier-preserving mode too; only equal heuristic scores fall
+            # back to the original PVS order below.
             score = heuristic_score(move)
         revised.append(
             (
@@ -98,6 +106,23 @@ def quarantine_unproven_scores(
         ),
         reverse=True,
     )
+    if preserve_order and len(revised) > 1:
+        best_heuristic = revised[0][1]
+        close = [
+            item
+            for item in revised
+            if best_heuristic - item[1]
+            <= preserve_order_margin
+        ]
+        distant = [item for item in revised if item not in close]
+        close.sort(
+            key=lambda item: (
+                tactical_priority.get(item[0], 0),
+                original_priority.get(item[0], 0),
+            ),
+            reverse=True,
+        )
+        revised = [*close, *distant]
     best_move, best_score, best_pv = revised[0]
     return (
         RootResult(
@@ -118,8 +143,17 @@ def apply_proof_tiebreak(
     config: SearchConfig,
     result: RootResult,
     proof_candidates: Sequence[ProofCandidateAnalysis],
+    *,
+    preserve_order: bool = False,
 ) -> RootResult:
-    """Apply strict safety first, then bounded risk near the PVS best."""
+    """Apply strict safety first, then bounded risk near the PVS best.
+
+    In frontier-preserving mode ``result`` has already been corrected back to
+    the pre-search threat-evidence order after false mate quarantine.  Equal
+    UNKNOWN risks must not silently undo that correction by sorting on the
+    same shallow static scores that caused the horizon inversion.  Strict
+    proof and a material risk difference remain authoritative.
+    """
     root_scores = dict(result.ranked_moves)
     available = [
         candidate
@@ -148,12 +182,18 @@ def apply_proof_tiebreak(
         root_scores[candidate.move]
         for candidate in eligible
     )
+    pvs_margin = config.proof_risk_pvs_margin
+    if preserve_order:
+        pvs_margin = max(
+            pvs_margin,
+            config.root_frontier_truth_score_margin,
+        )
     pvs_band = [
         candidate
         for candidate in eligible
         if (
             best_pvs_score - root_scores[candidate.move]
-            <= config.proof_risk_pvs_margin
+            <= pvs_margin
         )
     ]
 
@@ -183,10 +223,23 @@ def apply_proof_tiebreak(
                 if candidate.threat_risk == lowest_risk
             ]
 
-    chosen = max(
-        pvs_band,
-        key=lambda candidate: root_scores[candidate.move],
-    )
+    if preserve_order:
+        result_priority = {
+            move: index
+            for index, (move, _score) in enumerate(result.ranked_moves)
+        }
+        chosen = min(
+            pvs_band,
+            key=lambda candidate: result_priority.get(
+                candidate.move,
+                len(result_priority),
+            ),
+        )
+    else:
+        chosen = max(
+            pvs_band,
+            key=lambda candidate: root_scores[candidate.move],
+        )
     if chosen.move == result.move:
         return result
 
