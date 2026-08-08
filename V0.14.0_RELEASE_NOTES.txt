@@ -1,0 +1,98 @@
+Gomoku AI V0.14.0 NativeCore Phase 1
+====================================
+
+定位
+----
+
+V0.14.0不是把约一万行Python整体推倒重写，而是在冻结V0.13.0
+正确性规则的前提下，把高频搜索内核迁移到无第三方依赖的C++17
+动态库。Python继续负责UI、对局管理、YiXin通信、PVS/Proof调度、
+日志和测试；C++负责本阶段已经确认的热点。
+
+原生化范围
+----------
+
+1. 全盘一步胜点批量扫描。
+2. 四方向局部威胁画像，包括五连、活四、冲四、活三和胜点集合。
+3. AND节点全体防守着的“立即反击支撑”批量筛选。
+4. VCF胜利证书搜索。
+5. Windows/Linux/macOS共用的稳定C ABI，由ctypes加载，不绑定具体
+   CPython小版本。
+
+正确性边界
+----------
+
+1. Proof仍保留PROVEN_WIN、PROVEN_LOSS、UNKNOWN三态。
+2. 超时和节点预算耗尽仍返回UNKNOWN。
+3. C++返回的VCF主线必须由Python逐手重放，确认每个强制封堵和最终
+   五连/双胜点后才可进入Proof。
+4. 原生VCF的选择性未命中没有证明含义，自动回到Python参考搜索，
+   且不会把同一逻辑树重复计入Proof节点预算。
+5. 根VCF安全扫描继续使用V0.13.0的Python候选顺序，黑87仍准确保留
+   J2、C8、O9、O10、C11五个直接VCF存活点。
+6. 未编译动态库时自动使用Python参考实现；可设置
+   GOMOKU_NATIVE_DISABLE=1强制回退，用于对照和诊断。
+
+实战瓶颈结果
+------------
+
+同一Linux验证机，repeat=3中位数：
+
+  black15_L10  Python 4.008s -> Native 0.824s，4.87x
+  black51_H4   Python 11.299s -> Native 1.830s，6.17x
+
+两局均在8秒最终Proof预算内返回严格PROVEN_WIN：
+
+  黑15 L10：J7 -> H7 -> J9 -> L9 -> J10
+  黑51 H4：主线前缀 J3 -> K2 -> J5 -> J1 -> L5 -> I2
+
+固定SearchAI基准（repeat=3）：
+
+  counterattack_j9      J9   0.099s
+  g9_multi_threat       G9   0.091s
+  h11_defense_vct      H11   0.451s
+  i4_proof_risk         J5   2.068s
+
+旧V0.13.0结果分别约为0.563s、0.468s、2.143s、2.509s；四个选着
+全部不变。
+
+测试
+----
+
+  NativeCore启用：231 tests，OK
+  强制Python回退：231 tests，OK（5个Native专用测试正常skip）
+
+新增原生测试覆盖：
+
+1. 80组随机局面中，C++一步胜点、威胁画像和反击支撑与Python参考
+   实现逐项一致。
+2. 原生VCF证书合法性与非法证书拒绝。
+3. 黑15 L10和黑51 H4在8秒最终审计预算内完成。
+4. 所有Proof搜索后棋盘、历史、empty_count和Zobrist Hash完全恢复。
+
+Windows构建
+-----------
+
+在项目根目录运行：
+
+  build_native.bat
+
+脚本会优先使用当前PATH中的MSVC cl；普通终端中找不到cl时，会通过
+Visual Studio Installer的vswhere自动定位vcvars64.bat；也支持PATH中
+的MinGW-w64 g++。编译成功后自动运行NativeCore专项测试。
+
+也可在PowerShell中运行：
+
+  python build_native.py --clean
+  python -m unittest discover -v
+  python native_benchmark.py --repeat 3
+
+如果提示未找到C++编译器，需要安装“Visual Studio Build Tools”中的
+“使用C++的桌面开发”组件，或安装MinGW-w64并把g++加入PATH。
+
+后续路线
+--------
+
+本版已经解决当前8秒Proof瓶颈，但还不是完整C++引擎。下一阶段应在
+双跑一致性测试保护下，继续迁移精确防守分类、Proof AND/OR递归状态、
+置换表和PVS；不在这一版顺带修改UI、评价权重或候选策略。

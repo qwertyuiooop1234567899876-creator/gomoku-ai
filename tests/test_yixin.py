@@ -36,7 +36,7 @@ def play():
         if candidate not in position
     )
     position[move] = 1
-    coordinate = f"[{chr(ord('A') + move[0])},{move[1] + 1}]"
+    coordinate = f"[{chr(ord('A') + move[1])},{15 - move[0]}]"
     print(
         "MESSAGE DETAIL DEPTH:12-26 VAL:141 "
         "TIME:1250MS NODE:3M " + coordinate,
@@ -47,7 +47,7 @@ def play():
         flush=True,
     )
     print(
-        "MESSAGE Bestline: " + coordinate + " [G,8]",
+        "MESSAGE Bestline: " + coordinate + " [H,9]",
         flush=True,
     )
     print(f"{move[0]},{move[1]}", flush=True)
@@ -138,13 +138,13 @@ class TestYixinReportParser(unittest.TestCase):
         report = YixinSearchReport()
         report.consume(
             "MESSAGE DETAIL DEPTH:13-26 VAL:-115 "
-            "TIME:6352MS NODE:5M [G,9]"
+            "TIME:6352MS NODE:5M [I,9]"
         )
         report.consume(
             "MESSAGE Speed: 802 | Evaluation: -115"
         )
         report.consume(
-            "MESSAGE Bestline: [G,9] [H,10] [I,11]"
+            "MESSAGE Bestline: [I,9] [J,8] [K,7]"
         )
 
         self.assertEqual(13, report.depth)
@@ -154,6 +154,58 @@ class TestYixinReportParser(unittest.TestCase):
         self.assertEqual(5_000_000, report.nodes)
         self.assertEqual(802, report.speed)
         self.assertEqual(["G9", "H10", "I11"], report.bestline)
+
+    def test_display_coordinates_align_with_numeric_protocol_move(
+        self,
+    ) -> None:
+        report = YixinSearchReport(move=(8, 7), evaluation=10_000)
+        report.consume("MESSAGE REALTIME BEST 7,8")
+        report.consume("MESSAGE Bestline: [I,8] [G,7]")
+
+        self.assertEqual("H9", report.coordinate)
+        self.assertEqual("H9", report.realtime_coordinate)
+        self.assertEqual(["H9", "I7"], report.bestline)
+        self.assertEqual("H9", report.completed_best_coordinate)
+        self.assertTrue(report.evaluation_aligned_with_move)
+
+        analysis = report.to_analysis_dict(
+            player=WHITE,
+            requested_seconds=10.0,
+        )
+        self.assertEqual("H9", analysis["returned_coordinate"])
+        self.assertEqual(
+            "H9",
+            analysis["completed_best_coordinate"],
+        )
+        self.assertEqual("H9", analysis["evaluation_coordinate"])
+        self.assertTrue(
+            analysis["evaluation_aligned_with_returned_move"]
+        )
+        self.assertEqual(
+            "H9",
+            analysis["top_candidates"][0]["coordinate"],
+        )
+
+    def test_returned_move_can_differ_from_completed_bestline(
+        self,
+    ) -> None:
+        report = YixinSearchReport(move=(8, 7), evaluation=120)
+        report.consume("MESSAGE Bestline: [H,7] [G,7]")
+
+        self.assertEqual("H9", report.coordinate)
+        self.assertEqual("I8", report.completed_best_coordinate)
+        self.assertFalse(report.evaluation_aligned_with_move)
+
+    def test_known_review_coordinates_use_yixin_rotation(self) -> None:
+        report = YixinSearchReport()
+        report.consume(
+            "MESSAGE Bestline: [I,8] [G,8] [K,13] [O,1]"
+        )
+
+        self.assertEqual(
+            ["H9", "H7", "C11", "O15"],
+            report.bestline,
+        )
 
     def test_white_perspective_is_normalized(self) -> None:
         report = YixinSearchReport(

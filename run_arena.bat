@@ -1,19 +1,19 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku AI Arena V0.12.0
+title Gomoku AI Arena V0.14.9
 
 echo ========================================
-echo        Gomoku AI Arena V0.12.0
+echo        Gomoku AI Arena V0.14.9
 echo ========================================
 echo.
 
 if not exist "arena.py" goto no_arena
 
-where python >nul 2>nul
+python -c "import sys" >nul 2>nul
 if %errorlevel%==0 goto use_python
 
-where py >nul 2>nul
+py -3 -c "import sys" >nul 2>nul
 if %errorlevel%==0 goto use_py
 
 goto no_python

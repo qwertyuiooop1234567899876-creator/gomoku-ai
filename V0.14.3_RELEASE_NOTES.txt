@@ -1,0 +1,65 @@
+Gomoku AI V0.14.3 PVS Exact Throughput
+=======================================
+
+定位
+----
+V0.14.3 是普通 PVS 的严格等价加速版。目标是在不改变候选、评分、搜索树、
+剪枝规则、Proof 标准和时间预算的前提下，把实战普通搜索从约 100～130 NPS
+提升到 200 NPS 以上。
+
+改动
+----
+1. 叶子延伸的一步胜扫描改为调用 V0.14.0 已存在的 NativeCore 批量接口。
+   原实现对约 200 个合法点逐个执行 Python 判定；新实现一次传入完整有序
+   候选列表，原生结果保持相同顺序。调用前后都检查硬截止时间。
+2. 强制进攻候选的威胁画像从逐点 ctypes 调用改为既有批量画像接口；
+   ThreatAnalyzer 的同局面缓存、统计和 Python 回退语义保持不变。
+3. 快速排序分使用“局面 Zobrist 哈希＋落点＋行棋方”作单次思考缓存。
+   计算式改用与旧浮点中心距离严格等价的整数表达式，不改变任何排序分。
+4. 新增四项准确性回归：旧排序式全点等价、缓存局面隔离、批量胜点顺序与
+   棋盘恢复、H11 固定搜索树完整快照。
+
+准确性边界
+----------
+- 不改变 root_candidate_limit / branch_candidate_limit。
+- 不减少搜索节点，不增加选择性剪枝。
+- 不修改 evaluate_board / evaluate_move 的分值与权重。
+- 不修改 PVS、aspiration、TT、threat extension 或 Proof 的决策规则。
+- NativeCore 不可用时自动使用原 Python 参考实现。
+
+固定树逐项对照
+--------------
+V0.14.2 与 V0.14.3 在 counterattack_j9、g9_multi_threat、
+h11_defense_vct 上以下字段完全一致：最终落子、完成深度、节点数、剪枝数、
+TT 命中/截断、延伸数、PVS/aspiration 重搜数、主变化、候选分数及防守探针。
+
+本机性能（Linux / Python 3.12.13 / NativeCore ABI 1，中位数，repeat=9）
+--------------------------------------------------------------------------
+case                    V0.14.2 NPS    V0.14.3 NPS    吞吐倍率
+counterattack_j9              360             722        2.01x
+g9_multi_threat               255             504        1.98x
+h11_defense_vct               131             310        2.37x
+i4_proof_risk                  15              15        1.03x
+
+i4_proof_risk 是 Proof 主导的控制样本。当前 NPS 定义为“普通 PVS 节点数 ÷
+整手总耗时”，分母包含 Proof 时间、分子不包含 Proof 节点，所以这一类回合
+不会因 PVS 加速而显示 200+。本版不修改统计口径来制造虚假的 NPS 提升。
+
+验证
+----
+  python -m unittest tests.test_v0143_pvs_nps -v
+  python -m unittest discover -v
+  python search_benchmark.py --repeat 9
+
+Windows 验收标准
+---------------
+1. NativeCore available=True，ABI 1。
+2. 完整回归 241/241 OK。
+3. h11_defense_vct 的落子 H11、深度3、节点48保持不变。
+4. 普通 PVS 样本中位 NPS 至少 200；若机器负载造成单次低于200，以9次
+   中位数为准。
+
+安装
+----
+在 V0.14.2 项目根目录覆盖解压。不需要运行 build_native.bat，也不需要重新
+编译 DLL。

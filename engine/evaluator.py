@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from engine.board import BLACK, DIRECTIONS, EMPTY, WHITE, Board
+from engine.native_core import native_core
 
 Move = tuple[int, int]
 Direction = tuple[int, int]
@@ -371,7 +372,7 @@ def _line_creates_open_three(line: list[int], player: int) -> bool:
     return False
 
 
-def _analyze_hypothetical_move(
+def _analyze_hypothetical_move_python(
     board: Board,
     row: int,
     column: int,
@@ -423,6 +424,42 @@ def _analyze_hypothetical_move(
     )
 
 
+def _analyze_hypothetical_move(
+    board: Board,
+    row: int,
+    column: int,
+    player: int,
+) -> ThreatProfile:
+    """Use the native local-line kernel when available.
+
+    The Python implementation remains the executable reference and is used
+    automatically when the shared library has not been built.
+    """
+    try:
+        native = native_core.analyze_move(
+            board,
+            row,
+            column,
+            player,
+        )
+    except RuntimeError:
+        native = None
+    if native is not None:
+        return ThreatProfile(
+            immediate_win=native.immediate_win,
+            open_four_directions=native.open_four_directions,
+            four_directions=native.four_directions,
+            open_three_directions=native.open_three_directions,
+            winning_moves=native.winning_moves,
+        )
+    return _analyze_hypothetical_move_python(
+        board,
+        row,
+        column,
+        player,
+    )
+
+
 def analyze_move_threats(
     board: Board,
     row: int,
@@ -443,7 +480,7 @@ def analyze_move_threats(
     )
 
 
-def find_winning_moves(
+def _find_winning_moves_python(
     board: Board,
     player: int,
     candidates: Sequence[Move] | None = None,
@@ -457,6 +494,25 @@ def find_winning_moves(
             winning_moves.append((row, column))
 
     return winning_moves
+
+
+def find_winning_moves(
+    board: Board,
+    player: int,
+    candidates: Sequence[Move] | None = None,
+) -> list[Move]:
+    """Return one-ply wins through the native batch kernel when available."""
+    try:
+        native = native_core.find_winning_moves(
+            board,
+            player,
+            candidates,
+        )
+    except RuntimeError:
+        native = None
+    if native is not None:
+        return native
+    return _find_winning_moves_python(board, player, candidates)
 
 
 def is_winning_move(

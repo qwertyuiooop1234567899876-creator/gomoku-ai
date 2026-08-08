@@ -1,0 +1,40 @@
+Gomoku AI V0.14.0 NativeCore Hotfix 1
+=====================================
+
+Purpose
+-------
+Fix the Windows full-suite timing regression where
+test_black_fifty_one_h4_finishes_inside_final_audit_budget could return
+UNKNOWN even though the same NativeCore proof passed in the focused build
+verification.
+
+Changes
+-------
+1. Copy the 15x15 board into the ctypes ABI buffer as one contiguous byte
+   block instead of converting 225 Python integers individually per call.
+2. Precompute continuation blocking sets once per defense classification.
+3. When NativeCore exhausts its selective VCF witness search without a line,
+   continue the conservative AND/OR proof directly instead of repeating the
+   same unsuccessful bounded witness scan in Python.
+
+Proof safety
+------------
+- NativeCore remains a witness accelerator, not a proof authority.
+- Every returned native VCF certificate is still replayed by Python.
+- A native miss is never treated as safety or a proven loss.
+- Invalid native certificates still fall through to the Python reference VCF.
+- Without NativeCore, the unchanged pure-Python VCF path remains available.
+- The 8-second final-audit budget and 20,000-node limit are unchanged.
+
+Validation
+----------
+- NativeCore: 231 tests, OK
+- Pure Python fallback: 231 tests, OK (5 NativeCore tests skipped)
+- H4 NativeCore: 20 consecutive PROVEN_WIN runs
+- H4 median: 1.205 seconds (previous package: 1.880 seconds)
+- H4 proof nodes: 2,374 (previous package: 2,679)
+
+Install
+-------
+Expand this delta over an existing V0.14.0 project. No C++ rebuild is needed
+because this hotfix changes only Python files.

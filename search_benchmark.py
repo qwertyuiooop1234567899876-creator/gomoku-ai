@@ -34,6 +34,7 @@ class BenchmarkRun:
     nps: int
     proof_nodes: int
     vcf_nodes: int
+    root_vcf_nodes: int
     defense_vct_nodes: int
     stop_reason: str | None
 
@@ -148,6 +149,7 @@ def run_once(case: BenchmarkCase) -> BenchmarkRun:
         nps=analysis.nps,
         proof_nodes=analysis.proof_nodes,
         vcf_nodes=analysis.vcf_nodes,
+        root_vcf_nodes=analysis.root_vcf_nodes,
         defense_vct_nodes=analysis.defense_vct_nodes,
         stop_reason=analysis.stop_reason,
     )

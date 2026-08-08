@@ -4,6 +4,15 @@ __pycache__/
 .pytest_cache/
 .vscode/
 records/
+dist/
+
+# Keep the released NativeCore runtime artifacts in the unified source tree.
+# Other files generated under native/bin remain local build output.
+native/bin/*
+!native/bin/gomoku_native.dll
+!native/bin/gomoku_native.exp
+!native/bin/gomoku_native.lib
+!native/bin/gomoku_native.obj
 
 # Local search preferences
 search_settings.json

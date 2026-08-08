@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku CVC YiXin Analysis V0.12.0
+title Gomoku CVC YiXin Analysis V0.14.9
 
 echo ========================================
 echo         CVC YiXin Analysis
@@ -16,10 +16,10 @@ if not defined RECORD_PATH set /p "RECORD_PATH=Drag a CVC JSON here or enter its
 if not defined RECORD_PATH goto no_record
 if not exist "%RECORD_PATH%" goto bad_record
 
-where python >nul 2>nul
+python -c "import sys" >nul 2>nul
 if %errorlevel%==0 goto use_python
 
-where py >nul 2>nul
+py -3 -c "import sys" >nul 2>nul
 if %errorlevel%==0 goto use_py
 
 goto no_python

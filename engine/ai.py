@@ -66,6 +66,7 @@ class ProofCandidateAnalysis:
     cutoff_reason: str | None = None
     principal_variation: tuple[Move, ...] = ()
     threat_risk: int | None = None
+    phase: str = "initial"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +78,7 @@ class ProofCandidateAnalysis:
             "elapsed_seconds": self.elapsed_seconds,
             "cutoff_reason": self.cutoff_reason,
             "threat_risk": self.threat_risk,
+            "phase": self.phase,
             "principal_variation": [
                 {
                     "move": list(move),
@@ -94,12 +96,57 @@ class RootSafetyCandidateAnalysis:
     move: Move
     score: int
     principal_variation: tuple[Move, ...] = ()
+    frontier_balance: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "move": list(self.move),
             "coordinate": format_move(*self.move),
             "score": self.score,
+            "frontier_balance": self.frontier_balance,
+            "principal_variation": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.principal_variation
+            ],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SearchPhaseTiming:
+    """Wall-clock time attributed to one top-level decision phase."""
+
+    phase: str
+    elapsed_seconds: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "phase": self.phase,
+            "elapsed_seconds": self.elapsed_seconds,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RootVCFCandidateAnalysis:
+    """根候选落子后，对手有界 VCF 生存检查结果。"""
+
+    move: Move
+    status: str
+    completed: bool
+    nodes: int
+    elapsed_seconds: float
+    principal_variation: tuple[Move, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "move": list(self.move),
+            "coordinate": format_move(*self.move),
+            "status": self.status,
+            "completed": self.completed,
+            "nodes": self.nodes,
+            "elapsed_seconds": self.elapsed_seconds,
             "principal_variation": [
                 {
                     "move": list(move),
@@ -160,6 +207,11 @@ class DecisionAnalysis:
     proof_tt_skipped_stores: int = 0
     proof_tt_evictions: int = 0
     proof_tt_size: int = 0
+    final_proof_checked: bool = False
+    final_proof_state: str = "not_checked"
+    final_proof_completed: bool = False
+    final_proof_selected_move: Move | None = None
+    final_proof_rejected_moves: tuple[Move, ...] = ()
     threat_candidate_batches: int = 0
     threat_exact_descriptions: int = 0
     threat_frontier_batches: int = 0
@@ -180,6 +232,18 @@ class DecisionAnalysis:
     root_safety_candidates: tuple[
         RootSafetyCandidateAnalysis, ...
     ] = ()
+    root_vcf_checked: bool = False
+    root_vcf_complete: bool = False
+    root_vcf_nodes: int = 0
+    root_vcf_exhaustive_rescue_scanned: bool = False
+    root_vcf_rescue_candidates_checked: int = 0
+    root_vcf_baseline_line: tuple[Move, ...] = ()
+    root_vcf_candidates: tuple[
+        RootVCFCandidateAnalysis, ...
+    ] = ()
+    mate_scores_quarantined: bool = False
+    phase_timings: tuple[SearchPhaseTiming, ...] = ()
+    root_safety_selection_basis: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -273,6 +337,26 @@ class DecisionAnalysis:
             "proof_tt_skipped_stores": self.proof_tt_skipped_stores,
             "proof_tt_evictions": self.proof_tt_evictions,
             "proof_tt_size": self.proof_tt_size,
+            "final_proof_checked": self.final_proof_checked,
+            "final_proof_state": self.final_proof_state,
+            "final_proof_completed": self.final_proof_completed,
+            "final_proof_selected_move": (
+                None
+                if self.final_proof_selected_move is None
+                else list(self.final_proof_selected_move)
+            ),
+            "final_proof_selected_coordinate": (
+                None
+                if self.final_proof_selected_move is None
+                else format_move(*self.final_proof_selected_move)
+            ),
+            "final_proof_rejected_moves": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.final_proof_rejected_moves
+            ],
             "threat_candidate_batches": self.threat_candidate_batches,
             "threat_exact_descriptions": (
                 self.threat_exact_descriptions
@@ -315,6 +399,33 @@ class DecisionAnalysis:
                 candidate.to_dict()
                 for candidate in self.root_safety_candidates
             ],
+            "root_vcf_checked": self.root_vcf_checked,
+            "root_vcf_complete": self.root_vcf_complete,
+            "root_vcf_nodes": self.root_vcf_nodes,
+            "root_vcf_exhaustive_rescue_scanned": (
+                self.root_vcf_exhaustive_rescue_scanned
+            ),
+            "root_vcf_rescue_candidates_checked": (
+                self.root_vcf_rescue_candidates_checked
+            ),
+            "root_vcf_baseline_line": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.root_vcf_baseline_line
+            ],
+            "root_vcf_candidates": [
+                candidate.to_dict()
+                for candidate in self.root_vcf_candidates
+            ],
+            "mate_scores_quarantined": self.mate_scores_quarantined,
+            "phase_timings": [
+                timing.to_dict() for timing in self.phase_timings
+            ],
+            "root_safety_selection_basis": (
+                self.root_safety_selection_basis
+            ),
         }
 
 
