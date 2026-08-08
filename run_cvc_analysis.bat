@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku CVC YiXin Analysis V0.14.9
+title Gomoku CVC YiXin Analysis V0.15.0
 
 echo ========================================
 echo         CVC YiXin Analysis

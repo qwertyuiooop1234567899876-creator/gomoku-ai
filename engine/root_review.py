@@ -191,6 +191,27 @@ def finalists(
         for index, (move, _score) in enumerate(result.ranked_moves)
     }
     selected = [result.move]
+    # Source diversity must not crowd out the strongest searched challenger.
+    # ``ranked_moves`` may deliberately preserve tactical-source order after
+    # false-mate quarantine, so choose this one reservation by the bounded
+    # numeric score rather than by tuple position.
+    score_challengers = [
+        (move, score)
+        for move, score in result.ranked_moves
+        if move in pool and move != result.move
+    ]
+    if score_challengers:
+        selected.append(
+            max(
+                score_challengers,
+                key=lambda item: (
+                    item[1],
+                    -root_rank.get(item[0], len(root_rank)),
+                ),
+            )[0]
+        )
+        if len(selected) >= config.root_dynamic_review_finalist_limit:
+            return selected
     groups = [
         *((preferred_moves,) if preferred_moves else ()),
         *preferred_groups,
@@ -260,6 +281,18 @@ def approve_move(
         structure_scores.get(structural, -10**18)
         - structure_scores.get(probe_leader, -10**18)
     )
+    if (
+        probe.rank_stable
+        and probe.completed_depth >= 4
+        and probe.candidates[0].score >= HEURISTIC_SCORE_LIMIT
+        and probe.pvs_gap <= config.root_safety_score_margin
+        and unknown_moves
+        and all(move in unknown_moves for move in searched)
+    ):
+        # A repeated positive clamp from the isolated full-window probe is
+        # useful move-order evidence even though it is not strict mate proof.
+        # Keep the state UNKNOWN; only approve the heuristic root choice.
+        return probe_leader, "equal_window"
     if probe.completed_depth >= 3:
         top_score = probe.candidates[0].score
         tied = [
@@ -276,9 +309,28 @@ def approve_move(
                 structure_scores.get(tied_structural, -10**18)
                 - structure_scores.get(result.move, -10**18)
             )
-            if tied_gap >= config.root_dynamic_review_structure_margin:
+            if (
+                probe.pvs_gap <= config.root_safety_score_margin
+                and tied_gap
+                >= min(
+                    config.root_dynamic_review_structure_margin,
+                    config.root_safety_micro_margin,
+                )
+            ):
                 return tied_structural, "frontier_balance"
             return result.move, "pvs_fallback"
+    if (
+        probe.rank_stable
+        and probe.completed_depth >= 4
+        and abs(probe.candidates[0].score) < HEURISTIC_SCORE_LIMIT
+        and has_horizon_boundary(probe.candidates)
+        and probe.pvs_gap > config.root_safety_micro_margin
+    ):
+        # A stable, ordinary-score leader is useful escape evidence when its
+        # sibling alone remains pinned to the selective clamp.  Near-exact
+        # original PVS ties are excluded so the topology fallback can still
+        # arbitrate symmetric horizon cases.
+        return probe_leader, "equal_window"
     if (
         probe.rank_stable
         and probe.completed_depth
@@ -290,6 +342,7 @@ def approve_move(
         return probe_leader, "equal_window"
     if (
         probe.completed_depth >= 4
+        and probe.pvs_gap <= config.root_safety_score_margin
         and structural_gap
         >= config.root_dynamic_review_structure_margin
     ):

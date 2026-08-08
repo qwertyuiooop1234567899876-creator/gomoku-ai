@@ -60,7 +60,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.14.9 搜索 AI。
+    V0.15.0 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -667,13 +667,22 @@ class SearchAI(ScoringAI):
             self._search_phase_deadline = None
             self._search_phase_timeout_hit = False
             reserve = self._final_proof_reserve_seconds()
-            if completed_depth > 0 and self._root_safety_trigger(
-                best_result,
-                root_history,
-            ) is not None:
-                reserve = max(
-                    reserve,
-                    self._root_safety_budget_seconds(),
+            if completed_depth > 0 and (
+                self._root_mate_scores_quarantined
+                or self._root_safety_trigger(
+                    best_result,
+                    root_history,
+                )
+                is not None
+            ):
+                # Root review and final Proof are serial phases.  Taking only
+                # their maximum let the next iterative depth consume the
+                # entire review allowance and left exactly the Proof reserve.
+                reserve = root_policy.serial_verification_reserve(
+                    final_proof_seconds=reserve,
+                    root_review_seconds=(
+                        self._root_safety_budget_seconds()
+                    ),
                 )
             if reserve > 0 and self._time.hard_deadline is not None:
                 self._search_phase_deadline = (
@@ -887,7 +896,11 @@ class SearchAI(ScoringAI):
                 completed_depth=completed_depth,
                 root_history=root_history,
             )
-        elif not search_completed and completed_depth > 0:
+        elif (
+            not search_completed
+            and completed_depth > 0
+            and not self._root_mate_scores_quarantined
+        ):
             safety_probe = self._maybe_run_root_safety_probe(
                 board,
                 best_result,
@@ -921,6 +934,30 @@ class SearchAI(ScoringAI):
                 revised.move != best_result.move
             )
             best_result = revised
+        elif (
+            not search_completed
+            and completed_depth > 0
+            and self._root_mate_scores_quarantined
+        ):
+            # A quarantined selective root needs the source-aware equal-window
+            # review first.  Fall back to the older two-score probe only when
+            # that review could not start or finish inside its reserve.
+            safety_probe = self._maybe_run_root_safety_probe(
+                board,
+                best_result,
+                completed_depth=completed_depth,
+                root_history=root_history,
+            )
+            if safety_probe is not None:
+                self._root_safety_probe = safety_probe
+                revised = self._apply_root_safety_probe(
+                    best_result,
+                    safety_probe,
+                )
+                self._root_safety_applied = (
+                    revised.move != best_result.move
+                )
+                best_result = revised
 
         self._phase_timings["root_review"] = (
             self._phase_timings.get("root_review", 0.0)
@@ -2442,7 +2479,15 @@ class SearchAI(ScoringAI):
                 continue
             remaining = deadline - time.perf_counter()
             checks_left = max(1, len(pending) - index)
-            pair_budget = remaining / checks_left
+            fair_budget = remaining / checks_left
+            pair_budget = (
+                min(
+                    remaining,
+                    max(fair_budget, remaining * 0.65),
+                )
+                if index == 0 and checks_left > 1
+                else fair_budget
+            )
             if pair_budget < 0.5:
                 break
             pair_result = root_policy.promote_root_move(
@@ -2459,10 +2504,16 @@ class SearchAI(ScoringAI):
             )
             if latest is None:
                 continue
+            previous = current
             current = self._apply_root_safety_probe(
                 pair_result,
                 latest,
             ).move
+            if current != previous:
+                # The highest-priority completed comparison has already
+                # changed the leader.  Do not let a later, smaller time slice
+                # reverse it with weaker source-only evidence.
+                break
 
         if latest is None:
             return None

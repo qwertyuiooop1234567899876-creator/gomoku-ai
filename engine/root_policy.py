@@ -21,6 +21,15 @@ HeuristicScore = Callable[[Move], int]
 PRESERVE_ORDER_HEURISTIC_MARGIN = 2_000
 
 
+def serial_verification_reserve(
+    *,
+    final_proof_seconds: float,
+    root_review_seconds: float,
+) -> float:
+    """Return the reserve for two verification phases run in sequence."""
+    return max(0.0, final_proof_seconds) + max(0.0, root_review_seconds)
+
+
 def pending_proof_checks(
     *,
     candidate_limit: int,

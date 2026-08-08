@@ -185,6 +185,42 @@ class TestV0149RecordDriven(unittest.TestCase):
         self.assertEqual(preferred, move)
         self.assertEqual("frontier_shape", basis)
 
+    def test_stable_positive_boundary_can_select_without_becoming_proof(self) -> None:
+        original = parse_move("G7")
+        preferred = parse_move("E12")
+        result = RootResult(
+            original,
+            73_000,
+            (original,),
+            ((original, 73_000), (preferred, 82_000)),
+        )
+        probe = RootSafetyProbeResult(
+            trigger="dynamic_remaining_review",
+            pvs_gap=9_000,
+            main_rank_stable=True,
+            completed_depth=5,
+            nodes=100,
+            candidates=(
+                RootSafetyCandidateAnalysis(
+                    preferred,
+                    HEURISTIC_SCORE_LIMIT,
+                ),
+                RootSafetyCandidateAnalysis(original, 30_000),
+            ),
+            leader_history=(preferred, preferred, preferred),
+        )
+
+        move, basis = root_review.approve_move(
+            SearchConfig(),
+            result,
+            probe,
+            {original: 5_081, preferred: 3_483},
+            unknown_moves={original, preferred},
+        )
+
+        self.assertEqual(preferred, move)
+        self.assertEqual("equal_window", basis)
+
     def test_final_proof_divisor_uses_real_queue_not_empty_slots(self) -> None:
         self.assertEqual(
             2,

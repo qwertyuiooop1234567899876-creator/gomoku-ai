@@ -1,0 +1,47 @@
+Gomoku AI V0.15.0 Paired Root Review
+=====================================
+
+定位
+----
+V0.15.0 以 2026-08-08 的两盘 V0.14.9 真实对局为回归基线：
+
+- SearchAI(d=8,t=60s) 对 YiXin(t=10s)：黑方第 17 手 F11 对 E12。
+- SearchAI 自对弈：黑方第 41 手 K6 对 J11。
+
+YiXin 同根配对子局面复盘确认，两处均为可避免的首个直接败着。生产代码不包含
+棋谱坐标；坐标只保存在测试夹具中。
+
+核心修复
+--------
+1. 最强 PVS 竞争者保留槽
+   - 来源多样性决赛前，先保留一个真实数值分最高的 PVS 竞争者。
+   - 防止最低风险、双前沿、进攻延续等来源槽把 E12 一类已搜索强竞争者挤出。
+
+2. 限制结构信号的改选权限
+   - frontier_balance 只能在原 PVS 差距不超过 root_safety_score_margin 时改选。
+   - 原 PVS 相差 58800 的 E8/F11 不再允许仅靠前沿计数覆盖主搜索证据。
+   - 近分且同为负向夹值时，允许达到 micro margin 的结构净增益作启发式仲裁。
+
+3. 正向夹值与负向地平线分离
+   - 隔离全窗口复核连续多层稳定、正向达到 +100000000 且原 PVS 近分时，可作为
+     启发式落子依据。
+   - 该信号不会升级 Proof；最终状态仍保持 UNKNOWN。
+
+4. 串行验证预算
+   - 根复核与最终 Proof 是串行阶段，保留时间由 max 改为求和。
+   - 选择性 Mate 已被隔离时，优先运行来源感知动态复核，再回退旧根安全探针。
+   - 第一优先竞争者获得 65% 的当前复核余量；一旦形成有效改选，不再被后续更小
+     时间片反向覆盖。
+
+真实局面验收
+------------
+- F11 -> E12：完成 depth 8，selection_basis=equal_window，final Proof=UNKNOWN。
+- K6 -> J11：完成 depth 7，root_review 从 0 秒恢复为非零，
+  selection_basis=frontier_balance，final Proof=UNKNOWN。
+- NativeCore ABI 保持 1，无需重新编译 DLL。
+
+建议命令
+--------
+  python -B -m unittest tests.test_v0150_paired_review -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 9

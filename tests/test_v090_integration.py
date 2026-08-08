@@ -695,7 +695,7 @@ class TestV090ScoreAndVersionSeparation(unittest.TestCase):
             )
 
     def test_public_entry_points_share_v090_version(self) -> None:
-        self.assertEqual("0.14.9", ENGINE_VERSION)
+        self.assertEqual("0.15.0", ENGINE_VERSION)
         self.assertEqual(ENGINE_VERSION, main.ENGINE_VERSION)
         self.assertEqual(ENGINE_VERSION, arena.ENGINE_VERSION)
 
