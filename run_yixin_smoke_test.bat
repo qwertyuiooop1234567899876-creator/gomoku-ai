@@ -1,14 +1,14 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title YiXin Protocol Smoke Test V0.12.1
+title YiXin Protocol Smoke Test V0.14.9
 
 if not exist "yixin_smoke_test.py" goto no_program
 if not exist "yixin\engine.exe" goto no_engine
 
-where python >nul 2>nul
+python -c "import sys" >nul 2>nul
 if %errorlevel%==0 set "PY_CMD=python"
-if not defined PY_CMD where py >nul 2>nul
+if not defined PY_CMD py -3 -c "import sys" >nul 2>nul
 if not defined PY_CMD if %errorlevel%==0 set "PY_CMD=py -3"
 if not defined PY_CMD goto no_python
 

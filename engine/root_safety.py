@@ -126,7 +126,14 @@ def apply_vcf_scan(
         )
     ]
     if survivors:
-        return survivors
+        # A scan result only covers the candidate set it actually inspected.
+        # Root expansion may add legal moves later; keep those moves UNKNOWN
+        # instead of silently treating the old survivor set as a whitelist.
+        return [
+            move
+            for move in candidates
+            if move in survivors or move not in statuses
+        ]
 
     unknown = [
         move
@@ -487,7 +494,10 @@ def apply_probe(
     """Use only a repeated probe leader; preserve original PVS scores."""
     structurally_approved = (
         probe.trigger == "dynamic_remaining_review"
-        and probe.selection_basis == "frontier_balance"
+        and probe.selection_basis in {
+            "frontier_balance",
+            "frontier_shape",
+        }
         and probe.approved_move is not None
     )
     if (

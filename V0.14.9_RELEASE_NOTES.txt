@@ -1,0 +1,57 @@
+Gomoku AI V0.14.9 Record-Driven Root Arbitration
+==================================================
+
+定位
+----
+V0.14.9 以 2026-08-03 SearchAI(d=8,t=60s) 对 YiXin(t=10s) 的真实棋谱为
+回归基线，修复第 9、13、15、17 手暴露的根候选成员资格、复核来源配额、
+选择性搜索边界与最终 Proof 预算问题。生产逻辑不硬编码棋谱坐标；坐标只存在
+于测试夹具中。
+
+统一项目
+--------
+- 以真实 V0.14.8 源码树为基线，并纳入 ABI 1 的 NativeCore DLL/LIB/OBJ/EXP。
+- native/bin 只跟踪发布所需产物，其余本地构建输出继续忽略。
+- 启动脚本改为从脚本目录运行，不再硬编码 D:\Projects\gomoku-ai，也不会把
+  无法执行的 WindowsApps Python 别名误判为可用解释器。
+
+核心修复
+--------
+1. 根候选成员资格与搜索历史分离
+   - TT、killer、history 仍可重排已经选中的根候选，但不再决定候选集合成员。
+   - 根扩展新增点在尚未接受 VCF 扫描时保持 UNKNOWN 可选，旧扫描结果不再被
+     当成新增集合的白名单。
+
+2. 来源感知的动态复核
+   - 生产链统一使用 review_pool/finalists。
+   - PVS、最低 UNKNOWN 风险、安静预防、进攻延续、主动威胁和双前沿桥接按来源
+     保留有界代表，避免重要候选在统一截断前被静默挤掉。
+
+3. 双前沿安静桥接
+   - 若同一个安静 gain 点同时扩展本方多路延续并占据对手前沿 gain，则作为
+     有界候选加入根集合。
+   - 该信号只影响候选完整性，不产生任何严格证明语义。
+
+4. 选择性边界仲裁
+   - 任一复核候选命中 +/-100000000 夹值时，稳定 leader 不再触发提前停止。
+   - 当两着 Proof 均为 UNKNOWN、原 PVS 近似打平且复核仍处于夹值边界时，使用
+     前沿拓扑键优先比较独立高等级 gain 点，再比较强制点与延续宽度。
+   - 真实第 17 手定点验证从 J8 改选 F12；selection_basis=frontier_shape，最终
+     Proof 仍明确为 UNKNOWN。
+
+5. 最终 Proof 预算
+   - 时间片除数使用实际待检队列长度与配置上限的较小值。
+   - 仅有两着时不再按四个静态槽位稀释预算；UNKNOWN 语义不变。
+
+回归与验收
+----------
+- 新增 tests/positions/v0149_record_20260803.json，固定第 9、13、15、17 手前局面。
+- 覆盖原局面与 180 度旋转、跨手 history 污染、未扫描扩展点、来源配额、边界
+  仲裁和真实 Proof 队列分配。
+- NativeCore ABI 保持 1，不需要重新编译 DLL。
+
+建议命令
+--------
+  python -B -m unittest tests.test_v0149_record_driven -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 9

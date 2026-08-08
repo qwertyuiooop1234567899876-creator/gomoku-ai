@@ -21,6 +21,23 @@ HeuristicScore = Callable[[Move], int]
 PRESERVE_ORDER_HEURISTIC_MARGIN = 2_000
 
 
+def pending_proof_checks(
+    *,
+    candidate_limit: int,
+    checks_completed: int,
+    queued_unseen: int,
+) -> int:
+    """Return the fair divisor for the current final-proof time slice.
+
+    Empty configured slots must not dilute the budget when only a smaller
+    number of real candidates remains.  Certificate interception points may
+    still consume any configured slots left after the current check.
+    """
+    configured_remaining = max(1, candidate_limit - checks_completed + 1)
+    scheduled_remaining = max(1, queued_unseen + 1)
+    return min(configured_remaining, scheduled_remaining)
+
+
 def is_mate_like_score(score: int) -> bool:
     return abs(score) >= MATE_SCORE - 10_000
 

@@ -1,0 +1,18 @@
+{
+  "format": "gomoku-record-regression-v1",
+  "source_record": "search-d8-t60-vs-yixin-t10-v0148-20260803-215133-784287.json",
+  "source_engine_version": "0.14.8",
+  "board_size": 15,
+  "moves": [
+    "H8", "G8", "G7", "I9", "F6", "H7", "F7", "E5",
+    "F8", "F9", "I6", "H6", "G9", "H10", "G5", "G11",
+    "J8", "F10", "E10", "D11", "F12", "E13", "G13", "H13",
+    "I13", "J13", "K13", "L13"
+  ],
+  "checkpoints": {
+    "9": {"played": "F8", "review": "G6"},
+    "13": {"played": "G9", "review": "E7"},
+    "15": {"played": "G5", "review": "E7"},
+    "17": {"played": "J8", "review": "F12"}
+  }
+}

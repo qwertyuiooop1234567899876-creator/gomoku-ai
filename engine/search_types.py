@@ -127,6 +127,11 @@ class SearchConfig:
     root_quiet_sibling_min_continuations: int = 3
     root_offensive_continuation_limit: int = 4
     root_offensive_continuation_min_continuations: int = 4
+    root_dual_frontier_bridge_limit: int = 1
+    root_dual_frontier_min_own_rank: int = 60
+    root_dual_frontier_min_opponent_rank: int = 40
+    root_dual_frontier_min_own_continuations: int = 4
+    root_dual_frontier_min_opponent_continuations: int = 2
     root_quiet_prevention_min_depth: int = 4
     root_frontier_truth_score_margin: int = 30_000
     root_forcing_counterattack_min_depth: int = 4
@@ -362,6 +367,22 @@ class SearchConfig:
         if self.root_offensive_continuation_min_continuations < 2:
             raise ValueError(
                 "root_offensive_continuation_min_continuations 不能小于 2。"
+            )
+        if self.root_dual_frontier_bridge_limit < 0:
+            raise ValueError("root_dual_frontier_bridge_limit 不能小于 0。")
+        if self.root_dual_frontier_min_own_rank < 1:
+            raise ValueError("root_dual_frontier_min_own_rank 必须大于 0。")
+        if self.root_dual_frontier_min_opponent_rank < 1:
+            raise ValueError(
+                "root_dual_frontier_min_opponent_rank 必须大于 0。"
+            )
+        if self.root_dual_frontier_min_own_continuations < 2:
+            raise ValueError(
+                "root_dual_frontier_min_own_continuations 不能小于 2。"
+            )
+        if self.root_dual_frontier_min_opponent_continuations < 2:
+            raise ValueError(
+                "root_dual_frontier_min_opponent_continuations 不能小于 2。"
             )
         if self.root_quiet_prevention_min_depth < 1:
             raise ValueError(

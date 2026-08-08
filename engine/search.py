@@ -60,7 +60,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.14.8 搜索 AI。
+    V0.14.9 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -171,8 +171,15 @@ class SearchAI(ScoringAI):
         self._root_sibling_prevention: tuple[Move, ...] = ()
         self._root_quiet_prevention: tuple[Move, ...] = ()
         self._root_offensive_continuations: tuple[Move, ...] = ()
+        self._root_dual_frontier_bridges: tuple[Move, ...] = ()
+        self._root_own_frontiers: tuple[ThreatFrontier, ...] = ()
         self._root_attack_priority: tuple[Move, ...] = ()
+        self._root_candidate_sources: dict[
+            Move,
+            frozenset[root_candidates.CandidateSource],
+        ] = {}
         self._root_frontier_balance: dict[Move, int] = {}
+        self._root_frontier_shape: dict[Move, tuple[int, int, int, int]] = {}
         self._defense_risk_override_applied = False
         self._quiet_frontier_extension_enabled = False
         self._root_heuristic_score_cache: dict[
@@ -459,8 +466,12 @@ class SearchAI(ScoringAI):
         self._root_sibling_prevention = ()
         self._root_quiet_prevention = ()
         self._root_offensive_continuations = ()
+        self._root_dual_frontier_bridges = ()
+        self._root_own_frontiers = ()
         self._root_attack_priority = ()
+        self._root_candidate_sources.clear()
         self._root_frontier_balance.clear()
+        self._root_frontier_shape.clear()
         self._defense_risk_override_applied = False
         self._quiet_frontier_extension_enabled = False
         self._root_heuristic_score_cache.clear()
@@ -936,6 +947,19 @@ class SearchAI(ScoringAI):
         preserve_frontier_order = False
         allow_near_loss_expansion = True
         defense_probe: DefenseProbeResult | None = None
+        source_groups: list[
+            tuple[
+                root_candidates.CandidateSource,
+                list[Move] | tuple[Move, ...],
+            ]
+        ] = []
+        ordinary_candidates: list[Move] = []
+        frontier_candidates: list[Move] = []
+        counterattack_truth_moves: list[Move] = []
+        forcing_counterattacks: list[Move] = []
+        prevention_moves: list[Move] = []
+        offensive_continuations: list[Move] = []
+        dual_frontier_bridges: list[Move] = []
 
         root_pool = self._root_profile_pool(board, legal_moves)
         own_profiles = self._profile_moves_timed(
@@ -1035,6 +1059,16 @@ class SearchAI(ScoringAI):
                 full_evaluation=True,
             )
             tactical_reason = "合并攻方强制点与对手必防点搜索"
+            source_groups = [
+                (
+                    root_candidates.CandidateSource.MANDATORY_DEFENSE,
+                    opponent_forcing_moves,
+                ),
+                (
+                    root_candidates.CandidateSource.OWN_FORCING,
+                    own_forcing_moves,
+                ),
+            ]
             if 2 <= len(opponent_forcing_moves) <= (
                 self.config.defense_vct_max_candidates
             ):
@@ -1069,6 +1103,12 @@ class SearchAI(ScoringAI):
                 full_evaluation=True,
             )
             tactical_reason = "搜索自身强制威胁的最佳变化"
+            source_groups = [
+                (
+                    root_candidates.CandidateSource.OWN_FORCING,
+                    own_forcing_moves,
+                )
+            ]
         elif (
             candidate_mode
             is root_candidates.RootCandidateMode.MANDATORY_DEFENSE
@@ -1082,6 +1122,12 @@ class SearchAI(ScoringAI):
                 tt_move=self._tt_best_move(board, self.player),
                 full_evaluation=True,
             )
+            source_groups = [
+                (
+                    root_candidates.CandidateSource.MANDATORY_DEFENSE,
+                    opponent_forcing_moves,
+                )
+            ]
             if 2 <= len(search_candidates) <= (
                 self.config.defense_vct_max_candidates
             ):
@@ -1206,6 +1252,30 @@ class SearchAI(ScoringAI):
             self._root_offensive_continuations = tuple(
                 offensive_continuations
             )
+            dual_frontier_bridges = (
+                root_candidates.dual_frontier_gain_bridges(
+                    own_frontiers=self._root_own_frontiers,
+                    opponent_frontiers=opponent_pressure_frontiers,
+                    minimum_own_rank=(
+                        self.config.root_dual_frontier_min_own_rank
+                    ),
+                    minimum_opponent_rank=(
+                        self.config.root_dual_frontier_min_opponent_rank
+                    ),
+                    minimum_own_continuations=(
+                        self.config
+                        .root_dual_frontier_min_own_continuations
+                    ),
+                    minimum_opponent_continuations=(
+                        self.config
+                        .root_dual_frontier_min_opponent_continuations
+                    ),
+                    limit=self.config.root_dual_frontier_bridge_limit,
+                )
+            )
+            self._root_dual_frontier_bridges = tuple(
+                dual_frontier_bridges
+            )
             search_candidates = (
                 root_candidates.frontier_defense_moves(
                     frontier_moves=frontier_candidates,
@@ -1219,8 +1289,39 @@ class SearchAI(ScoringAI):
                     offensive_continuation_moves=(
                         offensive_continuations
                     ),
+                    dual_frontier_moves=dual_frontier_bridges,
                 )
             )
+            source_groups = [
+                (
+                    root_candidates.CandidateSource.THREAT_FRONTIER,
+                    frontier_candidates,
+                ),
+                (
+                    root_candidates.CandidateSource.ORDINARY,
+                    ordinary_candidates,
+                ),
+                (
+                    root_candidates.CandidateSource.ACTIVE_COUNTERATTACK,
+                    counterattacks,
+                ),
+                (
+                    root_candidates.CandidateSource.OWN_FORCING,
+                    forcing_counterattacks,
+                ),
+                (
+                    root_candidates.CandidateSource.QUIET_PREVENTION,
+                    prevention_moves,
+                ),
+                (
+                    root_candidates.CandidateSource.OFFENSIVE_CONTINUATION,
+                    offensive_continuations,
+                ),
+                (
+                    root_candidates.CandidateSource.DUAL_FRONTIER_BRIDGE,
+                    dual_frontier_bridges,
+                ),
+            ]
             preserve_frontier_order = True
             tactical_reason = "多重威胁启动点候选的 PVS 防守"
             if ordinary_candidates:
@@ -1253,7 +1354,30 @@ class SearchAI(ScoringAI):
                 ply=0,
             )
             tactical_reason = "PVS 搜索最佳变化"
+            source_groups = [
+                (
+                    root_candidates.CandidateSource.ORDINARY,
+                    search_candidates,
+                )
+            ]
 
+        provenance = root_candidates.with_sources(source_groups)
+        sources_by_move = {
+            entry.move: entry.sources for entry in provenance
+        }
+        entries = tuple(
+            root_candidates.CandidateEntry(
+                move,
+                sources_by_move.get(
+                    move,
+                    frozenset({root_candidates.CandidateSource.ORDINARY}),
+                ),
+            )
+            for move in search_candidates
+        )
+        self._root_candidate_sources = {
+            entry.move: entry.sources for entry in entries
+        }
         return root_candidates.RootCandidatePlan(
             moves=search_candidates,
             own_profiles=own_profiles,
@@ -1263,6 +1387,7 @@ class SearchAI(ScoringAI):
             allow_near_loss_expansion=allow_near_loss_expansion,
             defense_probe=defense_probe,
             reason=tactical_reason,
+            entries=entries,
         )
 
     def _run_root_opponent_vcf_scan(
@@ -1642,9 +1767,18 @@ class SearchAI(ScoringAI):
 
             checks += 1
             now = time.perf_counter()
-            checks_left = max(
-                1,
-                self.config.proof_final_candidate_limit - checks + 1,
+            queued_unseen = len(
+                {
+                    candidate
+                    for candidate in queue
+                    if candidate not in seen
+                    and board.is_empty(*candidate)
+                }
+            )
+            checks_left = root_policy.pending_proof_checks(
+                candidate_limit=self.config.proof_final_candidate_limit,
+                checks_completed=checks,
+                queued_unseen=queued_unseen,
             )
             candidate_deadline = min(
                 deadline,
@@ -1863,6 +1997,11 @@ class SearchAI(ScoringAI):
         The remaining legal root candidates must not disappear from later
         arbitration merely because they were outside that slice.
         """
+        for move in candidates:
+            self._root_candidate_sources.setdefault(
+                move,
+                frozenset({root_candidates.CandidateSource.ROOT_EXPANSION}),
+            )
         if not self._proof_candidates:
             return
         known = {
@@ -2248,133 +2387,82 @@ class SearchAI(ScoringAI):
             self._root_quiet_prevention,
             self._root_sibling_prevention,
         )
-        active = next(
-            (
-                move
-                for move in self._root_attack_priority
-                if move in legal and move != result.move
-            ),
-            None,
-        )
-        quiet = self._best_structural_challenger(
-            board,
-            quiet_moves,
-            legal=legal,
-            excluded={result.move},
-            deadline=deadline,
-        )
-        structural = (
-            [
-                move
-                for move in dict.fromkeys((active, quiet))
-                if move is not None
-            ]
-            if active is not None
-            else []
-        )
-        if (
-            budget < 10.0
-            and quiet is not None
-            and active is not None
-        ):
-            try:
-                active_delta = (
-                    self._frontier_balance_after_move(board, active)
-                    - self._frontier_balance_after_move(
-                        board,
-                        result.move,
-                    )
-                )
-            except SearchTimeout:
-                active_delta = 0
-            if (
-                active_delta
-                < self.config.root_dynamic_review_structure_margin
-            ):
-                structural = [quiet]
-        pvs_all = [
-            move
-            for move, _score in result.ranked_moves
-            if move in legal and move != result.move
-        ][: self.config.root_dynamic_review_pvs_limit]
         lowest_risk = root_review.lowest_unknown_risk_move(
             self._proof_candidates,
             legal,
         )
-        pvs_all = [
-            move
-            for move in root_candidates.merge_unique(
-                pvs_all,
-                (() if lowest_risk is None else (lowest_risk,)),
-                self._root_offensive_continuations,
-            )
-            if move not in structural
-        ]
-        review_slots = max(
-            0,
-            self.config.root_dynamic_review_finalist_limit
-            - len(structural),
+        offensive_moves = root_candidates.merge_unique(
+            self._root_offensive_continuations,
+            self._root_dual_frontier_bridges,
         )
-        pvs_all = pvs_all[:review_slots]
-        pvs = pvs_all
-        if pvs_all and time.perf_counter() < deadline - 0.5:
-            try:
-                leader_balance = self._frontier_balance_after_move(
-                    board,
-                    result.move,
-                )
-                material = [
-                    move
-                    for move in pvs_all
-                    if (
-                        self._frontier_balance_after_move(board, move)
-                        - leader_balance
-                        >= self.config.root_dynamic_review_structure_margin
-                    )
-                ]
-                if material:
-                    pvs = material[:1]
-            except SearchTimeout:
-                pvs = pvs_all
-        if not structural and not pvs:
+        pool = root_review.review_pool(
+            self.config,
+            result,
+            self._proof_candidates,
+            quiet_moves=quiet_moves,
+            offensive_moves=offensive_moves,
+        )
+        if len(pool) < 2:
             return None
+
+        structure_scores: dict[Move, int] = {}
+        for move in pool:
+            if time.perf_counter() >= deadline - 0.5:
+                break
+            try:
+                structure_scores[move] = self._frontier_balance_after_move(
+                    board,
+                    move,
+                )
+            except SearchTimeout:
+                break
+
+        preferred_groups = [
+            (() if lowest_risk is None else (lowest_risk,)),
+            self._root_dual_frontier_bridges,
+            self._root_offensive_continuations,
+            quiet_moves,
+            self._root_attack_priority,
+        ]
+        finalists = root_review.finalists(
+            self.config,
+            result,
+            pool,
+            structure_scores,
+            preferred_groups=preferred_groups,
+        )
+        pending = [move for move in finalists if move != result.move]
+        if not pending:
+            return None
+
         current = result.move
         latest: RootSafetyProbeResult | None = None
-        changed_by_structure = False
-        stages = [structural, pvs]
-        for stage_index, stage in enumerate(stages):
-            if stage_index == 1 and changed_by_structure:
+        for index, challenger in enumerate(pending):
+            if challenger == current:
+                continue
+            remaining = deadline - time.perf_counter()
+            checks_left = max(1, len(pending) - index)
+            pair_budget = remaining / checks_left
+            if pair_budget < 0.5:
                 break
-            pending = [move for move in stage if move != current]
-            for index, challenger in enumerate(pending):
-                remaining = deadline - time.perf_counter()
-                checks_left = max(1, len(pending) - index)
-                pair_budget = remaining / checks_left
-                if pair_budget < 0.5:
-                    break
-                pair_result = root_policy.promote_root_move(
-                    result,
-                    current,
-                    score=root_scores[current],
-                )
-                latest = self._run_dynamic_pair_review(
-                    board,
-                    pair_result,
-                    challenger,
-                    completed_depth=completed_depth,
-                    budget_seconds=pair_budget,
-                )
-                if latest is None:
-                    continue
-                revised = self._apply_root_safety_probe(
-                    pair_result,
-                    latest,
-                )
-                previous = current
-                current = revised.move
-                if stage_index == 1 and current != previous:
-                    break
-            changed_by_structure = current != result.move
+            pair_result = root_policy.promote_root_move(
+                result,
+                current,
+                score=root_scores[current],
+            )
+            latest = self._run_dynamic_pair_review(
+                board,
+                pair_result,
+                challenger,
+                completed_depth=completed_depth,
+                budget_seconds=pair_budget,
+            )
+            if latest is None:
+                continue
+            current = self._apply_root_safety_probe(
+                pair_result,
+                latest,
+            ).move
 
         if latest is None:
             return None
@@ -2416,6 +2504,15 @@ class SearchAI(ScoringAI):
             move: self._frontier_balance_after_move(board, move)
             for move in pair
         }
+        structure_keys = {
+            move: self._frontier_shape_after_move(board, move)
+            for move in pair
+        }
+        unknown_moves = {
+            candidate.move
+            for candidate in self._proof_candidates
+            if candidate.state == ProofState.UNKNOWN.value
+        }
         root_scores = dict(result.ranked_moves)
         probe = self._run_root_safety_probe(
             board,
@@ -2448,6 +2545,8 @@ class SearchAI(ScoringAI):
             result,
             probe,
             structure_scores,
+            structure_keys=structure_keys,
+            unknown_moves=unknown_moves,
         )
         return replace(
             probe,
@@ -2667,6 +2766,7 @@ class SearchAI(ScoringAI):
                 and len(
                     set(leader_history[-stable_leader_count:])
                 ) == 1
+                and not root_review.has_horizon_boundary(ranked)
             ):
                 break
 
@@ -3662,6 +3762,7 @@ class SearchAI(ScoringAI):
             scan_all_relevant=True,
             stop_requested=self._time.hard_expired,
         )
+        self._root_own_frontiers = tuple(own_frontiers)
         self._root_attack_priority = tuple(
             frontier.gain_move
             for frontier in own_frontiers
@@ -3692,9 +3793,27 @@ class SearchAI(ScoringAI):
         board: Board,
         move: Move,
     ) -> int:
-        cached = self._root_frontier_balance.get(move)
-        if cached is not None:
-            return cached
+        self._frontier_metrics_after_move(board, move)
+        return self._root_frontier_balance[move]
+
+    def _frontier_shape_after_move(
+        self,
+        board: Board,
+        move: Move,
+    ) -> tuple[int, int, int, int]:
+        self._frontier_metrics_after_move(board, move)
+        return self._root_frontier_shape[move]
+
+    def _frontier_metrics_after_move(
+        self,
+        board: Board,
+        move: Move,
+    ) -> None:
+        if (
+            move in self._root_frontier_balance
+            and move in self._root_frontier_shape
+        ):
+            return
 
         board.place(*move, self.player)
         try:
@@ -3720,7 +3839,10 @@ class SearchAI(ScoringAI):
             frontiers[1],
         )
         self._root_frontier_balance[move] = score
-        return score
+        self._root_frontier_shape[move] = root_review.frontier_shape_key(
+            frontiers[0],
+            frontiers[1],
+        )
 
     def _root_profile_pool(
         self,
@@ -3917,16 +4039,32 @@ class SearchAI(ScoringAI):
         )
         raw_candidates = sorted(
             raw_candidates,
-            key=lambda move: (
-                move == tt_move,
-                self._killer_priority(move, ply),
-                self._history_score(player, move),
-                self._quick_order_score(board, move, player),
+            key=(
+                (
+                    lambda move: self._quick_order_score(
+                        board,
+                        move,
+                        player,
+                    )
+                )
+                if at_root
+                else (
+                    lambda move: (
+                        move == tt_move,
+                        self._killer_priority(move, ply),
+                        self._history_score(player, move),
+                        self._quick_order_score(board, move, player),
+                    )
+                )
             ),
             reverse=True,
         )[:preselection_limit]
 
-        if tt_move is not None and board.is_empty(*tt_move):
+        if (
+            not at_root
+            and tt_move is not None
+            and board.is_empty(*tt_move)
+        ):
             if tt_move not in raw_candidates:
                 raw_candidates.append(tt_move)
 
@@ -3937,8 +4075,22 @@ class SearchAI(ScoringAI):
             ply=ply,
             tt_move=tt_move,
             full_evaluation=(at_root or ply <= 1),
+            use_search_heuristics=not at_root,
         )
-        return ranked[:desired_limit]
+        selected = ranked[:desired_limit]
+        if not at_root:
+            return selected
+        # Cross-move TT/history/killer state may reorder the bounded root set,
+        # but it must never decide which structurally ranked moves are members.
+        return self._order_specific_moves(
+            board,
+            selected,
+            player,
+            ply=ply,
+            tt_move=tt_move,
+            full_evaluation=True,
+            use_search_heuristics=True,
+        )
 
     def _raw_candidates(
         self,
@@ -4034,6 +4186,7 @@ class SearchAI(ScoringAI):
         ply: int,
         tt_move: Move | None,
         full_evaluation: bool,
+        use_search_heuristics: bool = True,
     ) -> list[Move]:
         center = (board.size - 1) / 2
         scored: list[tuple[Move, int, int, int, int]] = []
@@ -4041,8 +4194,16 @@ class SearchAI(ScoringAI):
 
         for move in dict.fromkeys(moves):
             self._check_timeout()
-            killer_priority = self._killer_priority(move, ply)
-            history_score = self._history_score(player, move)
+            killer_priority = (
+                self._killer_priority(move, ply)
+                if use_search_heuristics
+                else 0
+            )
+            history_score = (
+                self._history_score(player, move)
+                if use_search_heuristics
+                else 0
+            )
             if killer_priority:
                 self._counters.killer_hits += 1
             if history_score:
@@ -4080,7 +4241,7 @@ class SearchAI(ScoringAI):
 
         scored.sort(
             key=lambda item: (
-                item[0] == tt_move,
+                use_search_heuristics and item[0] == tt_move,
                 item[2],
                 item[3],
                 item[1],

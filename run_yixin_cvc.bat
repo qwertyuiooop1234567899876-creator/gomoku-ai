@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku SearchAI vs YiXin V0.12.1
+title Gomoku SearchAI vs YiXin V0.14.9
 
 echo ========================================
 echo      SearchAI vs YiXin Auto CVC
@@ -11,10 +11,10 @@ echo.
 if not exist "arena.py" goto no_program
 if not exist "yixin\engine.exe" goto no_engine
 
-where python >nul 2>nul
+python -c "import sys" >nul 2>nul
 if %errorlevel%==0 goto use_python
 
-where py >nul 2>nul
+py -3 -c "import sys" >nul 2>nul
 if %errorlevel%==0 goto use_py
 
 goto no_python

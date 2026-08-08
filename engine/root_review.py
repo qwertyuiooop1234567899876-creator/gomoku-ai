@@ -45,6 +45,38 @@ def frontier_balance_score(
     )
 
 
+def frontier_shape_key(
+    own_frontiers: Sequence[ThreatFrontier],
+    opponent_frontiers: Sequence[ThreatFrontier],
+) -> tuple[int, int, int, int]:
+    """Return a lexicographic topology key for unresolved horizon ties.
+
+    The ordinary scalar balance intentionally treats one extra high-rank gain
+    and one extra continuation as equivalent.  When an equal-window probe is
+    saturated at the selective horizon, prefer broader independent gain points
+    before continuation count.  The key remains heuristic and has no proof
+    semantics.
+    """
+    own = _frontier_summary(own_frontiers)
+    opponent = _frontier_summary(opponent_frontiers)
+    return (
+        own[0] - opponent[0],
+        own[2] - opponent[2],
+        own[1] - opponent[1],
+        own[3] - opponent[3],
+    )
+
+
+def has_horizon_boundary(
+    candidates: Sequence[object],
+) -> bool:
+    """Return whether any candidate score is a selective clamp boundary."""
+    return any(
+        abs(int(getattr(candidate, "score"))) >= HEURISTIC_SCORE_LIMIT
+        for candidate in candidates
+    )
+
+
 def _frontier_summary(
     frontiers: Sequence[ThreatFrontier],
 ) -> tuple[int, int, int, int]:
@@ -150,31 +182,47 @@ def finalists(
     structure_scores: Mapping[Move, int],
     *,
     preferred_moves: Sequence[Move] = (),
+    preferred_groups: Sequence[Sequence[Move]] = (),
 ) -> list[Move]:
-    """Keep the PVS leader plus the strongest structural challengers."""
+    """Keep the PVS leader plus bounded, source-diverse challengers."""
+
+    root_rank = {
+        move: index
+        for index, (move, _score) in enumerate(result.ranked_moves)
+    }
+    selected = [result.move]
+    groups = [
+        *((preferred_moves,) if preferred_moves else ()),
+        *preferred_groups,
+    ]
+    for group in groups:
+        eligible = [
+            move
+            for move in dict.fromkeys(group)
+            if move in pool and move not in selected
+        ]
+        if not eligible:
+            continue
+        selected.append(
+            min(
+                eligible,
+                key=lambda move: (
+                    root_rank.get(move, len(root_rank)),
+                    -structure_scores.get(move, -10**18),
+                    pool.index(move),
+                ),
+            )
+        )
+        if len(selected) >= config.root_dynamic_review_finalist_limit:
+            return selected
 
     pvs = [
-        result.move,
-        *(
-            move
-            for move, _score in result.ranked_moves
-            if move != result.move and move in pool
-        ),
+        move
+        for move, _score in result.ranked_moves
+        if move in pool and move not in selected
     ][: config.root_dynamic_review_pvs_limit]
-    preferred = sorted(
-        (
-            move
-            for move in preferred_moves
-            if move in pool and move not in pvs
-        ),
-        key=lambda move: (
-            structure_scores.get(move, -10**18),
-            -pool.index(move),
-        ),
-        reverse=True,
-    )
     challengers = sorted(
-        (move for move in pool if move != result.move),
+        (move for move in pool if move not in selected and move not in pvs),
         key=lambda move: (
             structure_scores.get(move, -10**18),
             -pool.index(move),
@@ -183,7 +231,7 @@ def finalists(
     )
     return list(
         dict.fromkeys(
-            (*pvs, *preferred, *challengers)
+            (*selected, *pvs, *challengers)
         )
     )[: config.root_dynamic_review_finalist_limit]
 
@@ -193,6 +241,9 @@ def approve_move(
     result: RootResult,
     probe: RootSafetyProbeResult,
     structure_scores: Mapping[Move, int],
+    *,
+    structure_keys: Mapping[Move, tuple[int, ...]] | None = None,
+    unknown_moves: set[Move] | None = None,
 ) -> tuple[Move, str]:
     """Choose the review recommendation without inventing proof evidence."""
 
@@ -232,7 +283,7 @@ def approve_move(
         probe.rank_stable
         and probe.completed_depth
         >= config.root_dynamic_review_min_completed_depth
-        and abs(probe.candidates[0].score) < HEURISTIC_SCORE_LIMIT
+        and not has_horizon_boundary(probe.candidates)
         and structural_gap
         < config.root_dynamic_review_structure_margin * 2
     ):
@@ -243,4 +294,19 @@ def approve_move(
         >= config.root_dynamic_review_structure_margin
     ):
         return structural, "frontier_balance"
+    if (
+        has_horizon_boundary(probe.candidates)
+        and structure_keys
+        and unknown_moves
+        and all(move in unknown_moves for move in searched)
+    ):
+        root_scores = dict(result.ranked_moves)
+        pvs_scores = [root_scores[move] for move in searched]
+        if max(pvs_scores) - min(pvs_scores) <= config.root_safety_micro_margin:
+            shaped = max(
+                searched,
+                key=lambda move: structure_keys.get(move, ()),
+            )
+            if shaped != result.move:
+                return shaped, "frontier_shape"
     return result.move, "pvs_fallback"

@@ -26,7 +26,9 @@ class CandidateSource(str, Enum):
     ACTIVE_COUNTERATTACK = "active_counterattack"
     MANDATORY_DEFENSE = "mandatory_defense"
     THREAT_FRONTIER = "threat_frontier"
+    QUIET_PREVENTION = "quiet_prevention"
     OFFENSIVE_CONTINUATION = "offensive_continuation"
+    DUAL_FRONTIER_BRIDGE = "dual_frontier_bridge"
     VCF_INTERCEPT = "vcf_intercept"
     ROOT_EXPANSION = "root_expansion"
 
@@ -57,6 +59,7 @@ class RootCandidatePlan:
     allow_near_loss_expansion: bool
     defense_probe: DefenseProbeResult | None
     reason: str
+    entries: tuple[CandidateEntry, ...] = ()
 
 
 def classify_mode(
@@ -182,6 +185,7 @@ def frontier_defense_moves(
     forcing_counterattack_moves: Iterable[Move] = (),
     prevention_moves: Iterable[Move] = (),
     offensive_continuation_moves: Iterable[Move] = (),
+    dual_frontier_moves: Iterable[Move] = (),
 ) -> list[Move]:
     """Build a complete but capped frontier-defense root set."""
     frontier = tuple(frontier_moves)
@@ -190,12 +194,14 @@ def frontier_defense_moves(
     forcing_counterattacks = tuple(forcing_counterattack_moves)
     prevention = tuple(prevention_moves)
     offensive_continuations = tuple(offensive_continuation_moves)
+    dual_frontiers = tuple(dual_frontier_moves)
     return merge_with_required(
         ordered_groups=(
             frontier,
             ordinary,
             forcing_counterattacks,
             prevention,
+            dual_frontiers,
             counterattacks,
             offensive_continuations,
         ),
@@ -203,6 +209,7 @@ def frontier_defense_moves(
             frontier,
             forcing_counterattacks,
             prevention,
+            dual_frontiers,
             counterattacks,
         ),
         limit=limit,
@@ -309,6 +316,63 @@ def offensive_continuation_bridges(
             and frontier.gain_move in opponent_continuations
         )
     ]
+
+
+def dual_frontier_gain_bridges(
+    *,
+    own_frontiers: Iterable[ThreatFrontier],
+    opponent_frontiers: Iterable[ThreatFrontier],
+    minimum_own_rank: int,
+    minimum_opponent_rank: int,
+    minimum_own_continuations: int,
+    minimum_opponent_continuations: int,
+    limit: int,
+) -> list[Move]:
+    """Return bounded quiet gain points shared by both threat networks.
+
+    A move can be strategically defensive even when neither side has a direct
+    three or four there.  If the same quiet gain expands several of our future
+    continuations while also occupying an opponent gain point, keep it as a
+    candidate-only counter-bridge.  This never upgrades the move to proof.
+    """
+    if limit <= 0:
+        return []
+
+    opponent_by_gain = {
+        frontier.gain_move: frontier
+        for frontier in opponent_frontiers
+        if (
+            frontier.kind is ThreatKind.QUIET
+            and len(frontier.continuations)
+            >= minimum_opponent_continuations
+            and max(frontier.continuation_ranks, default=0)
+            >= minimum_opponent_rank
+        )
+    }
+    ranked: list[tuple[int, int, int, int, Move]] = []
+    for order, frontier in enumerate(own_frontiers):
+        opponent = opponent_by_gain.get(frontier.gain_move)
+        if (
+            opponent is None
+            or frontier.kind is not ThreatKind.QUIET
+            or len(frontier.continuations) < minimum_own_continuations
+            or max(frontier.continuation_ranks, default=0)
+            < minimum_own_rank
+        ):
+            continue
+        ranked.append(
+            (
+                max(frontier.continuation_ranks, default=0)
+                + max(opponent.continuation_ranks, default=0),
+                len(frontier.continuations)
+                + len(opponent.continuations),
+                sum(frontier.continuation_ranks),
+                -order,
+                frontier.gain_move,
+            )
+        )
+    ranked.sort(reverse=True)
+    return [item[-1] for item in ranked[:limit]]
 
 
 def with_sources(
