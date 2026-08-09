@@ -36,10 +36,10 @@ goto run_analysis
 set "PYTHONUTF8=1"
 %PY_CMD% -X utf8 cvc_analysis.py "%RECORD_PATH%"
 set "EXIT_CODE=%ERRORLEVEL%"
-echo.
+if "%EXIT_CODE%"=="0" exit /b 0
 
-if not "%EXIT_CODE%"=="0" echo Analysis exited with error code %EXIT_CODE%.
-if "%EXIT_CODE%"=="0" echo Analysis finished normally.
+echo.
+echo Analysis exited with error code %EXIT_CODE%.
 echo.
 pause
 exit /b %EXIT_CODE%

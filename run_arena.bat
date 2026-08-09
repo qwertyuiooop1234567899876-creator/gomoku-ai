@@ -30,11 +30,10 @@ goto run_arena
 set "PYTHONUTF8=1"
 %PY_CMD% -X utf8 arena.py
 set "EXIT_CODE=%ERRORLEVEL%"
+if "%EXIT_CODE%"=="0" exit /b 0
+
 echo.
-
-if not "%EXIT_CODE%"=="0" echo Arena exited with error code %EXIT_CODE%.
-if "%EXIT_CODE%"=="0" echo Arena finished normally.
-
+echo Arena exited with error code %EXIT_CODE%.
 echo.
 pause
 exit /b %EXIT_CODE%

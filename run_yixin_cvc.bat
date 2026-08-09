@@ -31,10 +31,10 @@ goto run_game
 set "PYTHONUTF8=1"
 %PY_CMD% -X utf8 arena.py --black search --white yixin --black-depth 8 --black-time-limit 60 --white-time-limit 10 --watch --evaluation
 set "EXIT_CODE=%ERRORLEVEL%"
-echo.
+if "%EXIT_CODE%"=="0" exit /b 0
 
-if not "%EXIT_CODE%"=="0" echo CVC exited with error code %EXIT_CODE%.
-if "%EXIT_CODE%"=="0" echo CVC finished normally.
+echo.
+echo CVC exited with error code %EXIT_CODE%.
 echo.
 pause
 exit /b %EXIT_CODE%
