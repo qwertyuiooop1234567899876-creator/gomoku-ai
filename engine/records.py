@@ -197,6 +197,19 @@ class GameRecorder:
                 lines.append(
                     f"     reason={reason}; candidates={candidate_count}"
                 )
+                root_sources = move.analysis.get(
+                    "root_candidate_sources",
+                    [],
+                )
+                if root_sources:
+                    lines.append(
+                        "     root_sources="
+                        + " | ".join(
+                            f"{item.get('coordinate', '?')}:"
+                            f"{','.join(item.get('sources', []))}"
+                            for item in root_sources
+                        )
+                    )
 
                 if move.analysis.get("engine_name") == "yixin":
                     bestline = move.analysis.get("bestline", [])
@@ -259,6 +272,14 @@ class GameRecorder:
                         f"skipped:"
                         f"{move.analysis.get('proof_tt_skipped_stores', 0):,} "
                         f"size:{move.analysis.get('proof_tt_size', 0):,}; "
+                        f"proof_hint=hits:"
+                        f"{move.analysis.get('proof_hint_hits', 0):,}/"
+                        f"queries:"
+                        f"{move.analysis.get('proof_hint_queries', 0):,} "
+                        f"stores:"
+                        f"{move.analysis.get('proof_hint_stores', 0):,} "
+                        f"size:"
+                        f"{move.analysis.get('proof_hint_size', 0):,}; "
                         f"threat_cache=hits:{threat_cache_hits:,}/"
                         f"queries:{threat_cache_queries:,} "
                         f"stores:"

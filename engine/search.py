@@ -60,7 +60,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.15.1 搜索 AI。
+    V0.16.0 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -1592,8 +1592,10 @@ class SearchAI(ScoringAI):
             ):
                 return self._proof_root_result
 
-        probed = list(
-            candidates[: self.config.proof_root_candidate_limit]
+        probed = root_candidates.source_diverse_subset(
+            candidates,
+            self._root_candidate_sources,
+            limit=self.config.proof_root_candidate_limit,
         )
         risks: dict[Move, int] = {}
         for move in probed:
@@ -1666,6 +1668,10 @@ class SearchAI(ScoringAI):
             )
 
         self._proof_candidates = tuple(analyses)
+        self._register_unprobed_proof_candidates(
+            candidates,
+            cutoff_reason="initial_proof_unprobed",
+        )
         return self._proof_root_result
 
     def _proof_budget_seconds(self) -> float:
@@ -2039,6 +2045,18 @@ class SearchAI(ScoringAI):
                 move,
                 frozenset({root_candidates.CandidateSource.ROOT_EXPANSION}),
             )
+        self._register_unprobed_proof_candidates(
+            candidates,
+            cutoff_reason="root_expansion_unprobed",
+        )
+
+    def _register_unprobed_proof_candidates(
+        self,
+        candidates: list[Move],
+        *,
+        cutoff_reason: str,
+    ) -> None:
+        """Represent every unsearched root candidate as explicit UNKNOWN."""
         if not self._proof_candidates:
             return
         known = {
@@ -2051,7 +2069,7 @@ class SearchAI(ScoringAI):
                 completed=False,
                 nodes=0,
                 elapsed_seconds=0.0,
-                cutoff_reason="root_expansion_unprobed",
+                cutoff_reason=cutoff_reason,
                 threat_risk=None,
             )
             for move in candidates
@@ -4662,6 +4680,21 @@ class SearchAI(ScoringAI):
             reason=reason,
             candidate_count=candidate_count,
             top_candidates=tuple(top_candidates),
+            root_candidate_sources=tuple(
+                (
+                    move,
+                    tuple(
+                        sorted(
+                            source.value
+                            for source in self._root_candidate_sources[move]
+                        )
+                    ),
+                )
+                for move in dict.fromkeys(
+                    (selected_move, *(item[0] for item in ranked_moves))
+                )
+                if move in self._root_candidate_sources
+            ),
             search_depth=completed_depth,
             requested_depth=self.config.max_depth,
             interrupted_depth=self._interrupted_depth,
@@ -4753,6 +4786,11 @@ class SearchAI(ScoringAI):
             proof_tt_skipped_stores=proof_tt_delta.skipped_stores,
             proof_tt_evictions=proof_tt_delta.evictions,
             proof_tt_size=proof_tt_delta.size,
+            proof_hint_queries=proof_tt_delta.hint_queries,
+            proof_hint_hits=proof_tt_delta.hint_hits,
+            proof_hint_stores=proof_tt_delta.hint_stores,
+            proof_hint_evictions=proof_tt_delta.hint_evictions,
+            proof_hint_size=proof_tt_delta.hint_size,
             final_proof_checked=self._final_proof_checked,
             final_proof_state=self._final_proof_state,
             final_proof_completed=self._final_proof_completed,

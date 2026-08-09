@@ -164,6 +164,11 @@ class ProofTableStats:
     skipped_stores: int = 0
     evictions: int = 0
     size: int = 0
+    hint_queries: int = 0
+    hint_hits: int = 0
+    hint_stores: int = 0
+    hint_evictions: int = 0
+    hint_size: int = 0
 
     def delta(self, earlier: ProofTableStats) -> ProofTableStats:
         return ProofTableStats(
@@ -178,7 +183,22 @@ class ProofTableStats:
             ),
             evictions=self.evictions - earlier.evictions,
             size=self.size,
+            hint_queries=self.hint_queries - earlier.hint_queries,
+            hint_hits=self.hint_hits - earlier.hint_hits,
+            hint_stores=self.hint_stores - earlier.hint_stores,
+            hint_evictions=(
+                self.hint_evictions - earlier.hint_evictions
+            ),
+            hint_size=self.hint_size,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _ProofHintEntry:
+    """Non-semantic re-entry order learned from an interrupted search."""
+
+    deferred: tuple[tuple[Move, int], ...]
+    generation: int
 
 
 class ProofTable:
@@ -189,6 +209,7 @@ class ProofTable:
             raise ValueError("max_entries 必须大于 0。")
         self.max_entries = max_entries
         self._entries: dict[ProofKey, ProofTTEntry] = {}
+        self._hints: dict[ProofKey, _ProofHintEntry] = {}
         self._depth_index: dict[
             tuple[int, int, int, tuple[object, ...]],
             set[ProofKey],
@@ -199,6 +220,17 @@ class ProofTable:
         self._stores = 0
         self._skipped_stores = 0
         self._evictions = 0
+        self._hint_queries = 0
+        self._hint_hits = 0
+        self._hint_stores = 0
+        self._hint_evictions = 0
+        self._hint_clock = 0
+        self._generation = 0
+
+    def next_generation(self) -> int:
+        """Return a table-wide generation shared by all proof requests."""
+        self._generation += 1
+        return self._generation
 
     def get(self, key: ProofKey) -> ProofTTEntry | None:
         self._queries += 1
@@ -278,12 +310,71 @@ class ProofTable:
             self._evictions += 1
         is_new = key not in self._entries
         self._entries[key] = entry
+        self._hints.pop(key, None)
         if is_new:
             self._depth_index.setdefault(
                 self._base_key(key),
                 set(),
             ).add(key)
         self._stores += 1
+
+    def defer_move(
+        self,
+        key: ProofKey,
+        move: Move,
+        *,
+        generation: int,
+    ) -> None:
+        """Remember one budget-heavy move as a late re-entry hint.
+
+        Hints never contain a proof state and are never returned by ``get``.
+        They only rotate a branch that consumed an earlier bounded request
+        behind siblings that have not received an equivalent opportunity.
+        """
+        existing = self._hints.get(key)
+        if existing is None and len(self._hints) >= self.max_entries:
+            oldest_key = min(
+                self._hints,
+                key=lambda item: self._hints[item].generation,
+            )
+            del self._hints[oldest_key]
+            self._hint_evictions += 1
+
+        self._hint_clock += 1
+        deferred = [] if existing is None else list(existing.deferred)
+        deferred = [item for item in deferred if item[0] != move]
+        deferred.append((move, self._hint_clock))
+        self._hints[key] = _ProofHintEntry(
+            deferred=tuple(deferred[-8:]),
+            generation=generation,
+        )
+        self._hint_stores += 1
+
+    def order_moves(
+        self,
+        key: ProofKey,
+        moves: tuple[Move, ...],
+    ) -> tuple[Move, ...]:
+        """Rotate recently interrupted moves without changing membership."""
+        self._hint_queries += 1
+        hint = self._hints.get(key)
+        if hint is None:
+            return moves
+        deferred_rank = dict(hint.deferred)
+        if not any(move in deferred_rank for move in moves):
+            return moves
+        self._hint_hits += 1
+        original_rank = {move: index for index, move in enumerate(moves)}
+        return tuple(
+            sorted(
+                moves,
+                key=lambda move: (
+                    move in deferred_rank,
+                    deferred_rank.get(move, 0),
+                    original_rank[move],
+                ),
+            )
+        )
 
     @staticmethod
     def _base_key(
@@ -305,6 +396,11 @@ class ProofTable:
             skipped_stores=self._skipped_stores,
             evictions=self._evictions,
             size=len(self._entries),
+            hint_queries=self._hint_queries,
+            hint_hits=self._hint_hits,
+            hint_stores=self._hint_stores,
+            hint_evictions=self._hint_evictions,
+            hint_size=len(self._hints),
         )
 
     def __len__(self) -> int:
@@ -384,7 +480,7 @@ class ProofSearch:
         if side_to_move not in (BLACK, WHITE):
             raise ValueError("side_to_move 只能是 BLACK 或 WHITE。")
 
-        self._generation += 1
+        self._generation = self.table.next_generation()
         self._nodes = 0
         self._transposition_hits = 0
         self._max_attacker_ply = 0
@@ -512,6 +608,7 @@ class ProofSearch:
                 attacker=attacker,
                 remaining_attacker_moves=remaining_attacker_moves,
                 remaining_quiet_moves=remaining_quiet_moves,
+                hint_key=key,
             )
         else:
             result = self._search_and_node(
@@ -544,6 +641,7 @@ class ProofSearch:
         attacker: int,
         remaining_attacker_moves: int,
         remaining_quiet_moves: int,
+        hint_key: ProofKey,
     ) -> _NodeResult:
         if remaining_attacker_moves <= 0:
             return _NodeResult(
@@ -658,6 +756,11 @@ class ProofSearch:
             ] = batch.candidates
             candidate_coverage_complete = batch.coverage_complete
 
+        candidate_items = self._order_candidate_items(
+            hint_key,
+            candidate_items,
+        )
+
         if (
             not candidate_items
             and self.budget.max_quiet_frontiers <= 0
@@ -677,6 +780,7 @@ class ProofSearch:
             remaining_quiet_moves=remaining_quiet_moves,
             candidate_items=candidate_items,
             child_results=child_results,
+            hint_key=hint_key,
         )
         if winning_result is not None:
             return winning_result
@@ -706,6 +810,10 @@ class ProofSearch:
                     and frontier.gain_move not in forcing_moves
                 )
             )
+            quiet_frontiers = self._order_candidate_items(
+                hint_key,
+                quiet_frontiers,
+            )
             winning_result = self._search_candidate_stage(
                 board,
                 attacker=attacker,
@@ -714,6 +822,7 @@ class ProofSearch:
                 remaining_quiet_moves=remaining_quiet_moves,
                 candidate_items=quiet_frontiers,
                 child_results=child_results,
+                hint_key=hint_key,
             )
             if winning_result is not None:
                 return winning_result
@@ -766,6 +875,7 @@ class ProofSearch:
             ...,
         ],
         child_results: list[tuple[Threat, _NodeResult]],
+        hint_key: ProofKey,
     ) -> _NodeResult | None:
         """Search one already-ordered OR stage.
 
@@ -796,6 +906,11 @@ class ProofSearch:
                             ),
                         )
                         child_results.append((threat, child))
+                        self._defer_interrupted_move(
+                            hint_key,
+                            threat.gain_move,
+                            child.cutoff_reason,
+                        )
                         continue
                 elif isinstance(candidate_item, ThreatFrontier):
                     threat = self.analyzer.describe_frontier(
@@ -840,6 +955,11 @@ class ProofSearch:
                 self._pop_candidate_limits(candidate_limits)
 
             child_results.append((threat, child))
+            self._defer_interrupted_move(
+                hint_key,
+                move,
+                child.cutoff_reason,
+            )
             if child.state is ProofState.PROVEN_WIN:
                 linear_plan = (
                     None
@@ -858,6 +978,56 @@ class ProofSearch:
                     linear_plan=linear_plan,
                 )
         return None
+
+    def _order_candidate_items(
+        self,
+        key: ProofKey,
+        items: tuple[Threat | ThreatCandidate | ThreatFrontier, ...],
+    ) -> tuple[Threat | ThreatCandidate | ThreatFrontier, ...]:
+        if len(items) < 2:
+            return items
+        ordered_moves = self.table.order_moves(
+            key,
+            tuple(self._candidate_item_move(item) for item in items),
+        )
+        remaining = list(items)
+        ordered = []
+        for move in ordered_moves:
+            index = next(
+                index
+                for index, item in enumerate(remaining)
+                if self._candidate_item_move(item) == move
+            )
+            ordered.append(remaining.pop(index))
+        return tuple(ordered)
+
+    @staticmethod
+    def _candidate_item_move(
+        item: Threat | ThreatCandidate | ThreatFrontier,
+    ) -> Move:
+        return item.move if isinstance(item, ThreatCandidate) else item.gain_move
+
+    def _defer_interrupted_move(
+        self,
+        key: ProofKey,
+        move: Move,
+        cutoff_reason: str | None,
+    ) -> None:
+        if cutoff_reason not in {
+            "deadline",
+            "node_limit",
+            "candidate_deadline",
+            "candidate_node_limit",
+            "candidate_generation_interrupted",
+            "threat_description_interrupted",
+            "vcf_interrupted",
+        }:
+            return
+        self.table.defer_move(
+            key,
+            move,
+            generation=self._generation,
+        )
 
     def _find_vcf_witness(
         self,

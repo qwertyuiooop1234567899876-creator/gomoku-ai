@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku SearchAI vs YiXin V0.15.1
+title Gomoku SearchAI vs YiXin V0.16.0
 
 echo ========================================
 echo      SearchAI vs YiXin Auto CVC

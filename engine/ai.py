@@ -163,6 +163,9 @@ class DecisionAnalysis:
     reason: str
     candidate_count: int
     top_candidates: tuple[CandidateAnalysis, ...] = ()
+    root_candidate_sources: tuple[
+        tuple[Move, tuple[str, ...]], ...
+    ] = ()
     search_depth: int = 0
     requested_depth: int = 0
     interrupted_depth: int = 0
@@ -207,6 +210,11 @@ class DecisionAnalysis:
     proof_tt_skipped_stores: int = 0
     proof_tt_evictions: int = 0
     proof_tt_size: int = 0
+    proof_hint_queries: int = 0
+    proof_hint_hits: int = 0
+    proof_hint_stores: int = 0
+    proof_hint_evictions: int = 0
+    proof_hint_size: int = 0
     final_proof_checked: bool = False
     final_proof_state: str = "not_checked"
     final_proof_completed: bool = False
@@ -251,6 +259,14 @@ class DecisionAnalysis:
             "selected_coordinate": format_move(*self.selected_move),
             "reason": self.reason,
             "candidate_count": self.candidate_count,
+            "root_candidate_sources": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                    "sources": list(sources),
+                }
+                for move, sources in self.root_candidate_sources
+            ],
             "top_candidates": [
                 candidate.to_dict()
                 for candidate in self.top_candidates
@@ -337,6 +353,11 @@ class DecisionAnalysis:
             "proof_tt_skipped_stores": self.proof_tt_skipped_stores,
             "proof_tt_evictions": self.proof_tt_evictions,
             "proof_tt_size": self.proof_tt_size,
+            "proof_hint_queries": self.proof_hint_queries,
+            "proof_hint_hits": self.proof_hint_hits,
+            "proof_hint_stores": self.proof_hint_stores,
+            "proof_hint_evictions": self.proof_hint_evictions,
+            "proof_hint_size": self.proof_hint_size,
             "final_proof_checked": self.final_proof_checked,
             "final_proof_state": self.final_proof_state,
             "final_proof_completed": self.final_proof_completed,

@@ -1,0 +1,59 @@
+Gomoku AI V0.16.0 Engine Strength Foundation
+==============================================
+
+定位
+----
+V0.16.0 从逐盘根仲裁修补转向系统性增强，集中解决两个会持续限制棋力的问题：
+
+- 初始 Proof 超时后，最终 Proof 对同一节点从相同昂贵分支重新开始。
+- 固定根候选上限被单一大型来源占满时，后续战术来源可能完全失去代表。
+
+所有新增信息仍严格区分“证明状态”和“搜索提示”。任何超时结果都保持
+UNKNOWN，不会写入严格 Proof TT，也不会被描述为已确认安全或失败。
+
+核心增强
+--------
+1. Proof 安全续搜提示
+   - Proof 节点因 deadline/node limit 中断时，仅记录该分支的重入顺序提示。
+   - 下一次对同一严格 ProofKey 搜索时，把最近耗尽预算的分支轮转到未充分检查
+     的兄弟之后，避免初始 Proof 与最终审计重复消耗同一棵前缀树。
+   - 提示只改变搜索顺序，不包含 ProofState；ProofTable.get 永远不会把提示作为
+     命中返回，UNKNOWN 仍不进入严格缓存。
+   - 提示表有独立上限、淘汰和命中统计。
+
+2. 表级全局代数
+   - ProofSearch 的代数改由共享 ProofTable 单调分配。
+   - 跨根候选、初始 Proof 和最终 Proof 的新旧关系现在真实有效，完整证明表的
+     淘汰顺序不再因每个新 ProofSearch 都从 generation=1 开始而退化。
+
+3. 根候选来源配额
+   - 当必须保留的候选总数已经超过 root_candidate_limit 时，先为每个非空战术
+     来源保留一个代表，再按原战术顺序填满固定上限。
+   - 威胁前沿、强制反击、安静预防、双前沿桥等来源不再被最前面的大型来源
+     整组抹掉；根上限不变，不会无界扩大 PVS 搜索树。
+
+4. 初始 Proof 来源多样性
+   - proof_root_candidate_limit 较小时，保留首着，并为不同战术来源选择代表。
+   - 未进入初始 Proof 槽的根候选显式登记为 UNKNOWN，cutoff_reason 为
+     initial_proof_unprobed，仍可进入后续 PVS、动态复核和最终 Proof。
+
+5. 可审计诊断
+   - JSON/TXT 记录新增 root_candidate_sources。
+   - 新增 proof_hint_queries/hits/stores/evictions/size，能够直接确认最终审计是否
+     利用了初始 Proof 的中断位置。
+
+回归与性能
+----------
+- 新增 tests/test_v0160_engine_strength.py，覆盖提示轮转不污染严格状态、共享代数、
+  固定上限来源配额、初始 Proof 多样性、显式 UNKNOWN 和记录序列化。
+- 继续复用 V0.14.9、V0.15.0、V0.15.1 的真实棋谱根局面作为强度回归。
+- V0.15.1 两个 60 秒根局面继续选择 F6、I4，最终 Proof 均保持 UNKNOWN；
+  两局均观测到 2 次 proof_hint 命中，确认初始 Proof 与最终审计实际形成续搜。
+- 全量 291 项通过；9 轮固定基准着法与节点保持 J9/G9/H11/J5、27/18/48/23。
+- NativeCore ABI 保持 1，无需重新编译 DLL。
+
+建议命令
+--------
+  python -B -m unittest tests.test_v0160_engine_strength -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 9

@@ -41,6 +41,20 @@ class RootCandidateMode(str, Enum):
     ORDINARY = "ordinary"
 
 
+PROOF_SOURCE_PRIORITY = (
+    CandidateSource.MANDATORY_DEFENSE,
+    CandidateSource.VCF_INTERCEPT,
+    CandidateSource.THREAT_FRONTIER,
+    CandidateSource.QUIET_PREVENTION,
+    CandidateSource.DUAL_FRONTIER_BRIDGE,
+    CandidateSource.OWN_FORCING,
+    CandidateSource.ACTIVE_COUNTERATTACK,
+    CandidateSource.OFFENSIVE_CONTINUATION,
+    CandidateSource.ROOT_EXPANSION,
+    CandidateSource.ORDINARY,
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CandidateEntry:
     move: Move
@@ -138,6 +152,53 @@ def merge_unique(*groups: Iterable[Move]) -> list[Move]:
     )
 
 
+def source_diverse_subset(
+    moves: Iterable[Move],
+    sources_by_move: dict[Move, frozenset[CandidateSource]],
+    *,
+    limit: int,
+) -> list[Move]:
+    """Keep the leading move plus bounded representatives for Proof.
+
+    Initial Proof has fewer slots than the full searched root.  Reserving a
+    representative from each tactical source prevents all strict checks from
+    being consumed by several near-identical frontier moves.  Membership and
+    order of the full PVS root are unchanged.
+    """
+    ordered = list(dict.fromkeys(moves))
+    if limit <= 0:
+        return []
+    if len(ordered) <= limit or not sources_by_move:
+        return ordered[:limit]
+
+    selected = [ordered[0]]
+    for source in PROOF_SOURCE_PRIORITY:
+        if any(
+            source in sources_by_move.get(move, ())
+            for move in selected
+        ):
+            continue
+        representative = next(
+            (
+                move
+                for move in ordered
+                if (
+                    move not in selected
+                    and source in sources_by_move.get(move, ())
+                )
+            ),
+            None,
+        )
+        if representative is None:
+            continue
+        selected.append(representative)
+        if len(selected) >= limit:
+            return selected
+
+    selected.extend(move for move in ordered if move not in selected)
+    return selected[:limit]
+
+
 def merge_with_required(
     *,
     ordered_groups: Iterable[Iterable[Move]],
@@ -154,10 +215,36 @@ def merge_with_required(
     if limit < 1:
         return []
 
-    ordered = merge_unique(*ordered_groups)
-    required = merge_unique(*required_groups)
+    ordered_group_list = [tuple(group) for group in ordered_groups]
+    required_group_list = [tuple(group) for group in required_groups]
+    ordered = merge_unique(*ordered_group_list)
+    required = merge_unique(*required_group_list)
     if len(required) >= limit:
-        return required[:limit]
+        # When required evidence itself exceeds the fixed root cap, a plain
+        # flattened slice lets the earliest large source erase every later
+        # source. Reserve one representative from each non-empty group, then
+        # fill the remaining slots in the original tactical order.
+        representatives = merge_unique(
+            *(
+                group[:1]
+                for group in required_group_list
+                if group
+            )
+        )[:limit]
+        pending = set(representatives)
+        selected: list[Move] = []
+        for move in required:
+            is_reserved = move in pending
+            if (
+                not is_reserved
+                and limit - len(selected) <= len(pending)
+            ):
+                continue
+            selected.append(move)
+            pending.discard(move)
+            if len(selected) >= limit:
+                break
+        return selected
 
     pending = set(required)
     selected: list[Move] = []
