@@ -497,6 +497,7 @@ def apply_probe(
         and probe.selection_basis in {
             "frontier_balance",
             "frontier_shape",
+            "mandatory_boundary_escape",
         }
         and probe.approved_move is not None
     )

@@ -1,0 +1,50 @@
+Gomoku AI V0.15.1 Mandatory Defense Consensus
+================================================
+
+定位
+----
+V0.15.1 以 2026-08-09 两盘 V0.15.0 短局为回归基线：
+
+- SearchAI 自对弈：白方第 8 手 J10 对 F6。
+- SearchAI(d=8,t=60s) 对 YiXin(t=10s)：黑方第 17 手 I8 对 I4。
+
+YiXin 同根配对子局面复盘确认，J10 是首个直接败着；I8 在 10 秒复核下为
+明显失误。两个局面都只有两个强制防守候选，严格 Proof 均为 UNKNOWN。
+
+根因
+----
+安静前沿扩展在这类双候选强制防守局面中会把双方同时推到启发式夹值边界，
+使更深搜索失去区分能力。随后旧策略把浅层防守 VCT、走法顺序或前沿计数当作
+平局裁决，分别选择了 J10 和 I8。
+
+核心修复
+--------
+1. 强制防守专用成对复核
+   - 仅当成对候选全部来自 mandatory_defense 来源时启用。
+   - 使用关闭 PVS 的全窗口比较、普通威胁扩展深度和至少 12 个分支候选。
+   - 其他动态复核仍保留原安静前沿扩展路径。
+
+2. 多深度可信共识
+   - 同分层不投票，避免走法顺序制造稳定假象。
+   - 命中启发式夹值边界的层不投票。
+   - 两候选差距超过 root_safety_score_margin 的选择性悬崖层不投票。
+   - 最近两个可信层一致后，才允许按深度共识改选。
+
+3. 唯一边界逃生
+   - 若一个候选仍停在选择性夹值边界，而另一个候选回到普通启发式区间，
+     允许后者覆盖旧 PVS 同分。
+   - 该结论只属于启发式根仲裁，严格 Proof 状态仍保持 UNKNOWN。
+
+真实局面验收
+------------
+- J10 -> F6：depth 5，selection_basis=mandatory_boundary_escape，
+  final Proof=UNKNOWN。
+- I8 -> I4：depth 7，可信 leader 历史 I4/I4，
+  selection_basis=mandatory_depth_consensus，final Proof=UNKNOWN。
+- NativeCore ABI 保持 1，无需重新编译 DLL。
+
+建议命令
+--------
+  python -B -m unittest tests.test_v0151_mandatory_consensus -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 9

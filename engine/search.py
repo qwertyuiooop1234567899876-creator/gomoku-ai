@@ -60,7 +60,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.15.0 搜索 AI。
+    V0.15.1 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -2565,6 +2565,11 @@ class SearchAI(ScoringAI):
             if candidate.state == ProofState.UNKNOWN.value
         }
         root_scores = dict(result.ranked_moves)
+        mandatory_defense_pair = all(
+            root_candidates.CandidateSource.MANDATORY_DEFENSE
+            in self._root_candidate_sources.get(move, ())
+            for move in pair
+        )
         probe = self._run_root_safety_probe(
             board,
             pair,
@@ -2573,13 +2578,29 @@ class SearchAI(ScoringAI):
             main_rank_stable=True,
             completed_depth=completed_depth,
             budget_seconds=budget_seconds,
-            quiet_frontier_extension=True,
+            quiet_frontier_extension=not mandatory_defense_pair,
             target_depth_override=7,
             minimum_stable_depth=(
                 self.config.root_dynamic_review_min_completed_depth
             ),
-            stable_leader_count=3,
-            start_depth=2,
+            stable_leader_count=(2 if mandatory_defense_pair else 3),
+            start_depth=(1 if mandatory_defense_pair else 2),
+            extension_depth_override=(
+                self.config.threat_extension_depth
+                if mandatory_defense_pair
+                else None
+            ),
+            branch_candidate_limit_override=(
+                max(self.config.branch_candidate_limit, 12)
+                if mandatory_defense_pair
+                else None
+            ),
+            recalibrate_mate_like=not mandatory_defense_pair,
+            credible_score_margin=(
+                self.config.root_safety_score_margin
+                if mandatory_defense_pair
+                else None
+            ),
         )
         if probe is None:
             return None
@@ -2598,6 +2619,7 @@ class SearchAI(ScoringAI):
             structure_scores,
             structure_keys=structure_keys,
             unknown_moves=unknown_moves,
+            mandatory_defense_consensus=mandatory_defense_pair,
         )
         return replace(
             probe,
@@ -2659,6 +2681,10 @@ class SearchAI(ScoringAI):
         minimum_stable_depth: int | None = None,
         stable_leader_count: int = 2,
         start_depth: int = 1,
+        extension_depth_override: int | None = None,
+        branch_candidate_limit_override: int | None = None,
+        recalibrate_mate_like: bool = True,
+        credible_score_margin: int | None = None,
     ) -> RootSafetyProbeResult | None:
         """Compare near-tied moves independently with full root windows.
 
@@ -2674,17 +2700,25 @@ class SearchAI(ScoringAI):
             max_depth=self.config.max_depth,
             time_limit_seconds=budget_seconds,
             root_candidate_limit=max(2, len(candidates)),
-            branch_candidate_limit=self.config.branch_candidate_limit,
+            branch_candidate_limit=(
+                self.config.branch_candidate_limit
+                if branch_candidate_limit_override is None
+                else branch_candidate_limit_override
+            ),
             threat_extension_depth=(
-                max(
-                    6,
-                    self.config.threat_extension_depth
-                    + self.config.root_safety_extension_bonus,
-                )
-                if quiet_frontier_extension
+                extension_depth_override
+                if extension_depth_override is not None
                 else (
-                    self.config.threat_extension_depth
-                    + self.config.root_safety_extension_bonus
+                    max(
+                        6,
+                        self.config.threat_extension_depth
+                        + self.config.root_safety_extension_bonus,
+                    )
+                    if quiet_frontier_extension
+                    else (
+                        self.config.threat_extension_depth
+                        + self.config.root_safety_extension_bonus
+                    )
                 )
             ),
             diagnostics=False,
@@ -2765,7 +2799,7 @@ class SearchAI(ScoringAI):
             except SearchTimeout:
                 break
 
-            if any(
+            if recalibrate_mate_like and any(
                 self._is_mate_like_score(candidate.score)
                 for candidate in ranked
             ):
@@ -2809,7 +2843,15 @@ class SearchAI(ScoringAI):
             )
             latest = tuple(ranked)
             probe_completed_depth = depth
-            leader_history.append(ranked[0].move)
+            if credible_score_margin is None:
+                leader_history.append(ranked[0].move)
+            else:
+                credible_leader = root_review.credible_layer_leader(
+                    ranked,
+                    score_margin=credible_score_margin,
+                )
+                if credible_leader is not None:
+                    leader_history.append(credible_leader)
 
             if (
                 depth >= stable_depth

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku AI V0.15.0
+title Gomoku AI V0.15.1
 
 if not exist "main.py" goto no_program
 

@@ -1,0 +1,28 @@
+{
+  "format": "gomoku-record-regression-v1",
+  "source_engine_version": "0.15.0",
+  "board_size": 15,
+  "cases": [
+    {
+      "name": "selfplay_white_8",
+      "source_record": "search-d8-t60-vs-search-d8-t60-v0150-20260809-123120-162637.json",
+      "player": 2,
+      "history": ["H8", "I7", "H6", "H7", "G7", "I8", "I9"],
+      "played": "J10",
+      "review": "F6",
+      "zobrist_hash": 7942424549623177284
+    },
+    {
+      "name": "yixin_black_17",
+      "source_record": "search-d8-t60-vs-yixin-t10-v0150-20260809-150353-788323.json",
+      "player": 1,
+      "history": [
+        "H8", "H9", "G9", "I7", "F10", "G8", "E11", "D12",
+        "E10", "F7", "I10", "H7", "G7", "I6", "J5", "I5"
+      ],
+      "played": "I8",
+      "review": "I4",
+      "zobrist_hash": 18097701418126082955
+    }
+  ]
+}

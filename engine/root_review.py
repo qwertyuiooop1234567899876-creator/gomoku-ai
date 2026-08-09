@@ -77,6 +77,31 @@ def has_horizon_boundary(
     )
 
 
+def credible_layer_leader(
+    candidates: Sequence[object],
+    *,
+    score_margin: int,
+) -> Move | None:
+    """Return a bounded equal-window winner suitable for depth consensus.
+
+    Mandatory-defense searches are especially prone to alternating between
+    a quiet heuristic value and a selective tactical cliff.  A layer only
+    votes when both candidates stayed away from the clamp boundary and the
+    numeric gap is small enough to compare as an ordinary heuristic result.
+    Exact ties deliberately abstain instead of preserving move-order bias.
+    """
+    if len(candidates) < 2 or has_horizon_boundary(candidates):
+        return None
+    scores = sorted(
+        (int(getattr(candidate, "score")) for candidate in candidates),
+        reverse=True,
+    )
+    gap = scores[0] - scores[1]
+    if gap <= 0 or gap > score_margin:
+        return None
+    return getattr(candidates[0], "move")
+
+
 def _frontier_summary(
     frontiers: Sequence[ThreatFrontier],
 ) -> tuple[int, int, int, int]:
@@ -265,6 +290,7 @@ def approve_move(
     *,
     structure_keys: Mapping[Move, tuple[int, ...]] | None = None,
     unknown_moves: set[Move] | None = None,
+    mandatory_defense_consensus: bool = False,
 ) -> tuple[Move, str]:
     """Choose the review recommendation without inventing proof evidence."""
 
@@ -281,6 +307,24 @@ def approve_move(
         structure_scores.get(structural, -10**18)
         - structure_scores.get(probe_leader, -10**18)
     )
+    if mandatory_defense_consensus and probe.completed_depth >= 4:
+        ordinary = [
+            candidate.move
+            for candidate in probe.candidates
+            if abs(candidate.score) < HEURISTIC_SCORE_LIMIT
+        ]
+        if len(ordinary) == 1:
+            # The paired search is still heuristic, but a single candidate
+            # escaping the selective cliff is materially safer than keeping
+            # an old PVS tie whose sibling remains pinned to that boundary.
+            return ordinary[0], "mandatory_boundary_escape"
+        if (
+            probe.rank_stable
+            and probe.completed_depth
+            >= config.root_dynamic_review_min_completed_depth
+            and not has_horizon_boundary(probe.candidates)
+        ):
+            return probe_leader, "mandatory_depth_consensus"
     if (
         probe.rank_stable
         and probe.completed_depth >= 4
