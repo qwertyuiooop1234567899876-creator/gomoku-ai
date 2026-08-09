@@ -60,7 +60,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.0 搜索 AI。
+    V0.16.1 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -1151,9 +1151,41 @@ class SearchAI(ScoringAI):
             is root_candidates.RootCandidateMode.MANDATORY_DEFENSE
         ):
             allow_near_loss_expansion = False
+            # A root collapsed to one direct block is especially vulnerable
+            # to hiding a tempo defense.  Multiple direct defenses already
+            # receive their dedicated bounded VCT comparison; widening those
+            # roots as well would dilute that budget with unrelated fours.
+            full_own_profiles = (
+                self._profile_moves_timed(
+                    board,
+                    self._root_relevant_pool(board, legal_moves),
+                    self.player,
+                )
+                if len(opponent_forcing_moves) == 1
+                else {}
+            )
+            forcing_counterattacks = (
+                self._order_specific_moves(
+                    board,
+                    root_candidates.forcing_counterattack_moves(
+                        full_own_profiles
+                    ),
+                    self.player,
+                    ply=0,
+                    tt_move=None,
+                    full_evaluation=True,
+                )
+                if self.config.max_depth
+                >= self.config.root_forcing_counterattack_min_depth
+                else []
+            )
             search_candidates = self._order_specific_moves(
                 board,
-                opponent_forcing_moves,
+                root_candidates.mandatory_defense_moves(
+                    defense_moves=opponent_forcing_moves,
+                    forcing_counterattack_moves=forcing_counterattacks,
+                    limit=self.config.root_candidate_limit,
+                ),
                 self.player,
                 ply=0,
                 tt_move=self._tt_best_move(board, self.player),
@@ -1163,7 +1195,11 @@ class SearchAI(ScoringAI):
                 (
                     root_candidates.CandidateSource.MANDATORY_DEFENSE,
                     opponent_forcing_moves,
-                )
+                ),
+                (
+                    root_candidates.CandidateSource.FORCING_COUNTERATTACK,
+                    forcing_counterattacks,
+                ),
             ]
             if 2 <= len(search_candidates) <= (
                 self.config.defense_vct_max_candidates

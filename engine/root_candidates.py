@@ -24,6 +24,7 @@ class CandidateSource(str, Enum):
     ORDINARY = "ordinary"
     OWN_FORCING = "own_forcing"
     ACTIVE_COUNTERATTACK = "active_counterattack"
+    FORCING_COUNTERATTACK = "forcing_counterattack"
     MANDATORY_DEFENSE = "mandatory_defense"
     THREAT_FRONTIER = "threat_frontier"
     QUIET_PREVENTION = "quiet_prevention"
@@ -48,6 +49,7 @@ PROOF_SOURCE_PRIORITY = (
     CandidateSource.QUIET_PREVENTION,
     CandidateSource.DUAL_FRONTIER_BRIDGE,
     CandidateSource.OWN_FORCING,
+    CandidateSource.FORCING_COUNTERATTACK,
     CandidateSource.ACTIVE_COUNTERATTACK,
     CandidateSource.OFFENSIVE_CONTINUATION,
     CandidateSource.ROOT_EXPANSION,
@@ -299,6 +301,28 @@ def frontier_defense_moves(
             dual_frontiers,
             counterattacks,
         ),
+        limit=limit,
+    )
+
+
+def mandatory_defense_moves(
+    *,
+    defense_moves: Iterable[Move],
+    forcing_counterattack_moves: Iterable[Move],
+    limit: int,
+) -> list[Move]:
+    """Keep direct blocks and bounded tempo-gaining counterattacks.
+
+    A direct double-threat block is not always the only defensive resource.
+    A four-making move can force the opponent to answer first and thereby
+    interrupt the threatened sequence.  Both classes are only candidates;
+    PVS and Proof still decide whether either line actually survives.
+    """
+    defenses = tuple(defense_moves)
+    counterattacks = tuple(forcing_counterattack_moves)
+    return merge_with_required(
+        ordered_groups=(defenses, counterattacks),
+        required_groups=(defenses, counterattacks),
         limit=limit,
     )
 

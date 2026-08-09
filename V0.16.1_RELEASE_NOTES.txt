@@ -1,0 +1,36 @@
+Gomoku AI V0.16.1 Mandatory-Defense Counterattack Coverage
+==========================================================
+
+定位
+----
+V0.16.1 修复 2026-08-09 最新 SearchAI 对 YiXin 对局中首次决定性失误：
+第 15 手的必防根集合只保留 I10，导致弈心建议的 D11 在 VCF、PVS 和 Proof
+开始前就被排除。
+
+根因
+----
+- MANDATORY_DEFENSE 模式只接收对手强制威胁的直接落点。
+- 我方冲四反击只在较弱的 FRONTIER_DEFENSE 模式中保留。
+- 己方根威胁画像使用 24 点局部池，D11 虽在普通根排序第 2，仍未进入该画像池。
+
+修复
+----
+1. 新增 forcing_counterattack 候选来源，和 mandatory_defense 分开记录。
+2. 当必防根集合塌缩为唯一直接封堵点时，对己方相关点执行一次根级完整画像扫描，
+   找出能强迫对手先应手的冲四；已有多个直接防守分支时仍沿用专用 VCT 仲裁。
+3. 使用固定 root_candidate_limit 合并直接封堵与冲四反击，并为两种来源保留代表；
+   不扩大普通分支，也不把候选证据升级为严格 Proof。
+4. 最新实战同根 depth=8/time=60 复测改选 D11：D11/C11 为 997300，
+   原着 I10 为 8200，最终 Proof 仍诚实保持 UNKNOWN。
+
+回归
+----
+- tests/test_v0161_forcing_counterattack.py 覆盖固定上限下的来源保留，以及最新对局
+  第 15 手 D11/C11/I10 三类候选的完整性和来源审计。
+- NativeCore ABI 保持 1，无需重新编译 DLL。
+
+建议命令
+--------
+  python -B -m unittest tests.test_v0161_forcing_counterattack -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 9
