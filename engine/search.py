@@ -169,6 +169,7 @@ class SearchAI(ScoringAI):
         self._root_mate_scores_quarantined = False
         self._root_frontier_priority: tuple[Move, ...] = ()
         self._root_sibling_prevention: tuple[Move, ...] = ()
+        self._root_pressure_prevention: tuple[Move, ...] = ()
         self._root_quiet_prevention: tuple[Move, ...] = ()
         self._root_offensive_continuations: tuple[Move, ...] = ()
         self._root_dual_frontier_bridges: tuple[Move, ...] = ()
@@ -464,6 +465,7 @@ class SearchAI(ScoringAI):
         self._root_mate_scores_quarantined = False
         self._root_frontier_priority = ()
         self._root_sibling_prevention = ()
+        self._root_pressure_prevention = ()
         self._root_quiet_prevention = ()
         self._root_offensive_continuations = ()
         self._root_dual_frontier_bridges = ()
@@ -995,6 +997,7 @@ class SearchAI(ScoringAI):
         counterattack_truth_moves: list[Move] = []
         forcing_counterattacks: list[Move] = []
         prevention_moves: list[Move] = []
+        pressure_prevention_moves: list[Move] = []
         offensive_continuations: list[Move] = []
         dual_frontier_bridges: list[Move] = []
 
@@ -1349,6 +1352,31 @@ class SearchAI(ScoringAI):
             self._root_dual_frontier_bridges = tuple(
                 dual_frontier_bridges
             )
+            pressure_prevention_moves = (
+                root_candidates.pressure_prevention_moves(
+                    frontiers=opponent_pressure_frontiers,
+                    covered_moves=root_candidates.merge_unique(
+                        frontier_candidates,
+                        ordinary_candidates,
+                        counterattacks,
+                        forcing_counterattacks,
+                        prevention_moves,
+                        offensive_continuations,
+                        dual_frontier_bridges,
+                    ),
+                    strong_rank=self.config.root_quiet_prevention_min_rank,
+                    minimum_continuations=max(
+                        4,
+                        self.config
+                        .root_offensive_continuation_min_continuations
+                        * 2,
+                    ),
+                    limit=1,
+                )
+            )
+            self._root_pressure_prevention = tuple(
+                pressure_prevention_moves
+            )
             search_candidates = (
                 root_candidates.frontier_defense_moves(
                     frontier_moves=frontier_candidates,
@@ -1357,6 +1385,9 @@ class SearchAI(ScoringAI):
                     limit=self.config.root_candidate_limit,
                     forcing_counterattack_moves=(
                         forcing_counterattacks
+                    ),
+                    pressure_prevention_moves=(
+                        pressure_prevention_moves
                     ),
                     prevention_moves=prevention_moves,
                     offensive_continuation_moves=(
@@ -1381,6 +1412,10 @@ class SearchAI(ScoringAI):
                 (
                     root_candidates.CandidateSource.OWN_FORCING,
                     forcing_counterattacks,
+                ),
+                (
+                    root_candidates.CandidateSource.PRESSURE_PREVENTION,
+                    pressure_prevention_moves,
                 ),
                 (
                     root_candidates.CandidateSource.QUIET_PREVENTION,
@@ -1789,6 +1824,14 @@ class SearchAI(ScoringAI):
             result.move,
             *(
                 move
+                for group in self._critical_root_review_groups(
+                    tuple(move for move, _score in result.ranked_moves)
+                )
+                for move in group
+                if move != result.move
+            ),
+            *(
+                move
                 for move, _score in result.ranked_moves
                 if move != result.move
             ),
@@ -1928,19 +1971,21 @@ class SearchAI(ScoringAI):
 
         self._final_proof_rejected = tuple(dict.fromkeys(rejected))
         if selected is None:
-            selected = next(
-                (
+            selected = root_review.preferred_unknown_move(
+                tuple(
                     move for move in unknown if board.is_empty(*move)
                 ),
-                next(
+                self._root_pressure_prevention,
+            )
+            if selected is None:
+                selected = next(
                     (
                         move
                         for move in queue
                         if move not in seen and board.is_empty(*move)
                     ),
                     result.move,
-                ),
-            )
+                )
         self._final_proof_selected = selected
         selected_analysis = proof_by_move.get(selected)
         if selected_analysis is None:
@@ -2474,6 +2519,14 @@ class SearchAI(ScoringAI):
             for move in candidates
             if move in root_scores and board.is_empty(*move)
         }
+        critical_groups = self._critical_root_review_groups(
+            tuple(
+                move
+                for move, _score in result.ranked_moves
+                if move in legal
+            )
+        )
+        critical_moves = root_candidates.merge_unique(*critical_groups)
         quiet_moves = root_candidates.merge_unique(
             self._root_quiet_prevention,
             self._root_sibling_prevention,
@@ -2490,6 +2543,7 @@ class SearchAI(ScoringAI):
             self.config,
             result,
             self._proof_candidates,
+            critical_moves=critical_moves,
             quiet_moves=quiet_moves,
             offensive_moves=offensive_moves,
         )
@@ -2520,6 +2574,7 @@ class SearchAI(ScoringAI):
             result,
             pool,
             structure_scores,
+            critical_groups=critical_groups,
             preferred_groups=preferred_groups,
         )
         pending = [move for move in finalists if move != result.move]
@@ -2572,6 +2627,29 @@ class SearchAI(ScoringAI):
         if latest is None:
             return None
         return replace(latest, approved_move=current)
+
+    def _critical_root_review_groups(
+        self,
+        available: tuple[Move, ...],
+    ) -> tuple[tuple[Move, ...], ...]:
+        """Return source-priority groups that must reach bounded review."""
+        ordered = tuple(dict.fromkeys(available))
+        available_set = set(ordered)
+        pressure = tuple(
+            move
+            for move in self._root_pressure_prevention
+            if move in available_set
+        )
+        frontier = tuple(
+            move
+            for move in ordered
+            if (
+                move not in pressure
+                and root_candidates.CandidateSource.THREAT_FRONTIER
+                in self._root_candidate_sources.get(move, ())
+            )
+        )
+        return tuple(group for group in (pressure, frontier) if group)
 
     def _best_structural_challenger(
         self,

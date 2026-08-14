@@ -27,6 +27,7 @@ class CandidateSource(str, Enum):
     FORCING_COUNTERATTACK = "forcing_counterattack"
     MANDATORY_DEFENSE = "mandatory_defense"
     THREAT_FRONTIER = "threat_frontier"
+    PRESSURE_PREVENTION = "pressure_prevention"
     QUIET_PREVENTION = "quiet_prevention"
     OFFENSIVE_CONTINUATION = "offensive_continuation"
     DUAL_FRONTIER_BRIDGE = "dual_frontier_bridge"
@@ -46,6 +47,7 @@ PROOF_SOURCE_PRIORITY = (
     CandidateSource.MANDATORY_DEFENSE,
     CandidateSource.VCF_INTERCEPT,
     CandidateSource.THREAT_FRONTIER,
+    CandidateSource.PRESSURE_PREVENTION,
     CandidateSource.QUIET_PREVENTION,
     CandidateSource.DUAL_FRONTIER_BRIDGE,
     CandidateSource.OWN_FORCING,
@@ -272,6 +274,7 @@ def frontier_defense_moves(
     counterattack_moves: Iterable[Move],
     limit: int,
     forcing_counterattack_moves: Iterable[Move] = (),
+    pressure_prevention_moves: Iterable[Move] = (),
     prevention_moves: Iterable[Move] = (),
     offensive_continuation_moves: Iterable[Move] = (),
     dual_frontier_moves: Iterable[Move] = (),
@@ -281,6 +284,7 @@ def frontier_defense_moves(
     ordinary = tuple(ordinary_moves)
     counterattacks = tuple(counterattack_moves)
     forcing_counterattacks = tuple(forcing_counterattack_moves)
+    pressure_prevention = tuple(pressure_prevention_moves)
     prevention = tuple(prevention_moves)
     offensive_continuations = tuple(offensive_continuation_moves)
     dual_frontiers = tuple(dual_frontier_moves)
@@ -289,6 +293,7 @@ def frontier_defense_moves(
             frontier,
             ordinary,
             forcing_counterattacks,
+            pressure_prevention,
             prevention,
             dual_frontiers,
             counterattacks,
@@ -297,12 +302,57 @@ def frontier_defense_moves(
         required_groups=(
             frontier,
             forcing_counterattacks,
+            pressure_prevention,
             prevention,
             dual_frontiers,
             counterattacks,
         ),
         limit=limit,
     )
+
+
+def pressure_prevention_moves(
+    *,
+    frontiers: Iterable[ThreatFrontier],
+    covered_moves: Iterable[Move],
+    strong_rank: int,
+    minimum_continuations: int,
+    limit: int,
+) -> list[Move]:
+    """Keep bounded non-quiet pressure points omitted by frontier truth.
+
+    Multi-frontier mode deliberately avoids admitting the whole ordinary
+    root list.  The exhaustive pressure scan can nevertheless expose a
+    serious open-three or four gain that is not one of the strongest
+    multi-threat anchors.  Such a point is defensive evidence and must keep
+    one bounded route into PVS; it is never promoted to a proof result.
+    """
+    if limit <= 0:
+        return []
+
+    covered = set(covered_moves)
+    ranked: list[tuple[int, int, int, int, Move]] = []
+    for order, frontier in enumerate(frontiers):
+        maximum_rank = max(frontier.continuation_ranks, default=0)
+        if (
+            frontier.gain_move in covered
+            or frontier.kind is ThreatKind.QUIET
+            or len(frontier.continuations) < minimum_continuations
+            or maximum_rank < strong_rank
+        ):
+            continue
+        ranked.append(
+            (
+                maximum_rank,
+                len(frontier.continuations),
+                sum(frontier.continuation_ranks),
+                -order,
+                frontier.gain_move,
+            )
+        )
+
+    ranked.sort(reverse=True)
+    return [item[-1] for item in ranked[:limit]]
 
 
 def mandatory_defense_moves(

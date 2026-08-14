@@ -142,11 +142,24 @@ def lowest_unknown_risk_move(
     ).move
 
 
+def preferred_unknown_move(
+    unknown_moves: Sequence[Move],
+    pressure_moves: Sequence[Move],
+) -> Move | None:
+    """Prefer an audited broad-pressure defense without claiming safety."""
+    available = set(unknown_moves)
+    return next(
+        (move for move in pressure_moves if move in available),
+        unknown_moves[0] if unknown_moves else None,
+    )
+
+
 def review_pool(
     config: SearchConfig,
     result: RootResult,
     proof_candidates: Sequence[ProofCandidateAnalysis],
     *,
+    critical_moves: Sequence[Move] = (),
     quiet_moves: Sequence[Move],
     offensive_moves: Sequence[Move],
 ) -> list[Move]:
@@ -164,7 +177,9 @@ def review_pool(
     ]
     risk = lowest_unknown_risk_move(proof_candidates, available)
     source_order = [
-        *pvs,
+        result.move,
+        *critical_moves,
+        *pvs[1:],
         *(() if risk is None else (risk,)),
         *quiet_moves,
         *offensive_moves,
@@ -175,6 +190,7 @@ def review_pool(
         dict.fromkeys(
             (
                 result.move,
+                *critical_moves,
                 *pvs[: config.root_dynamic_review_pvs_limit],
                 *offensive_moves,
             )
@@ -206,6 +222,7 @@ def finalists(
     pool: Sequence[Move],
     structure_scores: Mapping[Move, int],
     *,
+    critical_groups: Sequence[Sequence[Move]] = (),
     preferred_moves: Sequence[Move] = (),
     preferred_groups: Sequence[Sequence[Move]] = (),
 ) -> list[Move]:
@@ -216,6 +233,30 @@ def finalists(
         for index, (move, _score) in enumerate(result.ranked_moves)
     }
     selected = [result.move]
+    # A serious candidate source is a membership invariant, not a score
+    # claim.  Reserve its representative before a shallow PVS challenger can
+    # consume the only meaningful pair-review slice.
+    for group in critical_groups:
+        eligible = [
+            move
+            for move in dict.fromkeys(group)
+            if move in pool and move not in selected
+        ]
+        if not eligible:
+            continue
+        selected.append(
+            min(
+                eligible,
+                key=lambda move: (
+                    root_rank.get(move, len(root_rank)),
+                    -structure_scores.get(move, -10**18),
+                    pool.index(move),
+                ),
+            )
+        )
+        if len(selected) >= config.root_dynamic_review_finalist_limit:
+            return selected
+
     # Source diversity must not crowd out the strongest searched challenger.
     # ``ranked_moves`` may deliberately preserve tactical-source order after
     # false-mate quarantine, so choose this one reservation by the bounded
