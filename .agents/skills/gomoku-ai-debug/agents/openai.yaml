@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gomoku AI Debug"
+  short_description: "Diagnose Gomoku engine losses and search regressions"
+  default_prompt: "Use $gomoku-ai-debug to analyze the latest relevant game record and diagnose the earliest mechanism-level engine failure."
