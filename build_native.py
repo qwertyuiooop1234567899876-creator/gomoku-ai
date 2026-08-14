@@ -21,9 +21,9 @@ def output_path() -> Path:
     return OUTPUT_DIRECTORY / "gomoku_native.so"
 
 
-def compiler_command() -> list[str]:
+def compiler_command(*, output: Path | None = None) -> list[str]:
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    output = output_path()
+    selected_output = output or output_path()
     if sys.platform == "win32" and shutil.which("cl"):
         return [
             "cl",
@@ -35,7 +35,7 @@ def compiler_command() -> list[str]:
             f"/Fo:{OUTPUT_DIRECTORY / 'gomoku_native.obj'}",
             str(SOURCE),
             "/link",
-            f"/OUT:{output}",
+            f"/OUT:{selected_output}",
             f"/IMPLIB:{OUTPUT_DIRECTORY / 'gomoku_native.lib'}",
         ]
 
@@ -65,7 +65,7 @@ def compiler_command() -> list[str]:
                 compile_text = (
                     f'call "{vcvars}" >nul && cl /nologo /std:c++17 /O2 /EHsc /LD '
                     f'/Fo:"{OUTPUT_DIRECTORY / "gomoku_native.obj"}" "{SOURCE}" /link '
-                    f'/OUT:"{output}" /IMPLIB:"{OUTPUT_DIRECTORY / "gomoku_native.lib"}"'
+                    f'/OUT:"{selected_output}" /IMPLIB:"{OUTPUT_DIRECTORY / "gomoku_native.lib"}"'
                 )
                 return ["cmd", "/d", "/s", "/c", compile_text]
 
@@ -82,8 +82,30 @@ def compiler_command() -> list[str]:
         command.append("-fPIC")
     else:
         command.extend(["-static-libgcc", "-static-libstdc++"])
-    command.extend([str(SOURCE), "-o", str(output)])
+    command.extend([str(SOURCE), "-o", str(selected_output)])
     return command
+
+
+def build_native_runtime() -> Path:
+    """Build beside the live library and replace it only after success."""
+    output = output_path()
+    OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    staged_output = output.with_name(
+        f"{output.stem}.staging{output.suffix}"
+    )
+    staged_output.unlink(missing_ok=True)
+    command = compiler_command(output=staged_output)
+    print("NativeCore build:", " ".join(command))
+    try:
+        subprocess.run(command, cwd=ROOT, check=True)
+        if not staged_output.is_file():
+            raise RuntimeError(
+                f"编译器成功退出但没有生成原生库：{staged_output}"
+            )
+        staged_output.replace(output)
+    finally:
+        staged_output.unlink(missing_ok=True)
+    return output
 
 
 def main() -> int:
@@ -91,12 +113,12 @@ def main() -> int:
     parser.add_argument("--clean", action="store_true", help="先删除旧原生库")
     args = parser.parse_args()
 
-    output = output_path()
-    if args.clean and output.exists():
-        output.unlink()
-    command = compiler_command()
-    print("NativeCore build:", " ".join(command))
-    subprocess.run(command, cwd=ROOT, check=True)
+    if args.clean:
+        print(
+            "NativeCore clean build: live runtime is kept until "
+            "replacement succeeds."
+        )
+    output = build_native_runtime()
     print(f"NativeCore ready: {output}")
     return 0
 

@@ -7,6 +7,7 @@ the same states without importing ``SearchAI`` or creating circular imports.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 
@@ -144,7 +145,10 @@ class SearchConfig:
             raise ValueError("max_depth 必须大于 0。")
         if (
             self.time_limit_seconds is not None
-            and self.time_limit_seconds <= 0
+            and (
+                not math.isfinite(self.time_limit_seconds)
+                or self.time_limit_seconds <= 0
+            )
         ):
             raise ValueError("time_limit_seconds 必须大于 0 或为 None。")
         if self.root_candidate_limit < 1:

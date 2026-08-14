@@ -15,6 +15,8 @@ ABI_VERSION = 1
 STATUS_NOT_FOUND = 0
 STATUS_FOUND = 1
 STATUS_CUTOFF = 2
+MIN_BOARD_SIZE = 5
+MAX_BOARD_SIZE = 25
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +142,12 @@ class NativeCore:
         flattened = b"".join(map(bytes, board.grid))
         return (ctypes.c_uint8 * len(flattened)).from_buffer_copy(flattened)
 
+    @staticmethod
+    def _supports_board(board: Board) -> bool:
+        # The C ABI validates this same range.  Larger Python boards remain
+        # supported by returning ``None`` and using the reference kernels.
+        return MIN_BOARD_SIZE <= board.size <= MAX_BOARD_SIZE
+
     def find_winning_moves(
         self,
         board: Board,
@@ -147,7 +155,7 @@ class NativeCore:
         candidates: Sequence[Move] | None = None,
     ) -> list[Move] | None:
         library = self._library
-        if library is None:
+        if library is None or not self._supports_board(board):
             return None
         grid = self._grid(board)
         if candidates is None:
@@ -184,7 +192,7 @@ class NativeCore:
         player: int,
     ) -> NativeThreatProfile | None:
         library = self._library
-        if library is None:
+        if library is None or not self._supports_board(board):
             return None
         grid = self._grid(board)
         output = (ctypes.c_int * (5 + board.size * board.size))()
@@ -222,7 +230,7 @@ class NativeCore:
         player: int,
     ) -> list[NativeThreatProfile] | None:
         library = self._library
-        if library is None:
+        if library is None or not self._supports_board(board):
             return None
         if not moves:
             return []
@@ -272,7 +280,7 @@ class NativeCore:
         minimum: int,
     ) -> tuple[bool, ...] | None:
         library = self._library
-        if library is None:
+        if library is None or not self._supports_board(board):
             return None
         if not moves:
             return ()
@@ -304,7 +312,7 @@ class NativeCore:
         candidate_limit: int,
     ) -> NativeVCFResult | None:
         library = self._library
-        if library is None:
+        if library is None or not self._supports_board(board):
             return None
         grid = self._grid(board)
         output = (ctypes.c_int * (board.size * board.size))()

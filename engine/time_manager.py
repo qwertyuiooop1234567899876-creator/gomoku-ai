@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass
 
@@ -16,7 +17,10 @@ class TimeManager:
 
     def __post_init__(self) -> None:
         if self.time_limit_seconds is not None:
-            if self.time_limit_seconds <= 0:
+            if (
+                not math.isfinite(self.time_limit_seconds)
+                or self.time_limit_seconds <= 0
+            ):
                 raise ValueError("time_limit_seconds 必须大于 0 或为 None。")
             if not 0.5 <= self.soft_ratio < 1.0:
                 raise ValueError("soft_ratio 必须在 0.5～1.0 之间。")
@@ -72,8 +76,15 @@ class TimeManager:
         maximum_seconds: float | None = None,
     ) -> float | None:
         """返回不超过硬截止时间的子任务截止时刻。"""
-        if not 0 < fraction <= 1:
+        if not math.isfinite(fraction) or not 0 < fraction <= 1:
             raise ValueError("fraction 必须在 0～1 之间。")
+        if not math.isfinite(minimum_seconds) or minimum_seconds < 0:
+            raise ValueError("minimum_seconds 必须是非负有限值。")
+        if maximum_seconds is not None and (
+            not math.isfinite(maximum_seconds)
+            or maximum_seconds < 0
+        ):
+            raise ValueError("maximum_seconds 必须是非负有限值或 None。")
 
         if self.time_limit_seconds is None:
             return None

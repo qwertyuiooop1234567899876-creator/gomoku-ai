@@ -38,7 +38,7 @@ from engine.threats import (
     ThreatFrontier,
     ThreatKind,
 )
-from engine.zobrist import get_zobrist_table
+from engine.zobrist import MASK_64, get_zobrist_table
 from engine.search_types import (
     BoundType,
     DefenseProbeResult,
@@ -60,7 +60,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.1 搜索 AI。
+    V0.16.2 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -3416,15 +3416,16 @@ class SearchAI(ScoringAI):
                     and entry.extension_depth >= extension_depth
                 ):
                     self._counters.transposition_hits += 1
+                    tt_score = self._score_from_tt(entry.score, ply)
                     if entry.bound == BoundType.EXACT:
-                        return entry.score, entry.principal_variation
+                        return tt_score, entry.principal_variation
                     if entry.bound == BoundType.LOWER:
-                        alpha = max(alpha, entry.score)
+                        alpha = max(alpha, tt_score)
                     elif entry.bound == BoundType.UPPER:
-                        beta = min(beta, entry.score)
+                        beta = min(beta, tt_score)
                     if alpha >= beta:
                         self._counters.transposition_cutoffs += 1
-                        return entry.score, entry.principal_variation
+                        return tt_score, entry.principal_variation
 
         if depth <= 0:
             score, pv = self._threat_extension(
@@ -3444,6 +3445,7 @@ class SearchAI(ScoringAI):
                 beta_original,
                 pv,
                 pv[0] if pv else None,
+                ply=ply,
             )
             return score, pv
 
@@ -3529,6 +3531,7 @@ class SearchAI(ScoringAI):
             beta_original,
             best_pv,
             best_move,
+            ply=ply,
         )
         return best_score, best_pv
 
@@ -4187,33 +4190,14 @@ class SearchAI(ScoringAI):
         raw_candidates = sorted(
             raw_candidates,
             key=(
-                (
-                    lambda move: self._quick_order_score(
-                        board,
-                        move,
-                        player,
-                    )
-                )
-                if at_root
-                else (
-                    lambda move: (
-                        move == tt_move,
-                        self._killer_priority(move, ply),
-                        self._history_score(player, move),
-                        self._quick_order_score(board, move, player),
-                    )
+                lambda move: self._quick_order_score(
+                    board,
+                    move,
+                    player,
                 )
             ),
             reverse=True,
         )[:preselection_limit]
-
-        if (
-            not at_root
-            and tt_move is not None
-            and board.is_empty(*tt_move)
-        ):
-            if tt_move not in raw_candidates:
-                raw_candidates.append(tt_move)
 
         ranked = self._order_specific_moves(
             board,
@@ -4222,13 +4206,13 @@ class SearchAI(ScoringAI):
             ply=ply,
             tt_move=tt_move,
             full_evaluation=(at_root or ply <= 1),
-            use_search_heuristics=not at_root,
+            # Search heuristics may order a fixed selective set, but must not
+            # decide membership: TT values assume a stable tree for each key.
+            use_search_heuristics=False,
         )
         selected = ranked[:desired_limit]
-        if not at_root:
-            return selected
-        # Cross-move TT/history/killer state may reorder the bounded root set,
-        # but it must never decide which structurally ranked moves are members.
+        # TT/history/killer state may reorder the bounded set, but it must
+        # never decide which structurally ranked moves are members.
         return self._order_specific_moves(
             board,
             selected,
@@ -4501,10 +4485,46 @@ class SearchAI(ScoringAI):
         )
 
     def _position_key(self, board: Board, player: int) -> int:
-        return (
+        position_key = (
             board.zobrist_hash
             ^ get_zobrist_table(board.size).side_key(player)
         )
+        # Non-root move generation deliberately gives a wider radius to the
+        # most recent moves.  The same colored stones can therefore produce a
+        # different selective tree when reached in another order.  Include
+        # that bounded order history in the TT key instead of reusing a score
+        # computed from a different candidate set.
+        history_key = 1_469_598_103_934_665_603
+        recent = board.move_history[-self.config.recent_move_count :]
+        for ordinal, (row, column, stone) in enumerate(recent, start=1):
+            token = (
+                ((row * board.size + column + 1) << 2)
+                ^ stone
+                ^ (ordinal << 12)
+            )
+            history_key ^= token
+            history_key = (
+                history_key * 1_099_511_628_211
+            ) & MASK_64
+        return (position_key ^ history_key) & MASK_64
+
+    @staticmethod
+    def _score_to_tt(score: int, ply: int) -> int:
+        """Store mate-band scores independently of the current root ply."""
+        if score > HEURISTIC_SCORE_LIMIT:
+            return score + ply
+        if score < -HEURISTIC_SCORE_LIMIT:
+            return score - ply
+        return score
+
+    @staticmethod
+    def _score_from_tt(score: int, ply: int) -> int:
+        """Restore a TT mate-band score for the current root ply."""
+        if score > HEURISTIC_SCORE_LIMIT:
+            return score - ply
+        if score < -HEURISTIC_SCORE_LIMIT:
+            return score + ply
+        return score
 
     def _tt_best_move(self, board: Board, player: int) -> Move | None:
         entry = self._transposition_table.get(
@@ -4524,6 +4544,8 @@ class SearchAI(ScoringAI):
         beta_original: int,
         principal_variation: tuple[Move, ...],
         best_move: Move | None,
+        *,
+        ply: int,
     ) -> None:
         if not self.config.use_transposition_table:
             return
@@ -4536,13 +4558,26 @@ class SearchAI(ScoringAI):
             bound = BoundType.EXACT
 
         previous = self._transposition_table.get(key)
-        if previous is not None and previous.depth > depth:
-            return
+        if previous is not None:
+            if previous.depth > depth:
+                return
+            if (
+                previous.depth == depth
+                and previous.extension_depth > extension_depth
+            ):
+                return
+            if (
+                previous.depth == depth
+                and previous.extension_depth == extension_depth
+                and previous.bound is BoundType.EXACT
+                and bound is not BoundType.EXACT
+            ):
+                return
 
         self._transposition_table[key] = TTEntry(
             depth=depth,
             extension_depth=extension_depth,
-            score=score,
+            score=self._score_to_tt(score, ply),
             bound=bound,
             best_move=best_move,
             principal_variation=principal_variation,

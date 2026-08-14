@@ -9,6 +9,13 @@ DEFAULT_ARENA_SETTINGS_PATH = Path("arena_settings.json")
 VALID_ENGINES = ("random", "tactical", "scoring", "search", "yixin")
 
 
+def _boolean_setting(payload: dict[str, Any], key: str, default: bool) -> bool:
+    value = payload.get(key, default)
+    if not isinstance(value, bool):
+        raise TypeError(f"{key} 必须是 JSON 布尔值。")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class AISelection:
     """一方参赛 AI 的类型与搜索时间参数。"""
@@ -120,12 +127,11 @@ def load_arena_settings(
                 white_payload,
                 defaults.white,
             ),
-            watch=bool(payload.get("watch", defaults.watch)),
-            show_evaluation=bool(
-                payload.get(
-                    "show_evaluation",
-                    defaults.show_evaluation,
-                )
+            watch=_boolean_setting(payload, "watch", defaults.watch),
+            show_evaluation=_boolean_setting(
+                payload,
+                "show_evaluation",
+                defaults.show_evaluation,
             ),
             delay_seconds=float(
                 payload.get(
@@ -133,8 +139,10 @@ def load_arena_settings(
                     defaults.delay_seconds,
                 )
             ),
-            save_record=bool(
-                payload.get("save_record", defaults.save_record)
+            save_record=_boolean_setting(
+                payload,
+                "save_record",
+                defaults.save_record,
             ),
         )
     except (

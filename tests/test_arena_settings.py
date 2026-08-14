@@ -49,6 +49,18 @@ class TestArenaSettings(unittest.TestCase):
 
         self.assertEqual(ArenaSettings(), loaded)
 
+    def test_string_booleans_do_not_silently_enable_features(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "wrong-types.json"
+            path.write_text(
+                json.dumps({"show_evaluation": "false"}),
+                encoding="utf-8",
+            )
+            loaded = load_arena_settings(path)
+
+        self.assertEqual(ArenaSettings(), loaded)
+        self.assertFalse(loaded.show_evaluation)
+
     def test_saved_file_is_valid_json(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "arena_settings.json"

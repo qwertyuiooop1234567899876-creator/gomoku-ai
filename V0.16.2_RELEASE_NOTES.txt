@@ -1,0 +1,25 @@
+Gomoku AI V0.16.2 Full CVC Workflow
+===================================
+
+新增流程
+--------
+新增 run_cvc_workflow.bat，按固定顺序自动完成：
+
+1. SearchAI(d=8,t=60s) 对 SearchAI(d=8,t=60s)。
+2. 使用 YiXin 分析刚刚生成的自对弈 JSON 棋谱。
+3. SearchAI(d=8,t=60s) 黑方对 YiXin(t=10s) 白方。
+4. 使用 YiXin 分析刚刚生成的人机对弈 JSON 棋谱。
+
+可靠性
+------
+- 总控程序直接使用每盘 play_game 返回的 RecordPaths.json，不按目录时间猜测文件，
+  因此不会误分析旧记录。
+- 每一步成功后才进入下一步；任意对局或分析失败都会停止流程并返回非零退出码。
+- BAT 成功时自动关闭，失败时保留窗口并暂停，便于查看错误。
+- 原 run_arena.bat 和 run_cvc_analysis.bat 保留为独立手动入口。
+- 原 run_yixin_cvc.bat 已由完整流程入口替代并删除。
+
+验证
+----
+  python -B -m unittest tests.test_cvc_workflow -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v

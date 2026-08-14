@@ -1,14 +1,20 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku SearchAI vs YiXin V0.16.1
+title Gomoku Full CVC Workflow V0.16.2
 
 echo ========================================
-echo      SearchAI vs YiXin Auto CVC
+echo       Gomoku Full CVC Workflow
 echo ========================================
 echo.
+echo 1. SearchAI vs SearchAI
+echo 2. Analyze the new self-play record
+echo 3. SearchAI vs YiXin
+echo 4. Analyze the new YiXin record
+echo.
 
-if not exist "arena.py" goto no_program
+if not exist "cvc_workflow.py" goto no_program
+if not exist "cvc_analysis.py" goto no_program
 if not exist "yixin\engine.exe" goto no_engine
 
 python -c "import sys" >nul 2>nul
@@ -21,26 +27,27 @@ goto no_python
 
 :use_python
 set "PY_CMD=python"
-goto run_game
+goto run_workflow
 
 :use_py
 set "PY_CMD=py -3"
-goto run_game
+goto run_workflow
 
-:run_game
+:run_workflow
 set "PYTHONUTF8=1"
-%PY_CMD% -X utf8 arena.py --black search --white yixin --black-depth 8 --black-time-limit 60 --white-time-limit 10 --watch --evaluation
+%PY_CMD% -X utf8 cvc_workflow.py
 set "EXIT_CODE=%ERRORLEVEL%"
 if "%EXIT_CODE%"=="0" exit /b 0
 
 echo.
-echo CVC exited with error code %EXIT_CODE%.
+echo Workflow exited with error code %EXIT_CODE%.
+echo The window will remain open for inspection.
 echo.
 pause
 exit /b %EXIT_CODE%
 
 :no_program
-echo ERROR: arena.py was not found in:
+echo ERROR: cvc_workflow.py or cvc_analysis.py was not found in:
 echo %CD%
 echo.
 pause

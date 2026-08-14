@@ -12,6 +12,7 @@ from engine.yixin import (
     YixinEngine,
     YixinPositionEvaluator,
     YixinSearchReport,
+    YixinTimeoutError,
     load_yixin_config,
     render_yixin_evaluation_bar,
     save_yixin_config,
@@ -131,6 +132,17 @@ class TestYixinConfiguration(unittest.TestCase):
     def test_bad_hash_size_is_rejected(self) -> None:
         with self.assertRaises(YixinConfigurationError):
             YixinConfig(hash_size=0)
+
+    def test_string_boolean_is_rejected_in_json_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "yixin.json"
+            path.write_text(
+                json.dumps({"pondering": "false"}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(YixinConfigurationError):
+                load_yixin_config(path)
 
 
 class TestYixinReportParser(unittest.TestCase):
@@ -382,6 +394,34 @@ class TestYixinProtocolClient(unittest.TestCase):
         )
         with self.assertRaises(YixinConfigurationError):
             engine.start()
+
+    def test_failed_startup_reaps_the_child_process(self) -> None:
+        silent_engine = """
+import sys
+for line in sys.stdin:
+    if line.strip().upper() == "END":
+        break
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            script_path = Path(directory) / "silent_yixin.py"
+            script_path.write_text(
+                textwrap.dedent(silent_engine),
+                encoding="utf-8",
+            )
+            engine = YixinEngine(
+                player=BLACK,
+                config=YixinConfig(
+                    executable_path=sys.executable,
+                    launch_arguments=(str(script_path),),
+                    startup_timeout_seconds=0.1,
+                ),
+            )
+
+            with self.assertRaises(YixinTimeoutError):
+                engine.start()
+
+            self.assertFalse(engine.is_running)
+            self.assertTrue(engine._closed)
 
 
 class TestYixinPositionEvaluator(unittest.TestCase):

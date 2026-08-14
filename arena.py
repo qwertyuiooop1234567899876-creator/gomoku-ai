@@ -36,6 +36,31 @@ class GomokuAI(Protocol):
     def close(self) -> None: ...
 
 
+def _close_players(
+    players: Mapping[int, GomokuAI],
+    *,
+    suppress_errors: bool,
+) -> Exception | None:
+    """Close every distinct engine even if one cleanup operation fails."""
+    closed_ids: set[int] = set()
+    first_error: Exception | None = None
+    for ai in players.values():
+        if id(ai) in closed_ids:
+            continue
+        closed_ids.add(id(ai))
+        close = getattr(ai, "close", None)
+        if not callable(close):
+            continue
+        try:
+            close()
+        except Exception as error:
+            if first_error is None:
+                first_error = error
+    if first_error is not None and not suppress_errors:
+        raise first_error
+    return first_error
+
+
 @dataclass(slots=True)
 class GameResult:
     winner: int | None
@@ -55,8 +80,8 @@ ENGINE_MENU = {
 ENGINE_LABELS = {
     "random": "RandomAI（随机基准）",
     "tactical": "TacticalAI（胜负与封堵）",
-    "scoring": "ScoringAI（V0.6.2 评分）",
-    "search": "SearchAI（V0.9.2 风险改选复核、AND/OR 证明与 PVS）",
+    "scoring": "ScoringAI（静态棋型评分与复合威胁）",
+    "search": "SearchAI（PVS、VCF/VCT、AND/OR Proof 与根安全复核）",
     "yixin": "YiXin（2017 Kernel 0.6.69 外部核心）",
 }
 
@@ -195,6 +220,7 @@ def play_game(
 
     current_player = BLACK
     winner: int | None = None
+    cleanup_error: Exception | None = None
     game_started = time.perf_counter()
 
     print()
@@ -300,14 +326,12 @@ def play_game(
 
             current_player = next_player
     finally:
-        closed_ids: set[int] = set()
-        for ai in players.values():
-            if id(ai) in closed_ids:
-                continue
-            closed_ids.add(id(ai))
-            close = getattr(ai, "close", None)
-            if callable(close):
-                close()
+        cleanup_error = _close_players(
+            players,
+            # Preserve an active game exception.  On normal completion the
+            # cleanup error is raised only after the finished record is saved.
+            suppress_errors=True,
+        )
 
     duration_seconds = time.perf_counter() - game_started
     result = result_text(winner)
@@ -340,6 +364,9 @@ def play_game(
         print(f"TXT 棋谱：{record_paths.txt}")
         print(f"JSON 诊断：{record_paths.json}")
 
+    if cleanup_error is not None:
+        raise cleanup_error
+
     return GameResult(
         winner=winner,
         move_count=len(recorder.moves),
@@ -356,8 +383,8 @@ def _prompt_engine(
     print(f"请选择{side_text}引擎：")
     print("  1  RandomAI   随机落子基准")
     print("  2  TacticalAI 立即胜负、封堵、邻近落子")
-    print("  3  ScoringAI  V0.6.2 棋型评分与复合威胁")
-    print("  4  SearchAI   V0.9.2 风险改选复核、AND/OR 证明、PVS 与 VCF")
+    print("  3  ScoringAI  静态棋型评分与复合威胁")
+    print("  4  SearchAI   PVS、VCF/VCT、AND/OR Proof 与根安全复核")
     print("  5  YiXin      2017 Kernel 0.6.69 外部核心")
 
     default_number = {

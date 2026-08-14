@@ -216,6 +216,12 @@ def _optional_positive_integer(value: Any) -> int | None:
     return int(value)
 
 
+def _boolean_config(value: Any, *, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{field_name} 必须是 JSON 布尔值。")
+    return value
+
+
 def load_yixin_config(
     path: str | Path = DEFAULT_YIXIN_SETTINGS_PATH,
 ) -> YixinConfig:
@@ -292,14 +298,17 @@ def load_yixin_config(
                 payload.get("checkmate", defaults.checkmate)
             ),
             rule=int(payload.get("rule", defaults.rule)),
-            pondering=bool(
-                payload.get("pondering", defaults.pondering)
+            pondering=_boolean_config(
+                payload.get("pondering", defaults.pondering),
+                field_name="pondering",
             ),
-            show_detail=bool(
-                payload.get("show_detail", defaults.show_detail)
+            show_detail=_boolean_config(
+                payload.get("show_detail", defaults.show_detail),
+                field_name="show_detail",
             ),
-            use_database=bool(
-                payload.get("use_database", defaults.use_database)
+            use_database=_boolean_config(
+                payload.get("use_database", defaults.use_database),
+                field_name="use_database",
             ),
             max_depth=_optional_positive_integer(
                 payload.get("max_depth", defaults.max_depth)
@@ -624,16 +633,26 @@ class YixinEngine:
                 f"无法启动 YiXin 核心：{error}"
             ) from error
 
-        self._reader_thread = threading.Thread(
-            target=self._read_output,
-            name="yixin-output-reader",
-            daemon=True,
-        )
-        self._reader_thread.start()
-        self._send(f"START {self.config.board_size}")
-        self._wait_for_startup()
-        for command_text in self.config.info_commands():
-            self._send(command_text)
+        try:
+            self._reader_thread = threading.Thread(
+                target=self._read_output,
+                name="yixin-output-reader",
+                daemon=True,
+            )
+            self._reader_thread.start()
+            self._send(f"START {self.config.board_size}")
+            self._wait_for_startup()
+            for command_text in self.config.info_commands():
+                self._send(command_text)
+        except BaseException:
+            # ``start`` can fail before a caller enters its own try/finally
+            # block.  Reap the child here so a failed handshake never leaves
+            # an engine process or reader thread behind.
+            try:
+                self.close()
+            except Exception:
+                pass
+            raise
 
     @staticmethod
     def _decode_line(raw_line: bytes) -> str:

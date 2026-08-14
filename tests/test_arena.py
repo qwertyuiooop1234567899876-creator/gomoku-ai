@@ -1,10 +1,12 @@
 import io
+from pathlib import Path
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from arena import (
     _analysis_to_dict,
+    _close_players,
     create_ai,
     engine_display_name,
     play_game,
@@ -14,6 +16,7 @@ from engine.arena_settings import AISelection
 from engine.board import BLACK, WHITE, Board
 from engine.evaluator import PositionEvaluation
 from engine.search import SearchAI
+from engine.records import RecordPaths
 from engine.yixin import YixinEngine
 
 
@@ -107,6 +110,70 @@ class TestArenaAnalysisCompatibility(unittest.TestCase):
             },
             _analysis_to_dict(ai),
         )
+
+    def test_all_players_close_when_one_cleanup_fails(self) -> None:
+        class FailingAI:
+            def close(self) -> None:
+                raise RuntimeError("close failed")
+
+        class TrackingAI:
+            closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        tracking = TrackingAI()
+
+        with self.assertRaisesRegex(RuntimeError, "close failed"):
+            _close_players(
+                {BLACK: FailingAI(), WHITE: tracking},
+                suppress_errors=False,
+            )
+
+        self.assertTrue(tracking.closed)
+
+    def test_completed_game_is_saved_before_cleanup_error_is_raised(
+        self,
+    ) -> None:
+        class RowAI:
+            def __init__(self, player: int) -> None:
+                self.player = player
+                self.last_analysis = None
+
+            def choose_move(self, board: Board) -> tuple[int, int]:
+                row = 0 if self.player == BLACK else 1
+                return next(
+                    (row, column)
+                    for column in range(board.size)
+                    if board.is_empty(row, column)
+                )
+
+            def close(self) -> None:
+                if self.player == BLACK:
+                    raise RuntimeError("close failed")
+
+        with (
+            patch(
+                "arena.create_ai",
+                side_effect=lambda _selection, player: RowAI(player),
+            ),
+            patch(
+                "arena.GameRecorder.save",
+                return_value=RecordPaths(
+                    txt=Path("finished.txt"),
+                    json=Path("finished.json"),
+                ),
+            ) as save,
+            redirect_stdout(io.StringIO()),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "close failed"):
+                play_game(
+                    black=AISelection("random"),
+                    white=AISelection("random"),
+                    save_record=True,
+                )
+
+        save.assert_called_once()
 
 
 class TestArenaYixinEvaluationBar(unittest.TestCase):
