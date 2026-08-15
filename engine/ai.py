@@ -162,6 +162,8 @@ class DecisionAnalysis:
     selected_move: Move
     reason: str
     candidate_count: int
+    evaluation_profile: str | None = None
+    evaluation_parameters: tuple[tuple[str, int], ...] = ()
     top_candidates: tuple[CandidateAnalysis, ...] = ()
     root_candidate_sources: tuple[
         tuple[Move, tuple[str, ...]], ...
@@ -259,6 +261,8 @@ class DecisionAnalysis:
             "selected_coordinate": format_move(*self.selected_move),
             "reason": self.reason,
             "candidate_count": self.candidate_count,
+            "evaluation_profile": self.evaluation_profile,
+            "evaluation_parameters": dict(self.evaluation_parameters),
             "root_candidate_sources": [
                 {
                     "move": list(move),

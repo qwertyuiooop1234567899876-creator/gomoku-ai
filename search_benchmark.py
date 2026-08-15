@@ -10,6 +10,11 @@ from pathlib import Path
 
 from engine import evaluator
 from engine.board import BLACK, WHITE, Board
+from engine.evaluator import (
+    DEFAULT_SEARCH_EVALUATION_CONFIG,
+    STATIC_SEARCH_EVALUATION_CONFIG,
+    EvaluationConfig,
+)
 from engine.game import format_move, parse_move
 from engine.search import SearchAI
 from engine.version import ENGINE_VERSION
@@ -98,12 +103,18 @@ def build_board(coordinates: tuple[str, ...]) -> Board:
 
 
 def clear_evaluator_cache() -> None:
-    clear = getattr(evaluator._score_line, "cache_clear", None)
+    clear = getattr(evaluator._score_line_features, "cache_clear", None)
     if clear is not None:
         clear()
 
 
-def run_once(case: BenchmarkCase) -> BenchmarkRun:
+def run_once(
+    case: BenchmarkCase,
+    *,
+    evaluation_config: EvaluationConfig = (
+        DEFAULT_SEARCH_EVALUATION_CONFIG
+    ),
+) -> BenchmarkRun:
     clear_evaluator_cache()
     board = build_board(case.coordinates)
     before = (
@@ -116,6 +127,7 @@ def run_once(case: BenchmarkCase) -> BenchmarkRun:
         player=case.player,
         max_depth=case.max_depth,
         time_limit_seconds=case.time_limit_seconds,
+        evaluation_config=evaluation_config,
         diagnostics=True,
     )
 
@@ -177,6 +189,7 @@ def summarize_case(
 def print_report(report: dict[str, object]) -> None:
     print(
         f"SearchAI benchmark | V{report['engine_version']} | "
+        f"profile={report['evaluation_profile']} | "
         f"repeat={report['repeat']}"
     )
     print(
@@ -219,6 +232,12 @@ def main() -> None:
         help="只运行一个局面。",
     )
     parser.add_argument(
+        "--evaluation-profile",
+        choices=("tempo-v1", "static-v1"),
+        default="tempo-v1",
+        help="选择叶面评估配置（默认 tempo-v1）。",
+    )
+    parser.add_argument(
         "--json",
         type=Path,
         help="可选：把完整结果写入 JSON。",
@@ -232,9 +251,17 @@ def main() -> None:
         for case in CASES
         if args.case is None or case.name == args.case
     ]
+    evaluation_config = (
+        DEFAULT_SEARCH_EVALUATION_CONFIG
+        if args.evaluation_profile == "tempo-v1"
+        else STATIC_SEARCH_EVALUATION_CONFIG
+    )
     summaries = []
     for case in selected_cases:
-        runs = [run_once(case) for _ in range(args.repeat)]
+        runs = [
+            run_once(case, evaluation_config=evaluation_config)
+            for _ in range(args.repeat)
+        ]
         summaries.append(summarize_case(case, runs))
 
     report = {
@@ -242,6 +269,10 @@ def main() -> None:
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "repeat": args.repeat,
+        "evaluation_profile": evaluation_config.profile_name,
+        "evaluation_parameters": dict(
+            evaluation_config.parameter_items()
+        ),
         "cases": summaries,
     }
     print_report(report)

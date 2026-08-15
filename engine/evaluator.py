@@ -16,6 +16,7 @@ FOUR_SCORE = 1_000_000
 OPEN_THREE_SCORE = 100_000
 YIXIN_DECISIVE_SCORE = 10_000
 YIXIN_DISPLAY_SCALE = 400.0
+MAX_INITIATIVE_CAP = 10_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +36,80 @@ class PositionEvaluation:
     @property
     def available(self) -> bool:
         return self.score_white is not None and self.error is None
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationConfig:
+    """Immutable, instance-scoped weights for SearchAI leaf evaluation."""
+
+    profile_name: str = "tempo-v1"
+    initiative_open_three_bonus: int = 8_000
+    initiative_jump_three_bonus: int = 5_000
+    initiative_cap: int = 10_000
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.profile_name, str):
+            raise TypeError("profile_name 必须是字符串。")
+        if not self.profile_name.strip():
+            raise ValueError("profile_name 不能为空。")
+        for name, value in self.parameter_items():
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} 必须是整数。")
+            if value < 0:
+                raise ValueError(f"{name} 不能小于 0。")
+        if self.initiative_cap > MAX_INITIATIVE_CAP:
+            raise ValueError(
+                "initiative_cap 不能超过安全上限 "
+                f"{MAX_INITIATIVE_CAP}。"
+            )
+
+    def parameter_items(self) -> tuple[tuple[str, int], ...]:
+        return (
+            (
+                "initiative_open_three_bonus",
+                self.initiative_open_three_bonus,
+            ),
+            (
+                "initiative_jump_three_bonus",
+                self.initiative_jump_three_bonus,
+            ),
+            ("initiative_cap", self.initiative_cap),
+        )
+
+
+DEFAULT_SEARCH_EVALUATION_CONFIG = EvaluationConfig()
+STATIC_SEARCH_EVALUATION_CONFIG = EvaluationConfig(
+    profile_name="static-v1",
+    initiative_open_three_bonus=0,
+    initiative_jump_three_bonus=0,
+    initiative_cap=0,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationBreakdown:
+    """Auditable components of one side-to-move-aware search score."""
+
+    perspective: int
+    side_to_move: int
+    perspective_pattern_score: int
+    opponent_pattern_score: int
+    static_score: int
+    side_to_move_open_threes: int
+    side_to_move_jump_threes: int
+    initiative_suppressed_by_forcing: bool
+    initiative_bonus: int
+    initiative_adjustment: int
+    total_score: int
+    profile_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class _PlayerPatternFeatures:
+    score: int = 0
+    open_threes: int = 0
+    jump_threes: int = 0
+    forcing_patterns: int = 0
 
 
 # 只维护一个方向的基础棋型，镜像会自动生成。
@@ -73,6 +148,7 @@ def _build_pattern_scores() -> tuple[tuple[str, int], ...]:
 
 
 PATTERN_SCORES = _build_pattern_scores()
+_JUMP_THREE_PATTERNS = frozenset((".XX.X.", ".X.XX."))
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,10 +306,13 @@ def _iter_lines(board: Board) -> Iterator[list[int]]:
 
 
 @lru_cache(maxsize=65_536)
-def _score_line(text: str) -> int:
-    """强棋型优先且不让同一段字符被重复计分。"""
+def _score_line_features(text: str) -> tuple[int, int, int, int]:
+    """Return pattern features from the same non-overlap scoring pass."""
     occupied = [False] * len(text)
     total = 0
+    open_threes = 0
+    jump_threes = 0
+    forcing_patterns = 0
 
     for pattern, score in PATTERN_SCORES:
         start = 0
@@ -247,12 +326,50 @@ def _score_line(text: str) -> int:
 
             if not any(occupied[index:end]):
                 total += score
+                if score >= FOUR_SCORE:
+                    forcing_patterns += 1
+                elif pattern == ".XXX.":
+                    open_threes += 1
+                elif pattern in _JUMP_THREE_PATTERNS:
+                    jump_threes += 1
                 for position in range(index, end):
                     occupied[position] = True
 
             start = index + 1
 
-    return total
+    return total, open_threes, jump_threes, forcing_patterns
+
+
+def _score_line(text: str) -> int:
+    """强棋型优先且不让同一段字符被重复计分。"""
+    return _score_line_features(text)[0]
+
+
+def _evaluate_player_features(
+    board: Board,
+    player: int,
+) -> _PlayerPatternFeatures:
+    score = 0
+    open_threes = 0
+    jump_threes = 0
+    forcing_patterns = 0
+    for line in _iter_lines(board):
+        (
+            line_score,
+            line_open_threes,
+            line_jump_threes,
+            line_forcing_patterns,
+        ) = _score_line_features(_line_to_text(line, player))
+        score += line_score
+        open_threes += line_open_threes
+        jump_threes += line_jump_threes
+        forcing_patterns += line_forcing_patterns
+    return _PlayerPatternFeatures(
+        score=score,
+        open_threes=open_threes,
+        jump_threes=jump_threes,
+        forcing_patterns=forcing_patterns,
+    )
 
 
 def evaluate_player(board: Board, player: int) -> int:
@@ -273,6 +390,107 @@ def evaluate_board(board: Board, perspective: int) -> int:
         evaluate_player(board, perspective)
         - evaluate_player(board, opponent)
     )
+
+
+def _evaluate_search(
+    board: Board,
+    perspective: int,
+    side_to_move: int,
+    *,
+    config: EvaluationConfig,
+    include_breakdown: bool,
+) -> int | EvaluationBreakdown:
+    if not isinstance(config, EvaluationConfig):
+        raise TypeError("config 必须是 EvaluationConfig。")
+    opponent = other_side(perspective)
+    if side_to_move not in (BLACK, WHITE):
+        raise ValueError("side_to_move 只能是 BLACK 或 WHITE。")
+    if not include_breakdown and config.initiative_cap == 0:
+        return evaluate_board(board, perspective)
+
+    perspective_features = _evaluate_player_features(board, perspective)
+    opponent_features = _evaluate_player_features(board, opponent)
+    side_features = (
+        perspective_features
+        if side_to_move == perspective
+        else opponent_features
+    )
+    static_score = perspective_features.score - opponent_features.score
+    initiative_suppressed_by_forcing = bool(
+        perspective_features.forcing_patterns
+        or opponent_features.forcing_patterns
+    )
+    raw_initiative = 0
+    if not initiative_suppressed_by_forcing:
+        raw_initiative = (
+            side_features.open_threes * config.initiative_open_three_bonus
+            + side_features.jump_threes * config.initiative_jump_three_bonus
+        )
+    initiative_bonus = min(config.initiative_cap, raw_initiative)
+    initiative_adjustment = (
+        initiative_bonus
+        if side_to_move == perspective
+        else -initiative_bonus
+    )
+    total_score = static_score + initiative_adjustment
+    if not include_breakdown:
+        return total_score
+    return EvaluationBreakdown(
+        perspective=perspective,
+        side_to_move=side_to_move,
+        perspective_pattern_score=perspective_features.score,
+        opponent_pattern_score=opponent_features.score,
+        static_score=static_score,
+        side_to_move_open_threes=side_features.open_threes,
+        side_to_move_jump_threes=side_features.jump_threes,
+        initiative_suppressed_by_forcing=(
+            initiative_suppressed_by_forcing
+        ),
+        initiative_bonus=initiative_bonus,
+        initiative_adjustment=initiative_adjustment,
+        total_score=total_score,
+        profile_name=config.profile_name,
+    )
+
+
+def evaluate_search_features(
+    board: Board,
+    perspective: int,
+    side_to_move: int,
+    *,
+    config: EvaluationConfig = DEFAULT_SEARCH_EVALUATION_CONFIG,
+) -> EvaluationBreakdown:
+    """Evaluate a search leaf without conflating score sign and move tempo."""
+    result = _evaluate_search(
+        board,
+        perspective,
+        side_to_move,
+        config=config,
+        include_breakdown=True,
+    )
+    if isinstance(result, int):
+        raise AssertionError("feature evaluation did not return a breakdown")
+    return result
+
+
+def evaluate_search_position(
+    board: Board,
+    perspective: int,
+    side_to_move: int,
+    *,
+    config: EvaluationConfig = DEFAULT_SEARCH_EVALUATION_CONFIG,
+) -> int:
+    """Return the side-to-move-aware leaf score used by SearchAI."""
+    result = _evaluate_search(
+        board,
+        perspective,
+        side_to_move,
+        config=config,
+        include_breakdown=False,
+    )
+    if not isinstance(result, int):
+        raise AssertionError("score evaluation returned a breakdown")
+    return result
 
 
 def _center_bonus(board: Board, row: int, column: int) -> int:

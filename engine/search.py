@@ -15,9 +15,11 @@ from engine.ai import (
 )
 from engine.board import DIRECTIONS, EMPTY, WHITE, Board
 from engine.evaluator import (
+    DEFAULT_SEARCH_EVALUATION_CONFIG,
+    EvaluationConfig,
     ThreatProfile,
-    evaluate_board,
     evaluate_move,
+    evaluate_search_position,
     find_winning_moves,
     other_side,
 )
@@ -128,6 +130,9 @@ class SearchAI(ScoringAI):
         root_candidate_limit: int = 12,
         branch_candidate_limit: int = 8,
         threat_extension_depth: int = 2,
+        evaluation_config: EvaluationConfig = (
+            DEFAULT_SEARCH_EVALUATION_CONFIG
+        ),
         diagnostics: bool = False,
         top_n: int = 5,
     ) -> None:
@@ -143,6 +148,9 @@ class SearchAI(ScoringAI):
             branch_candidate_limit=branch_candidate_limit,
             threat_extension_depth=threat_extension_depth,
         )
+        if not isinstance(evaluation_config, EvaluationConfig):
+            raise TypeError("evaluation_config 必须是 EvaluationConfig。")
+        self._evaluation_config = evaluation_config
         self._time = TimeManager.start(None)
         self._counters = SearchCounters()
         self._transposition_table: dict[int, TTEntry] = {}
@@ -2180,7 +2188,11 @@ class SearchAI(ScoringAI):
             if board.check_win(*move):
                 score = MATE_SCORE
             else:
-                score = self._static_score(board, self.player)
+                score = self._static_score(
+                    board,
+                    perspective=self.player,
+                    side_to_move=self.opponent,
+                )
         finally:
             board.undo()
         self._root_heuristic_score_cache[key] = score
@@ -2853,6 +2865,7 @@ class SearchAI(ScoringAI):
                     )
                 )
             ),
+            evaluation_config=self.evaluation_config,
             diagnostics=False,
         )
         probe.config = replace(
@@ -3040,6 +3053,7 @@ class SearchAI(ScoringAI):
             root_candidate_limit=max(2, len(candidates)),
             branch_candidate_limit=self.config.defense_vct_branch_limit,
             threat_extension_depth=self.config.defense_vct_extension_depth,
+            evaluation_config=self.evaluation_config,
             diagnostics=False,
         )
         probe.config = replace(
@@ -3165,6 +3179,7 @@ class SearchAI(ScoringAI):
             threat_extension_depth=(
                 self.config.mandatory_defense_extension_depth
             ),
+            evaluation_config=self.evaluation_config,
             diagnostics=False,
         )
         probe.config = replace(
@@ -3535,7 +3550,11 @@ class SearchAI(ScoringAI):
             tt_move=tt_move,
         )
         if not moves:
-            return self._static_score(board, player), ()
+            return self._static_score(
+                board,
+                perspective=player,
+                side_to_move=player,
+            ), ()
 
         best_score = -INFINITY
         best_move: Move | None = None
@@ -3647,7 +3666,11 @@ class SearchAI(ScoringAI):
             return -MATE_SCORE + ply, ()
 
         if extension_depth <= 0:
-            return self._static_score(board, player), ()
+            return self._static_score(
+                board,
+                perspective=player,
+                side_to_move=player,
+            ), ()
 
         if len(opponent_wins) == 1:
             forcing_moves = opponent_wins
@@ -3669,7 +3692,11 @@ class SearchAI(ScoringAI):
             )
 
         if not forcing_moves:
-            return self._static_score(board, player), ()
+            return self._static_score(
+                board,
+                perspective=player,
+                side_to_move=player,
+            ), ()
 
         self._counters.extensions += 1
         best_score = -INFINITY
@@ -4555,8 +4582,26 @@ class SearchAI(ScoringAI):
             player,
         )
 
-    def _static_score(self, board: Board, player: int) -> int:
-        score = evaluate_board(board, player)
+    @property
+    def evaluation_config(self) -> EvaluationConfig:
+        """Return the immutable evaluation profile fixed for this AI."""
+        return self._evaluation_config
+
+    def _static_score(
+        self,
+        board: Board,
+        perspective: int,
+        side_to_move: int | None = None,
+    ) -> int:
+        """Evaluate one leaf with score sign and move tempo kept separate."""
+        if side_to_move is None:
+            side_to_move = perspective
+        score = evaluate_search_position(
+            board,
+            perspective=perspective,
+            side_to_move=side_to_move,
+            config=self.evaluation_config,
+        )
         return max(
             -HEURISTIC_SCORE_LIMIT,
             min(HEURISTIC_SCORE_LIMIT, score),
@@ -4828,6 +4873,10 @@ class SearchAI(ScoringAI):
             selected_move=selected_move,
             reason=reason,
             candidate_count=candidate_count,
+            evaluation_profile=self.evaluation_config.profile_name,
+            evaluation_parameters=(
+                self.evaluation_config.parameter_items()
+            ),
             top_candidates=tuple(top_candidates),
             root_candidate_sources=tuple(
                 (

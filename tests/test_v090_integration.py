@@ -678,7 +678,7 @@ class TestV090ScoreAndVersionSeparation(unittest.TestCase):
         board = Board()
 
         with patch(
-            "engine.search.evaluate_board",
+            "engine.search.evaluate_search_position",
             return_value=10_000_000_000,
         ):
             self.assertEqual(
@@ -686,7 +686,7 @@ class TestV090ScoreAndVersionSeparation(unittest.TestCase):
                 ai._static_score(board, BLACK),
             )
         with patch(
-            "engine.search.evaluate_board",
+            "engine.search.evaluate_search_position",
             return_value=-10_000_000_000,
         ):
             self.assertEqual(
