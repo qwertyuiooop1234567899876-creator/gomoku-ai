@@ -160,10 +160,11 @@ def review_pool(
     proof_candidates: Sequence[ProofCandidateAnalysis],
     *,
     critical_moves: Sequence[Move] = (),
+    active_moves: Sequence[Move] = (),
     quiet_moves: Sequence[Move],
     offensive_moves: Sequence[Move],
 ) -> list[Move]:
-    """Unify PVS, risk, quiet, and offensive sources under one fixed cap."""
+    """Unify searched and structural sources under one fixed cap."""
 
     available = {move for move, _score in result.ranked_moves}
     ranked_others = [
@@ -180,6 +181,7 @@ def review_pool(
         result.move,
         *critical_moves,
         *pvs[1:],
+        *active_moves,
         *(() if risk is None else (risk,)),
         *quiet_moves,
         *offensive_moves,
@@ -192,6 +194,7 @@ def review_pool(
                 result.move,
                 *critical_moves,
                 *pvs[: config.root_dynamic_review_pvs_limit],
+                *active_moves[:1],
                 *offensive_moves,
             )
         )
@@ -264,7 +267,7 @@ def finalists(
     score_challengers = [
         (move, score)
         for move, score in result.ranked_moves
-        if move in pool and move != result.move
+        if move in pool and move not in selected
     ]
     if score_challengers:
         selected.append(

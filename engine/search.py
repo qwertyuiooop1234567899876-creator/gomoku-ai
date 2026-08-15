@@ -1266,6 +1266,7 @@ class SearchAI(ScoringAI):
                     at_root=True,
                     ply=0,
                     tt_move=self._tt_best_move(board, self.player),
+                    use_search_heuristics=False,
                 )
                 if len(frontier_candidates) == 1
                 else []
@@ -2551,11 +2552,24 @@ class SearchAI(ScoringAI):
             self._root_offensive_continuations,
             self._root_dual_frontier_bridges,
         )
+        active_moves = tuple(
+            move
+            for move in root_candidates.merge_unique(
+                self._root_attack_priority,
+                tuple(move for move, _score in result.ranked_moves),
+            )
+            if (
+                move in legal
+                and root_candidates.CandidateSource.ACTIVE_COUNTERATTACK
+                in self._root_candidate_sources.get(move, ())
+            )
+        )
         pool = root_review.review_pool(
             self.config,
             result,
             self._proof_candidates,
             critical_moves=critical_moves,
+            active_moves=active_moves,
             quiet_moves=quiet_moves,
             offensive_moves=offensive_moves,
         )
@@ -2575,6 +2589,7 @@ class SearchAI(ScoringAI):
                 break
 
         preferred_groups = [
+            active_moves,
             (() if lowest_risk is None else (lowest_risk,)),
             self._root_dual_frontier_bridges,
             self._root_offensive_continuations,
@@ -4244,6 +4259,7 @@ class SearchAI(ScoringAI):
         ply: int,
         limit: int | None = None,
         tt_move: Move | None = None,
+        use_search_heuristics: bool = True,
     ) -> list[Move]:
         legal_moves = board.get_legal_moves()
         if not legal_moves:
@@ -4251,7 +4267,11 @@ class SearchAI(ScoringAI):
 
         own_wins = self._timed_winning_moves(board, player, legal_moves)
         if own_wins:
-            return self._promote_move(own_wins, tt_move)
+            return (
+                self._promote_move(own_wins, tt_move)
+                if use_search_heuristics
+                else own_wins
+            )
 
         opponent = other_side(player)
         opponent_wins = self._timed_winning_moves(
@@ -4269,6 +4289,7 @@ class SearchAI(ScoringAI):
                 ply=ply,
                 tt_move=tt_move,
                 full_evaluation=(at_root or ply <= 1),
+                use_search_heuristics=use_search_heuristics,
             )
 
         raw_candidates = self._raw_candidates(
@@ -4325,7 +4346,7 @@ class SearchAI(ScoringAI):
             ply=ply,
             tt_move=tt_move,
             full_evaluation=True,
-            use_search_heuristics=True,
+            use_search_heuristics=use_search_heuristics,
         )
 
     def _raw_candidates(
