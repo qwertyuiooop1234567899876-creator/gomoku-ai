@@ -15,6 +15,12 @@ from engine.evaluator import evaluate_board
 from engine.game import format_move, other_player
 from engine.records import GameRecorder, RecordPaths
 from engine.version import ENGINE_VERSION
+from gomoku_ui_common import (
+    ClickConfirmation,
+    clone_board,
+    normalized_ai_selection,
+    stone_name,
+)
 
 
 Move = tuple[int, int]
@@ -87,42 +93,8 @@ class BoardGeometry:
         return row, column
 
 
-@dataclass(slots=True)
-class ClickConfirmation:
-    pending: Move | None = None
-
-    def register(self, move: Move) -> bool:
-        """Return True only when the same intersection is selected twice."""
-        if self.pending == move:
-            self.pending = None
-            return True
-        self.pending = move
-        return False
-
-    def cancel(self) -> None:
-        self.pending = None
-
-
-def normalized_ai_selection(
-    engine_name: str,
-    depth_value: float,
-    time_value: float,
-) -> AISelection:
-    depth = min(8, max(1, int(round(depth_value))))
-    time_limit = min(60.0, max(0.5, round(time_value * 2) / 2))
-    return AISelection(
-        engine_name=engine_name,
-        max_depth=depth,
-        time_limit_seconds=time_limit,
-    )
-
-
 def side_name(player: int) -> str:
     return "黑棋" if player == BLACK else "白棋"
-
-
-def stone_name(player: int) -> str:
-    return "黑棋 ●" if player == BLACK else "白棋 ○"
 
 
 class GomokuApp:
@@ -232,7 +204,11 @@ class GomokuApp:
         )
         style.map(
             "Accent.TButton",
-            background=[("active", COLORS["accent_hover"])],
+            background=[
+                ("disabled", COLORS["panel_alt"]),
+                ("active", COLORS["accent_hover"]),
+            ],
+            foreground=[("disabled", COLORS["muted"])],
         )
         style.configure(
             "Panel.TButton",
@@ -240,6 +216,31 @@ class GomokuApp:
             foreground=COLORS["text"],
             padding=(9, 7),
             font=("Microsoft YaHei UI", 9),
+        )
+        style.map(
+            "Panel.TButton",
+            background=[
+                ("disabled", COLORS["panel_alt"]),
+                ("active", "#2b3d50"),
+            ],
+            foreground=[("disabled", "#66788a")],
+        )
+        style.configure(
+            "Panel.TCombobox",
+            fieldbackground=COLORS["panel_alt"],
+            background=COLORS["panel_alt"],
+            foreground=COLORS["text"],
+            arrowcolor=COLORS["muted"],
+            bordercolor="#33465b",
+            lightcolor="#33465b",
+            darkcolor="#33465b",
+        )
+        style.map(
+            "Panel.TCombobox",
+            fieldbackground=[("readonly", COLORS["panel_alt"])],
+            foreground=[("readonly", COLORS["text"])],
+            selectbackground=[("readonly", COLORS["panel_alt"])],
+            selectforeground=[("readonly", COLORS["text"])],
         )
         style.configure(
             "Panel.TRadiobutton",
@@ -269,6 +270,31 @@ class GomokuApp:
             font=("Microsoft YaHei UI", 9, "bold"),
         )
         style.map("Treeview", background=[("selected", "#31586a")])
+        style.configure(
+            "AI.Horizontal.TProgressbar",
+            troughcolor=COLORS["panel_alt"],
+            background=COLORS["accent"],
+            lightcolor=COLORS["accent"],
+            darkcolor=COLORS["accent"],
+            bordercolor=COLORS["panel_alt"],
+            thickness=8,
+        )
+        style.configure(
+            "Panel.TNotebook",
+            background=COLORS["panel"],
+            bordercolor=COLORS["panel_alt"],
+        )
+        style.configure(
+            "Panel.TNotebook.Tab",
+            background=COLORS["panel_alt"],
+            foreground=COLORS["muted"],
+            padding=(10, 5),
+        )
+        style.map(
+            "Panel.TNotebook.Tab",
+            background=[("selected", "#2b3d50")],
+            foreground=[("selected", COLORS["text"])],
+        )
 
     def _build_layout(self) -> None:
         outer = ttk.Frame(self.root, style="App.TFrame", padding=14)
@@ -353,15 +379,20 @@ class GomokuApp:
         progress_frame = ttk.Frame(sidebar, style="Panel.TFrame", padding=(8, 7))
         progress_frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
         progress_frame.columnconfigure(0, weight=1)
-        self.progress = ttk.Progressbar(progress_frame, mode="indeterminate")
+        self.progress = ttk.Progressbar(
+            progress_frame,
+            mode="indeterminate",
+            style="AI.Horizontal.TProgressbar",
+        )
         self.progress.grid(row=0, column=0, sticky="ew")
+        self.progress.grid_remove()
         ttk.Label(
             progress_frame,
             textvariable=self.score_var,
             style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(5, 0))
 
-        notebook = ttk.Notebook(sidebar)
+        notebook = ttk.Notebook(sidebar, style="Panel.TNotebook")
         notebook.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
         moves_tab = ttk.Frame(notebook, style="Panel.TFrame", padding=6)
         analysis_tab = ttk.Frame(notebook, style="Panel.TFrame", padding=6)
@@ -456,6 +487,7 @@ class GomokuApp:
             textvariable=self.engine_var,
             values=tuple(AI_LABELS),
             state="readonly",
+            style="Panel.TCombobox",
             font=("Microsoft YaHei UI", 9),
         )
         self.engine_combo.grid(row=3, column=0, sticky="ew", pady=(3, 8))
@@ -816,11 +848,12 @@ class GomokuApp:
         self._set_status(
             f"{stone_name(self.ai_player)} · {engine_display_name(self.ai_selection)} 正在思考…"
         )
+        self.progress.grid()
         self.progress.start(12)
         self._update_action_buttons()
         token = self._game_token
         ai = self.ai
-        board = self.board
+        board = clone_board(self.board)
 
         def worker() -> None:
             started = time.perf_counter()
@@ -864,6 +897,7 @@ class GomokuApp:
             return
         self.ai_thinking = False
         self.progress.stop()
+        self.progress.grid_remove()
         if error is not None:
             self._set_status(f"AI 运行失败：{error}")
             self._update_action_buttons()
@@ -1179,6 +1213,9 @@ class GomokuApp:
         )
         self.new_button.configure(
             state=("disabled" if self.ai_thinking else "normal")
+        )
+        self.save_button.configure(
+            state=("normal" if self.recorder.moves else "disabled")
         )
 
     def _update_slider_labels(self) -> None:

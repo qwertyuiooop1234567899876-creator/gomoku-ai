@@ -5,14 +5,16 @@ from pathlib import Path
 from threading import Event
 from unittest.mock import patch
 
-from engine.board import BLACK
+from engine.board import BLACK, WHITE, Board
 from engine.game import parse_move
 from gomoku_ui import (
     BoardGeometry,
     ClickConfirmation,
+    GomokuApp,
     normalized_ai_selection,
 )
 from gomoku_web_ui import WebGameController
+from gomoku_ui_common import clone_board
 
 
 class _BlockingAI:
@@ -76,6 +78,16 @@ class TestUIAISelection(unittest.TestCase):
         self.assertEqual(8, selection.max_depth)
         self.assertEqual(0.5, selection.time_limit_seconds)
 
+    def test_search_board_snapshot_is_independent(self) -> None:
+        board = Board()
+        board.place(*parse_move("H8"), BLACK)
+
+        snapshot = clone_board(board)
+        snapshot.place(*parse_move("I8"), WHITE)
+
+        self.assertEqual(1, len(board.move_history))
+        self.assertEqual(2, len(snapshot.move_history))
+
 
 class TestWebGameController(unittest.TestCase):
     def test_second_click_commits_human_move_and_starts_ai(self) -> None:
@@ -105,6 +117,46 @@ class TestWebGameController(unittest.TestCase):
         self.assertIn('id="depth"', html)
         self.assertIn('id="time"', html)
         self.assertIn('id="confirm"', html)
+
+    def test_browser_backend_does_not_import_tk_desktop_ui(self) -> None:
+        project_root = Path(__file__).parents[1]
+        backend = (project_root / "gomoku_web_ui.py").read_text(encoding="utf-8")
+        launcher = (project_root / "run_game_web.bat").read_text(encoding="utf-8")
+
+        self.assertNotIn("import tkinter", backend)
+        self.assertNotIn("from gomoku_ui import", backend)
+        self.assertIn("gomoku_web_ui.py", launcher)
+
+
+class TestTkDesktopWindow(unittest.TestCase):
+    def test_window_builds_with_requested_controls(self) -> None:
+        try:
+            import tkinter as tk
+        except ImportError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+            return
+        try:
+            root = tk.Tk()
+        except tk.TclError as error:
+            self.skipTest(f"Tk display is unavailable: {error}")
+            return
+        root.withdraw()
+        fake_ai = _BlockingAI(Event())
+        app = None
+        try:
+            with patch("gomoku_ui.create_ai", return_value=fake_ai):
+                app = GomokuApp(root)
+            root.update_idletasks()
+
+            self.assertEqual("readonly", str(app.engine_combo.cget("state")))
+            self.assertIn("disabled", app.save_button.state())
+            self.assertEqual("", app.progress.winfo_manager())
+            self.assertEqual(15, app.board.size)
+        finally:
+            if app is not None:
+                app._closed = True
+                app._close_ai()
+            root.destroy()
 
 
 if __name__ == "__main__":

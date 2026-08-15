@@ -19,7 +19,12 @@ from engine.evaluator import evaluate_board
 from engine.game import format_move, other_player
 from engine.records import GameRecorder, RecordPaths
 from engine.version import ENGINE_VERSION
-from gomoku_ui import ClickConfirmation, normalized_ai_selection, stone_name
+from gomoku_ui_common import (
+    ClickConfirmation,
+    clone_board,
+    normalized_ai_selection,
+    stone_name,
+)
 
 
 STATIC_FILE = Path(__file__).with_name("ui") / "gomoku.html"
@@ -36,13 +41,6 @@ def _analysis_dict(ai: object) -> dict[str, Any] | None:
         value = to_dict()
         return dict(value) if isinstance(value, Mapping) else None
     return None
-
-
-def _clone_board(board: Board) -> Board:
-    clone = Board(size=board.size)
-    for row, column, player in board.move_history:
-        clone.place(row, column, player)
-    return clone
 
 
 class WebGameController:
@@ -219,7 +217,7 @@ class WebGameController:
         self.status = f"{engine_display_name(self.selection)} 正在思考…"
         token = self._token
         ai = self.ai
-        board = _clone_board(self.board)
+        board = clone_board(self.board)
         threading.Thread(
             target=self._ai_worker,
             args=(token, ai, board),
