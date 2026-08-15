@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Gomoku AI · 点击落子</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b111b;
+      --panel: rgba(22, 32, 46, .94);
+      --panel-2: #202d3d;
+      --text: #edf4fa;
+      --muted: #95a8bd;
+      --accent: #4bc0ad;
+      --accent-2: #77ddca;
+      --wood: #d4a45c;
+      --wood-dark: #956a35;
+      --danger: #ef747c;
+      font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 8%, rgba(75,192,173,.13), transparent 28rem),
+        radial-gradient(circle at 96% 95%, rgba(77,125,181,.12), transparent 34rem),
+        var(--bg);
+      overflow-x: hidden;
+    }
+    button, select, input { font: inherit; }
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(285px, 330px) minmax(560px, 1fr) minmax(260px, 330px);
+      gap: 18px;
+      padding: 18px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(151,175,199,.14);
+      border-radius: 18px;
+      box-shadow: 0 18px 45px rgba(0,0,0,.24);
+    }
+    aside { padding: 22px; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+    .logo {
+      width: 45px; height: 45px; border-radius: 14px;
+      display: grid; place-items: center;
+      background: linear-gradient(145deg, #5bd1bd, #2c887d);
+      color: #09201d; font-size: 25px; font-weight: 900;
+      box-shadow: 0 8px 25px rgba(75,192,173,.24);
+    }
+    h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
+    .version { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .section { padding-top: 18px; margin-top: 18px; border-top: 1px solid rgba(151,175,199,.13); }
+    .section:first-of-type { border-top: 0; padding-top: 0; }
+    .label-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+    .label { font-weight: 700; font-size: 13px; }
+    .value { color: var(--accent-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+    select {
+      width: 100%; padding: 11px 12px; border-radius: 10px;
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid rgba(151,175,199,.2); outline: none;
+    }
+    input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .segmented input { display: none; }
+    .segmented label {
+      padding: 9px 8px; border-radius: 9px; text-align: center; cursor: pointer;
+      background: var(--panel-2); border: 1px solid transparent; color: var(--muted);
+    }
+    .segmented input:checked + label { border-color: var(--accent); color: var(--text); background: rgba(75,192,173,.12); }
+    .switch { display: flex; gap: 9px; align-items: center; font-size: 13px; color: var(--muted); }
+    .switch input { accent-color: var(--accent); width: 16px; height: 16px; }
+    .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 18px; }
+    button {
+      border: 0; border-radius: 10px; padding: 10px 12px; cursor: pointer;
+      color: var(--text); background: var(--panel-2); transition: .16s ease;
+    }
+    button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.13); }
+    button:disabled { opacity: .42; cursor: not-allowed; }
+    button.primary { background: linear-gradient(135deg, #4bc0ad, #329d91); color: #061d19; font-weight: 800; }
+    button.wide { grid-column: 1 / -1; }
+    .board-area { display: flex; flex-direction: column; min-width: 0; padding: 15px; }
+    .statusbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      min-height: 50px; padding: 0 7px 12px;
+    }
+    .status { font-weight: 700; line-height: 1.4; }
+    .turn-chip { white-space: nowrap; padding: 7px 10px; border-radius: 99px; color: var(--accent-2); background: rgba(75,192,173,.1); font-size: 12px; }
+    .board-wrap {
+      position: relative; width: min(100%, calc(100vh - 115px)); aspect-ratio: 1;
+      margin: auto; border-radius: 15px; overflow: hidden;
+      border: 4px solid var(--wood-dark);
+      box-shadow: inset 0 0 35px rgba(72,39,10,.25), 0 18px 40px rgba(0,0,0,.24);
+      background: var(--wood);
+    }
+    canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: manipulation; }
+    .thinking {
+      position: absolute; inset: 0; display: none; place-items: center;
+      background: rgba(11,17,27,.25); backdrop-filter: blur(1px); pointer-events: none;
+    }
+    .thinking.show { display: grid; }
+    .thinking-card { padding: 11px 16px; border-radius: 99px; background: rgba(14,23,34,.9); border: 1px solid rgba(75,192,173,.35); }
+    .dot { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity: .25; transform: scale(.75); } }
+    .confirmbar { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 12px 7px 0; }
+    .confirmbar .hint { grid-column: 1 / -1; color: var(--muted); font-size: 12px; text-align: center; min-height: 17px; }
+    .right { display: flex; flex-direction: column; padding: 20px; min-height: 0; }
+    .eval { padding: 15px; border-radius: 13px; background: var(--panel-2); }
+    .eval-head { display: flex; justify-content: space-between; font-size: 13px; }
+    .meter { height: 8px; margin-top: 10px; border-radius: 99px; overflow: hidden; background: #0f151e; }
+    .meter > div { width: 50%; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#3d4b5a,#f1f1e8); transition: width .3s; }
+    .tabs { display: flex; gap: 7px; margin: 18px 0 10px; }
+    .tabs button { flex: 1; padding: 8px; font-size: 13px; }
+    .tabs button.active { background: rgba(75,192,173,.16); color: var(--accent-2); }
+    .tabview { display: none; min-height: 0; flex: 1; overflow: auto; }
+    .tabview.active { display: block; }
+    .moves { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    .moves th { position: sticky; top: 0; background: #16202e; color: var(--muted); text-align: left; font-size: 11px; padding: 8px; }
+    .moves td { padding: 8px; border-bottom: 1px solid rgba(151,175,199,.1); font-size: 13px; }
+    pre { white-space: pre-wrap; word-break: break-word; color: #c4d2e0; font: 12px/1.55 Consolas, monospace; margin: 0; }
+    .toast {
+      position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 25px);
+      opacity: 0; pointer-events: none; z-index: 5; padding: 11px 17px; border-radius: 10px;
+      background: #29394c; box-shadow: 0 12px 35px rgba(0,0,0,.35); transition: .2s;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { background: #743a42; }
+    @media (max-width: 1050px) {
+      .app { grid-template-columns: 285px minmax(500px, 1fr); }
+      .right { grid-column: 1 / -1; min-height: 360px; }
+    }
+    @media (max-width: 780px) {
+      .app { display: flex; flex-direction: column; padding: 9px; }
+      aside { order: 2; } .board-area { order: 1; } .right { order: 3; }
+      .board-wrap { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="panel">
+      <div class="brand"><div class="logo">五</div><div><h1>Gomoku AI</h1><div class="version" id="version">本地棋盘 UI</div></div></div>
+
+      <div class="section">
+        <div class="label-row"><span class="label">AI 类别</span><span class="value">折叠列表</span></div>
+        <select id="engine">
+          <option value="search">SearchAI · 深度搜索 / VCF / VCT / Proof</option>
+          <option value="scoring">ScoringAI · 静态棋型评分</option>
+          <option value="tactical">TacticalAI · 胜负与封堵</option>
+          <option value="random">RandomAI · 随机基准</option>
+          <option value="yixin">YiXin · 外部引擎</option>
+        </select>
+      </div>
+
+      <div class="section">
+        <div class="label-row"><span class="label">搜索深度</span><span class="value" id="depthValue">3 层</span></div>
+        <input id="depth" type="range" min="1" max="8" step="1" value="3">
+        <div class="label-row" style="margin-top:15px"><span class="label">每步时间</span><span class="value" id="timeValue">2 秒</span></div>
+        <input id="time" type="range" min="0.5" max="60" step="0.5" value="2">
+      </div>
+
+      <div class="section">
+        <div class="label-row"><span class="label">玩家执子</span></div>
+        <div class="segmented">
+          <input type="radio" name="side" id="sideBlack" value="black" checked><label for="sideBlack">● 黑棋先手</label>
+          <input type="radio" name="side" id="sideWhite" value="white"><label for="sideWhite">○ 白棋后手</label>
+        </div>
+        <label class="switch" style="margin-top:14px"><input id="autoSave" type="checkbox" checked>对局结束自动保存新棋谱</label>
+      </div>
+
+      <div class="buttons">
+        <button class="primary wide" id="newGame">开始新对局</button>
+        <button id="undo">悔棋一回合</button>
+        <button id="save">保存棋谱</button>
+      </div>
+    </aside>
+
+    <section class="panel board-area">
+      <div class="statusbar"><div class="status" id="status">正在连接本地引擎…</div><div class="turn-chip" id="turn">准备中</div></div>
+      <div class="board-wrap">
+        <canvas id="board" aria-label="15 路五子棋棋盘"></canvas>
+        <div class="thinking" id="thinking"><div class="thinking-card"><span class="dot"></span>AI 正在思考</div></div>
+      </div>
+      <div class="confirmbar">
+        <div class="hint" id="hint">第一次点击预选，第二次点击同一点确认</div>
+        <button class="primary" id="confirm" disabled>确认落子 · Enter</button>
+        <button id="cancel" disabled>取消预选 · Esc</button>
+      </div>
+    </section>
+
+    <section class="panel right">
+      <div class="eval">
+        <div class="eval-head"><strong>静态局面</strong><span id="evalText">均衡 · 0</span></div>
+        <div class="meter"><div id="evalMeter"></div></div>
+      </div>
+      <div class="tabs"><button class="active" data-tab="movesView">着法记录</button><button data-tab="analysisView">AI 分析</button></div>
+      <div class="tabview active" id="movesView">
+        <table class="moves"><thead><tr><th>#</th><th>棋色</th><th>坐标</th></tr></thead><tbody id="moveRows"></tbody></table>
+      </div>
+      <div class="tabview" id="analysisView"><pre id="analysis">尚无 AI 分析。</pre></div>
+    </section>
+  </main>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const canvas = $('board');
+    const ctx = canvas.getContext('2d');
+    let state = null;
+    let busy = false;
+    let firstState = true;
+
+    async function api(path, payload = {}) {
+      const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+      const data = await response.json();
+      if (!data.ok) throw new Error(data.error || '操作失败');
+      return data.result;
+    }
+
+    function toast(message, error=false) {
+      const box = $('toast'); box.textContent = message; box.className = `toast show${error?' error':''}`;
+      clearTimeout(box.timer); box.timer = setTimeout(() => box.className='toast', 2600);
+    }
+
+    function controlsPayload() {
+      return {
+        engine:$('engine').value, depth:Number($('depth').value), time_limit:Number($('time').value),
+        side:document.querySelector('input[name=side]:checked').value, auto_save:$('autoSave').checked
+      };
+    }
+
+    function syncSliders() {
+      $('depthValue').textContent = `${$('depth').value} 层`;
+      $('timeValue').textContent = `${Number($('time').value).toFixed(Number($('time').value)%1?1:0)} 秒`;
+      const engine = $('engine').value;
+      $('depth').disabled = engine !== 'search';
+      $('time').disabled = !['search','yixin'].includes(engine);
+    }
+
+    function geometry() {
+      const rect=canvas.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+      if (canvas.width!==Math.round(rect.width*dpr) || canvas.height!==Math.round(rect.height*dpr)) {
+        canvas.width=Math.round(rect.width*dpr); canvas.height=Math.round(rect.height*dpr);
+      }
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      const pad=Math.max(31,rect.width*.06), cell=(rect.width-pad*2)/14;
+      return {rect,pad,cell};
+    }
+
+    function drawBoard() {
+      if (!state) return;
+      const {rect,pad,cell}=geometry();
+      ctx.clearRect(0,0,rect.width,rect.height);
+      const wood=ctx.createLinearGradient(0,0,rect.width,rect.height); wood.addColorStop(0,'#dfb46c'); wood.addColorStop(1,'#c8934d');
+      ctx.fillStyle=wood; ctx.fillRect(0,0,rect.width,rect.height);
+      ctx.strokeStyle='rgba(76,50,24,.86)'; ctx.lineWidth=1;
+      for(let i=0;i<15;i++){
+        const p=pad+i*cell; ctx.beginPath(); ctx.moveTo(pad,p); ctx.lineTo(pad+14*cell,p); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(p,pad); ctx.lineTo(p,pad+14*cell); ctx.stroke();
+      }
+      ctx.fillStyle='#55391d'; for(const [r,c] of [[3,3],[3,11],[7,7],[11,3],[11,11]]){ctx.beginPath();ctx.arc(pad+c*cell,pad+r*cell,Math.max(2.4,cell*.075),0,Math.PI*2);ctx.fill();}
+      ctx.font=`${Math.max(10,cell*.28)}px "Segoe UI"`; ctx.fillStyle='rgba(65,42,20,.85)'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      for(let i=0;i<15;i++){ctx.fillText(String.fromCharCode(65+i),pad+i*cell,pad-cell*.62);ctx.fillText(String(i+1),pad-cell*.65,pad+i*cell);}
+      const radius=cell*.405;
+      state.grid.forEach((row,r)=>row.forEach((stone,c)=>{if(stone) drawStone(pad+c*cell,pad+r*cell,radius,stone,false);}));
+      if(state.pending) drawStone(pad+state.pending.column*cell,pad+state.pending.row*cell,radius,state.human_player,true);
+      if(state.moves.length){const last=state.moves[state.moves.length-1];const x=pad+last.column*cell,y=pad+last.row*cell;ctx.strokeStyle='#e84e4e';ctx.lineWidth=2;ctx.strokeRect(x-radius*.22,y-radius*.22,radius*.44,radius*.44);}
+    }
+
+    function drawStone(x,y,r,player,preview) {
+      ctx.save(); ctx.globalAlpha=preview?.62:1;
+      ctx.beginPath();ctx.ellipse(x+r*.11,y+r*.17,r*.96,r*.88,0,0,Math.PI*2);ctx.fillStyle='rgba(20,15,10,.25)';ctx.fill();
+      const g=ctx.createRadialGradient(x-r*.28,y-r*.32,r*.08,x,y,r);
+      if(player===1){g.addColorStop(0,'#53606d');g.addColorStop(.36,'#222a33');g.addColorStop(1,'#070a0e');}
+      else{g.addColorStop(0,'#fff');g.addColorStop(.45,'#f2f0e8');g.addColorStop(1,'#a8adb1');}
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+      ctx.strokeStyle=preview?'#1e6e64':(player===1?'#05080a':'#83888d');ctx.lineWidth=preview?3:1;ctx.setLineDash(preview?[5,4]:[]);ctx.stroke();
+      if(preview){ctx.setLineDash([]);ctx.fillStyle='#114b44';ctx.font=`bold ${r}px "Segoe UI"`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('✓',x,y);}
+      ctx.restore();
+    }
+
+    function render(s) {
+      state=s; $('version').textContent=`本地棋盘 UI · V${s.version}`; $('status').textContent=s.status;
+      $('turn').textContent=s.game_over?'对局结束':s.ai_thinking?'AI 回合':s.current_player===s.human_player?'你的回合':'等待 AI';
+      $('thinking').classList.toggle('show',s.ai_thinking);
+      const canMove=!s.game_over&&!s.ai_thinking&&s.current_player===s.human_player;
+      $('confirm').disabled=!canMove||!s.pending; $('cancel').disabled=!s.pending; $('undo').disabled=s.ai_thinking||s.moves.length<2;
+      $('newGame').disabled=s.ai_thinking; $('save').disabled=!s.moves.length;
+      $('hint').textContent=s.pending?`已预选 ${String.fromCharCode(65+s.pending.column)}${s.pending.row+1}，再次点击或确认后落子`:'第一次点击预选，第二次点击同一点确认';
+      const e=Number(s.evaluation||0), pct=50+Math.max(-45,Math.min(45,e/4000));
+      $('evalMeter').style.width=`${pct}%`; $('evalText').textContent=`${e>0?'白方优势':e<0?'黑方优势':'均衡'} · ${e>0?'+':''}${e}`;
+      $('moveRows').innerHTML=s.moves.map(m=>`<tr><td>${m.number}</td><td>${m.player===1?'● 黑':'○ 白'}</td><td>${m.coordinate}</td></tr>`).join('');
+      const body=$('moveRows'); if(body.lastElementChild) body.lastElementChild.scrollIntoView({block:'nearest'});
+      $('analysis').textContent=s.analysis?JSON.stringify(s.analysis,null,2):'尚无 AI 分析。';
+      drawBoard();
+      if(firstState){$('engine').value=s.engine;$('depth').value=s.depth;$('time').value=s.time_limit;$('autoSave').checked=s.auto_save;syncSliders();firstState=false;}
+    }
+
+    canvas.addEventListener('click', async ev=>{
+      if(!state||busy||state.game_over||state.ai_thinking||state.current_player!==state.human_player)return;
+      const {rect,pad,cell}=geometry(), c=Math.round((ev.clientX-rect.left-pad)/cell), r=Math.round((ev.clientY-rect.top-pad)/cell);
+      if(r<0||r>14||c<0||c>14)return;
+      const x=pad+c*cell,y=pad+r*cell;if(Math.max(Math.abs(ev.clientX-rect.left-x),Math.abs(ev.clientY-rect.top-y))>cell*.45)return;
+      try{busy=true;render(await api('/api/select',{row:r,column:c}));}catch(e){toast(e.message,true);}finally{busy=false;}
+    });
+    $('confirm').onclick=async()=>{try{render(await api('/api/confirm'));}catch(e){toast(e.message,true);}};
+    $('cancel').onclick=async()=>{try{render(await api('/api/cancel'));}catch(e){toast(e.message,true);}};
+    $('undo').onclick=async()=>{try{render(await api('/api/undo'));}catch(e){toast(e.message,true);}};
+    $('save').onclick=async()=>{try{const r=await api('/api/save');render(r.state);toast(`已保存：${r.paths.json}`);}catch(e){toast(e.message,true);}};
+    $('newGame').onclick=async()=>{
+      if(state?.moves.length&&!confirm('开始新对局会清空当前棋盘，是否继续？'))return;
+      try{render(await api('/api/new',controlsPayload()));toast('新对局已开始');}catch(e){toast(e.message,true);}
+    };
+    for(const id of ['engine','depth','time']) $(id).addEventListener('input',syncSliders);
+    document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('confirm').disabled)$('confirm').click();if(e.key==='Escape'&&!$('cancel').disabled)$('cancel').click();});
+    for(const button of document.querySelectorAll('.tabs button')) button.onclick=()=>{document.querySelectorAll('.tabs button,.tabview').forEach(x=>x.classList.remove('active'));button.classList.add('active');$(button.dataset.tab).classList.add('active');};
+    window.addEventListener('resize',drawBoard);
+    window.addEventListener('beforeunload',()=>navigator.sendBeacon('/api/shutdown',new Blob(['{}'],{type:'application/json'})));
+    async function poll(){try{const r=await fetch('/api/state',{cache:'no-store'});render(await r.json());}catch(e){$('status').textContent='本地引擎连接已关闭';}setTimeout(poll,state?.ai_thinking?160:550);}
+    syncSliders(); poll();
+  </script>
+</body>
+</html>
