@@ -379,20 +379,24 @@ def mandatory_defense_moves(
     *,
     defense_moves: Iterable[Move],
     forcing_counterattack_moves: Iterable[Move],
+    active_counterattack_moves: Iterable[Move] = (),
     limit: int,
 ) -> list[Move]:
-    """Keep direct blocks and bounded tempo-gaining counterattacks.
+    """Keep direct blocks and bounded counterattack representatives.
 
     A direct double-threat block is not always the only defensive resource.
     A four-making move can force the opponent to answer first and thereby
-    interrupt the threatened sequence.  Both classes are only candidates;
-    PVS and Proof still decide whether either line actually survives.
+    interrupt the threatened sequence.  Against a singleton heuristic threat,
+    an open-three counterattack can also intercept the dependency line or gain
+    enough initiative to survive.  Every class remains candidate evidence;
+    PVS and Proof still decide whether any line actually survives.
     """
     defenses = tuple(defense_moves)
-    counterattacks = tuple(forcing_counterattack_moves)
+    forcing = tuple(forcing_counterattack_moves)
+    active = tuple(active_counterattack_moves)
     return merge_with_required(
-        ordered_groups=(defenses, counterattacks),
-        required_groups=(defenses, counterattacks),
+        ordered_groups=(defenses, forcing, active),
+        required_groups=(defenses, forcing, active),
         limit=limit,
     )
 

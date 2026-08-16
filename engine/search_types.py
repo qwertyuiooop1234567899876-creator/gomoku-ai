@@ -136,6 +136,7 @@ class SearchConfig:
     root_quiet_prevention_min_depth: int = 4
     root_frontier_truth_score_margin: int = 30_000
     root_forcing_counterattack_min_depth: int = 4
+    root_mandatory_active_counterattack_limit: int = 2
     root_survival_scan_limit: int = 16
     root_survival_min_depth: int = 4
     root_unverified_advantage_threshold: int = 900_000
@@ -407,6 +408,10 @@ class SearchConfig:
         if self.root_forcing_counterattack_min_depth < 1:
             raise ValueError(
                 "root_forcing_counterattack_min_depth 必须大于 0。"
+            )
+        if self.root_mandatory_active_counterattack_limit < 0:
+            raise ValueError(
+                "root_mandatory_active_counterattack_limit 不能小于 0。"
             )
 
 

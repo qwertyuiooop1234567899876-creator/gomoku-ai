@@ -1,0 +1,33 @@
+Gomoku AI V0.16.3 Mandatory Defense Candidate Repair
+=====================================================
+
+问题
+----
+- 对手只有一个启发式强制胜点时，根候选曾只保留直接防守和冲四反击。
+- 已被威胁图识别的活三反击或同线截击点会在 PVS、VCF/VCT 和 ProofSearch
+  之前消失，导致引擎即使有完整思考时间也只搜索一个候选。
+
+修复
+----
+- 单点强制防守模式现在额外保留最多两个主动活三反击代表。
+- 直接防守、冲四反击和主动反击分别预留来源席位，根候选总数仍受原上限约束。
+- 新候选仍只属于启发式候选证据；ProofSearch 的 UNKNOWN 不会被改写成安全、胜或负。
+- 复用完整相关点画像，避免为单点防守重复扫描同一批根候选。
+
+记录驱动回归
+------------
+- 自对弈第 17 手结构局面：I6 必须以 active_counterattack 来源进入根集合。
+- SearchAI 对 YiXin 第 21 手结构局面：H7 必须以 active_counterattack 来源进入根集合。
+- 两个回归都直接构造最小局面，不复制、不恢复 records/ 下的历史文件。
+
+验证
+----
+  python -B -m unittest tests.test_v0163_mandatory_active_counterattack -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 3
+
+实战说明
+--------
+- 在第 21 手同根局面按 d=8、t=60s 重跑，修复后的 SearchAI 完成深度 8 后选择 H7，
+  不再因根候选只有 L7 而立即进入 YiXin 的必胜区。
+- 单局复现只能确认决策链已修复；整体棋力仍需用新的换色自对弈和 YiXin 对局验证。

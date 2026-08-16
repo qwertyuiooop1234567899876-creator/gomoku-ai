@@ -1,4 +1,4 @@
 """Single source of truth for engine and record versions."""
 
-ENGINE_VERSION = "0.16.2"
+ENGINE_VERSION = "0.16.3"
 RECORD_FORMAT_VERSION = "1.2"

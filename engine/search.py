@@ -62,7 +62,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.2 搜索 AI。
+    V0.16.3 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -1111,12 +1111,8 @@ class SearchAI(ScoringAI):
             # to hiding a tempo defense.  Multiple direct defenses already
             # receive their dedicated bounded VCT comparison; widening those
             # roots as well would dilute that budget with unrelated fours.
-            full_own_profiles = (
-                self._profile_moves_timed(
-                    board,
-                    self._root_relevant_pool(board, legal_moves),
-                    self.player,
-                )
+            mandatory_own_profiles = (
+                full_own_profiles
                 if len(opponent_forcing_moves) == 1
                 else {}
             )
@@ -1124,7 +1120,7 @@ class SearchAI(ScoringAI):
                 self._order_specific_moves(
                     board,
                     root_candidates.forcing_counterattack_moves(
-                        full_own_profiles
+                        mandatory_own_profiles
                     ),
                     self.player,
                     ply=0,
@@ -1135,11 +1131,25 @@ class SearchAI(ScoringAI):
                 >= self.config.root_forcing_counterattack_min_depth
                 else []
             )
+            counterattack_truth_moves = self._order_specific_moves(
+                board,
+                root_candidates.active_counterattack_moves(
+                    mandatory_own_profiles
+                ),
+                self.player,
+                ply=0,
+                tt_move=None,
+                full_evaluation=True,
+            )[
+                : self.config.root_mandatory_active_counterattack_limit
+            ]
+            self._root_attack_priority = tuple(counterattack_truth_moves)
             search_candidates = self._order_specific_moves(
                 board,
                 root_candidates.mandatory_defense_moves(
                     defense_moves=opponent_forcing_moves,
                     forcing_counterattack_moves=forcing_counterattacks,
+                    active_counterattack_moves=counterattack_truth_moves,
                     limit=self.config.root_candidate_limit,
                 ),
                 self.player,
@@ -1155,6 +1165,10 @@ class SearchAI(ScoringAI):
                 (
                     root_candidates.CandidateSource.FORCING_COUNTERATTACK,
                     forcing_counterattacks,
+                ),
+                (
+                    root_candidates.CandidateSource.ACTIVE_COUNTERATTACK,
+                    counterattack_truth_moves,
                 ),
             ]
             if 2 <= len(search_candidates) <= (
