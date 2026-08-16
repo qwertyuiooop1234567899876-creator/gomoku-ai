@@ -4,13 +4,10 @@ import time
 from dataclasses import replace
 
 from engine.ai import (
-    CandidateAnalysis,
-    DecisionAnalysis,
     DefenseCandidateAnalysis,
     Move,
     ProofCandidateAnalysis,
     RootSafetyCandidateAnalysis,
-    SearchPhaseTiming,
     ScoringAI,
 )
 from engine.board import DIRECTIONS, EMPTY, WHITE, Board
@@ -36,9 +33,12 @@ from engine import root_candidates, root_policy, root_review, root_safety
 from engine.vcf import VCFSearch
 from engine.threats import (
     ThreatAnalyzer,
-    ThreatAnalyzerStats,
     ThreatFrontier,
     ThreatKind,
+)
+from engine.search_diagnostics import (
+    build_search_analysis,
+    compose_search_reason,
 )
 from engine.zobrist import MASK_64, get_zobrist_table
 from engine.search_types import (
@@ -341,19 +341,20 @@ class SearchAI(ScoringAI):
             if completed_depth > 0
             else f"{tactical_reason}（时间不足，使用快速回退）"
         )
-        reason = self._append_root_expansion_reason(
+        reason = compose_search_reason(
             reason,
-            root_expansion_reason,
+            expansion_reason=root_expansion_reason,
+            expansion_hold_applied=self._root_expansion_hold_applied,
+            root_vcf_scan=self._root_vcf_scan,
+            mate_scores_quarantined=self._root_mate_scores_quarantined,
+            defense_risk_override=self._defense_risk_override_applied,
+            root_safety_probe=self._root_safety_probe,
+            root_safety_applied=self._root_safety_applied,
+            final_proof_checked=self._final_proof_checked,
+            final_proof_state=self._final_proof_state,
+            final_proof_completed=self._final_proof_completed,
+            final_proof_rejected=self._final_proof_rejected,
         )
-        if self._root_expansion_hold_applied:
-            reason += "；扩展领跑未完成等窗复核，已按原候选与 Proof 保守仲裁"
-        reason = self._append_root_vcf_reason(reason)
-        if self._root_mate_scores_quarantined:
-            reason += "；未证明 Mate 分已降级为启发式分"
-        if self._defense_risk_override_applied:
-            reason += "；防守探针已由更低的对手威胁风险纠正"
-        reason = self._append_root_safety_reason(reason)
-        reason = self._append_final_proof_reason(reason)
         self._save_search_analysis(
             selected_move=best_result.move,
             reason=reason,
@@ -367,92 +368,6 @@ class SearchAI(ScoringAI):
             stop_reason=stop_reason,
         )
         return best_result.move
-
-    @staticmethod
-    def _append_root_expansion_reason(
-        reason: str,
-        expansion_reason: str | None,
-    ) -> str:
-        if expansion_reason == "near_forced_loss":
-            return reason + "；近必败候选已自动扩展"
-        if expansion_reason == "unverified_advantage":
-            return reason + "；未证实高分已触发全盘生存候选扩展"
-        return reason
-
-    def _append_root_safety_reason(self, reason: str) -> str:
-        probe = self._root_safety_probe
-        if probe is None:
-            return reason
-        if probe.trigger == "dynamic_remaining_review":
-            messages = {
-                "frontier_balance": "；动态余时复核按攻防前沿净增益改选",
-                "equal_window": "；动态余时同窗深层复核完成",
-                "pvs_fallback": "；动态余时复核未形成稳定改选证据",
-            }
-            return reason + messages.get(
-                probe.selection_basis,
-                "；动态余时复核完成",
-            )
-        messages = {
-            ("threat_risk_override", True): (
-                "；独立复核批准风险指标改选"
-            ),
-            ("threat_risk_override", False): (
-                "；风险改选未获确认，保留 PVS 首选"
-            ),
-            ("quiet_frontier_sibling", True): (
-                "；安静前沿深层复核改选候选"
-            ),
-            ("quiet_frontier_sibling", False): (
-                "；安静前沿深层复核保持原候选"
-            ),
-        }
-        return reason + messages.get(
-            (probe.trigger, self._root_safety_applied),
-            (
-                "；决胜节点复核改选近分候选"
-                if self._root_safety_applied
-                else "；决胜节点复核保持原候选"
-            ),
-        )
-
-    def _append_final_proof_reason(self, reason: str) -> str:
-        if self._final_proof_rejected:
-            reason += "；最终 Proof 已淘汰可证败着"
-        if (
-            self._final_proof_completed
-            and self._final_proof_state
-            == ProofState.PROVEN_LOSS.value
-        ):
-            return reason + "；最终候选通过 Proof 生存确认"
-        if (
-            self._final_proof_checked
-            and self._final_proof_state
-            == ProofState.UNKNOWN.value
-        ):
-            return reason + "；最终 Proof 为 UNKNOWN，安全性未确认"
-        if self._final_proof_checked:
-            return reason + "；最终候选未取得严格 Proof 结论"
-        return reason
-
-    def _append_root_vcf_reason(self, reason: str) -> str:
-        scan = self._root_vcf_scan
-        if scan is None:
-            return reason
-        if any(
-            move not in scan.original_candidates
-            for move in scan.candidates
-        ):
-            reason += "；已合并对手 VCF 拦截点"
-        if any(
-            candidate.status
-            == root_safety.RootCandidateSafety.PROVEN_LOSS.value
-            for candidate in scan.analyses
-        ):
-            reason += "；已淘汰对手 VCF 可证败着"
-        if not scan.complete:
-            reason += "；对手 VCF 生存检查部分候选未知"
-        return reason
 
     def _begin_move_search(self) -> None:
         """Reset per-move state while preserving long-lived tables."""
@@ -4931,267 +4846,18 @@ class SearchAI(ScoringAI):
         vcf_depth: int = 0,
         stop_reason: str = "unspecified",
     ) -> None:
-        elapsed = self._time.elapsed_seconds
-        nps = int(self._counters.nodes / elapsed) if elapsed > 0 else 0
-        top_candidates: list[CandidateAnalysis] = []
-
-        if self.diagnostics:
-            own_profiles = own_profiles or {}
-            opponent_profiles = opponent_profiles or {}
-            for move, score in ranked_moves[: self.top_n]:
-                top_candidates.append(
-                    CandidateAnalysis(
-                        move=move,
-                        score=score,
-                        own_threat=(
-                            own_profiles[move].label
-                            if move in own_profiles
-                            else "普通"
-                        ),
-                        opponent_threat=(
-                            opponent_profiles[move].label
-                            if move in opponent_profiles
-                            else "普通"
-                        ),
-                    )
-                )
-
-        soft_limit = (
-            None
-            if self.config.time_limit_seconds is None
-            else (
-                self.config.time_limit_seconds
-                * self.config.soft_time_ratio
-            )
-        )
-        time_used_ratio = (
-            None
-            if self.config.time_limit_seconds is None
-            else min(
-                1.0,
-                elapsed / self.config.time_limit_seconds,
-            )
-        )
-        proof_tt_delta = self._proof_table.stats().delta(
-            self._proof_table_start_stats
-        )
-        threat_stats = (
-            ThreatAnalyzerStats()
-            if self._proof_analyzer is None
-            else self._proof_analyzer.stats()
-        )
-        self.last_analysis = DecisionAnalysis(
+        self.last_analysis = build_search_analysis(
+            self,
             selected_move=selected_move,
             reason=reason,
             candidate_count=candidate_count,
-            evaluation_profile=self.evaluation_config.profile_name,
-            evaluation_parameters=(
-                self.evaluation_config.parameter_items()
-            ),
-            top_candidates=tuple(top_candidates),
-            root_candidate_sources=tuple(
-                (
-                    move,
-                    tuple(
-                        sorted(
-                            source.value
-                            for source in self._root_candidate_sources[move]
-                        )
-                    ),
-                )
-                for move in dict.fromkeys(
-                    (selected_move, *(item[0] for item in ranked_moves))
-                )
-                if move in self._root_candidate_sources
-            ),
-            search_depth=completed_depth,
-            requested_depth=self.config.max_depth,
-            interrupted_depth=self._interrupted_depth,
-            nodes=self._counters.nodes,
-            nps=nps,
-            cutoffs=self._counters.cutoffs,
-            transposition_hits=self._counters.transposition_hits,
-            transposition_cutoffs=self._counters.transposition_cutoffs,
-            transposition_size=len(self._transposition_table),
-            killer_hits=self._counters.killer_hits,
-            history_hits=self._counters.history_hits,
-            extensions=self._counters.extensions,
-            pvs_researches=self._counters.pvs_researches,
-            aspiration_researches=self._counters.aspiration_researches,
-            vcf_found=vcf_found,
-            vcf_depth=vcf_depth,
-            vcf_nodes=self._counters.vcf_nodes,
-            elapsed_seconds=elapsed,
-            soft_time_limit_seconds=soft_limit,
-            hard_time_limit_seconds=self.config.time_limit_seconds,
+            ranked_moves=ranked_moves,
+            completed_depth=completed_depth,
             principal_variation=principal_variation,
             search_completed=search_completed,
+            own_profiles=own_profiles,
+            opponent_profiles=opponent_profiles,
+            vcf_found=vcf_found,
+            vcf_depth=vcf_depth,
             stop_reason=stop_reason,
-            time_used_ratio=time_used_ratio,
-            defense_vct_checked=self._defense_probe is not None,
-            defense_vct_depth=(
-                0
-                if self._defense_probe is None
-                else self._defense_probe.completed_depth
-            ),
-            defense_vct_nodes=(
-                0
-                if self._defense_probe is None
-                else self._defense_probe.nodes
-            ),
-            defense_vct_best_move=(
-                None
-                if self._defense_probe is None
-                else self._defense_probe.best_move
-            ),
-            defense_vct_candidates=(
-                ()
-                if self._defense_probe is None
-                else self._defense_probe.candidates
-            ),
-            proof_checked=(
-                self._proof_root_result is not None
-                or bool(self._proof_candidates)
-            ),
-            proof_state=(
-                "not_checked"
-                if self._proof_root_result is None
-                else self._proof_root_result.state.value
-            ),
-            proof_nodes=self._counters.proof_nodes,
-            proof_elapsed_seconds=(
-                (
-                    0.0
-                    if self._proof_root_result is None
-                    else self._proof_root_result.elapsed_seconds
-                )
-                + sum(
-                    candidate.elapsed_seconds
-                    for candidate in self._proof_candidates
-                )
-            ),
-            proof_best_move=(
-                None
-                if self._proof_root_result is None
-                else self._proof_root_result.best_move
-            ),
-            proof_principal_variation=(
-                ()
-                if self._proof_root_result is None
-                else self._proof_root_result.principal_variation
-            ),
-            proof_cutoff_reason=(
-                None
-                if self._proof_root_result is None
-                else self._proof_root_result.cutoff_reason
-            ),
-            proof_candidates=self._proof_candidates,
-            proof_tt_queries=proof_tt_delta.queries,
-            proof_tt_hits=proof_tt_delta.hits,
-            proof_tt_compatible_hits=(
-                proof_tt_delta.compatible_hits
-            ),
-            proof_tt_stores=proof_tt_delta.stores,
-            proof_tt_skipped_stores=proof_tt_delta.skipped_stores,
-            proof_tt_evictions=proof_tt_delta.evictions,
-            proof_tt_size=proof_tt_delta.size,
-            proof_hint_queries=proof_tt_delta.hint_queries,
-            proof_hint_hits=proof_tt_delta.hint_hits,
-            proof_hint_stores=proof_tt_delta.hint_stores,
-            proof_hint_evictions=proof_tt_delta.hint_evictions,
-            proof_hint_size=proof_tt_delta.hint_size,
-            final_proof_checked=self._final_proof_checked,
-            final_proof_state=self._final_proof_state,
-            final_proof_completed=self._final_proof_completed,
-            final_proof_selected_move=self._final_proof_selected,
-            final_proof_rejected_moves=self._final_proof_rejected,
-            threat_candidate_batches=threat_stats.candidate_batches,
-            threat_exact_descriptions=(
-                threat_stats.exact_descriptions
-            ),
-            threat_frontier_batches=threat_stats.frontier_batches,
-            threat_frontier_descriptions=(
-                threat_stats.frontier_descriptions
-            ),
-            threat_cache_queries=threat_stats.cache_queries,
-            threat_cache_hits=threat_stats.cache_hits,
-            threat_cache_stores=threat_stats.cache_stores,
-            threat_cache_skips=threat_stats.cache_skips,
-            root_safety_checked=self._root_safety_probe is not None,
-            root_safety_applied=self._root_safety_applied,
-            root_safety_trigger=(
-                None
-                if self._root_safety_probe is None
-                else self._root_safety_probe.trigger
-            ),
-            root_safety_pvs_gap=(
-                None
-                if self._root_safety_probe is None
-                else self._root_safety_probe.pvs_gap
-            ),
-            root_safety_main_rank_stable=(
-                True
-                if self._root_safety_probe is None
-                else self._root_safety_probe.main_rank_stable
-            ),
-            root_safety_depth=(
-                0
-                if self._root_safety_probe is None
-                else self._root_safety_probe.completed_depth
-            ),
-            root_safety_nodes=self._counters.root_safety_nodes,
-            root_safety_best_move=(
-                None
-                if self._root_safety_probe is None
-                else self._root_safety_probe.best_move
-            ),
-            root_safety_leaders=(
-                ()
-                if self._root_safety_probe is None
-                else self._root_safety_probe.leader_history
-            ),
-            root_safety_candidates=(
-                ()
-                if self._root_safety_probe is None
-                else self._root_safety_probe.candidates
-            ),
-            root_vcf_checked=self._root_vcf_scan is not None,
-            root_vcf_complete=(
-                False
-                if self._root_vcf_scan is None
-                else self._root_vcf_scan.complete
-            ),
-            root_vcf_nodes=self._counters.root_vcf_nodes,
-            root_vcf_exhaustive_rescue_scanned=(
-                False
-                if self._root_vcf_scan is None
-                else self._root_vcf_scan.exhaustive_rescue_scanned
-            ),
-            root_vcf_rescue_candidates_checked=(
-                0
-                if self._root_vcf_scan is None
-                else self._root_vcf_scan.rescue_candidates_checked
-            ),
-            root_vcf_baseline_line=(
-                ()
-                if self._root_vcf_scan is None
-                else self._root_vcf_scan.baseline_line
-            ),
-            root_vcf_candidates=(
-                ()
-                if self._root_vcf_scan is None
-                else self._root_vcf_scan.analyses
-            ),
-            mate_scores_quarantined=(
-                self._root_mate_scores_quarantined
-            ),
-            phase_timings=tuple(
-                SearchPhaseTiming(phase, elapsed_seconds)
-                for phase, elapsed_seconds in self._phase_timings.items()
-            ),
-            root_safety_selection_basis=(
-                None
-                if self._root_safety_probe is None
-                else self._root_safety_probe.selection_basis
-            ),
         )

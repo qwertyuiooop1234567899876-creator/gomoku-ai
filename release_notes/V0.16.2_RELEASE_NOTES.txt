@@ -27,6 +27,15 @@ Gomoku AI V0.16.2 Full CVC Workflow
   独立等窗复核，或由后续严格 Proof 排除原候选，才能接管最终选择。
 - 扩展搜索会预留串行根复核和最终 Proof 时间，避免新增候选耗尽全部 60 秒预算。
 
+项目结构整理
+------------
+- 用户应用实现统一放入 app/，构建、复盘和基准工具实现统一放入 tools/；
+  根目录保留轻量兼容入口，原 BAT、命令行和测试 patch 路径无需改变。
+- 搜索诊断记录构建与结束原因拼装移入 engine/search_diagnostics.py，
+  SearchAI 保留搜索协调与 PVS/Negamax 热路径，避免用高耦合 mixin 机械拆分。
+- 新增根目录 README、架构边界说明和兼容入口结构测试；records/ 继续只作为
+  本机运行数据目录，结构整理不会恢复或重建历史棋谱。
+
 验证
 ----
   python -B -m unittest tests.test_record_driven_repairs -v
