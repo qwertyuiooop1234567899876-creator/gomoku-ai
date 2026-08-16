@@ -1,10 +1,10 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku AI Arena V0.16.3
+title Gomoku AI Arena V0.16.4
 
 echo ========================================
-echo        Gomoku AI Arena V0.16.3
+echo        Gomoku AI Arena V0.16.4
 echo ========================================
 echo.
 

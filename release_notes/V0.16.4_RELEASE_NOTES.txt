@@ -1,0 +1,34 @@
+Gomoku AI V0.16.4 Dynamic Review Integrity Hotfix
+=================================================
+
+崩溃原因
+--------
+- 动态根复核会为 PVS、关键防守、主动反击和进攻桥接等来源预留席位。
+- 当必保留来源数量达到复核上限时，旧的提前返回路径没有把来源集合与当前
+  RootResult.ranked_moves 再取交集。
+- 已被根 VCF、生存过滤或未完成深度移除的旧桥接点可能因此重新进入 pair review；
+  该点没有当前 PVS 分数，最终在读取 root_scores[challenger] 时触发 KeyError。
+
+修复
+----
+- 所有必保留来源在进入动态复核前统一限制为当前 ranked_moves 成员。
+- 不使用默认分数掩盖问题，不恢复已过滤候选，也不改变 ProofSearch 的 UNKNOWN 语义。
+- 新增提前返回边界回归，锁定“所有 review_pool 候选都有真实根分数”的不变量。
+
+防守 VCT 行为说明
+----------------
+- V0.16.3 新增的主动活三反击可能令单点必防根从 3 个候选增至 4 个。
+- 防守 VCT 探针仍只在 2 <= candidate_count <= 3 时运行；4 个候选会继续进入
+  普通 PVS、根 VCF、Proof 和动态复核，而不会自动提高探针上限或摊薄探针预算。
+- 后续新记录应重点比较 defense_vct_checked、候选来源、完成深度、节点数和最终选择，
+  再决定是否从 4 个 PVS 候选中按来源抽取 3 个代表进入 VCT 探针。
+
+验证
+----
+  python -B -m unittest tests.test_v0164_dynamic_review_integrity -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 3
+
+记录边界
+--------
+- 回归测试直接构造 RootResult，不恢复、不生成、不提交 records/ 下的历史对局。

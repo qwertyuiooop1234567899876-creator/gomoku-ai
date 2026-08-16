@@ -188,8 +188,12 @@ def review_pool(
     ]
     eligible = [move for move in dict.fromkeys(source_order) if move in available]
 
-    required = list(
-        dict.fromkeys(
+    # A source reservation cannot restore a move removed from the current PVS
+    # result by root VCF, survival filtering, or an interrupted depth.  Every
+    # downstream pair review requires a real score from ``ranked_moves``.
+    required = [
+        move
+        for move in dict.fromkeys(
             (
                 result.move,
                 *critical_moves,
@@ -198,7 +202,8 @@ def review_pool(
                 *offensive_moves,
             )
         )
-    )
+        if move in available
+    ]
     if len(required) >= config.root_dynamic_review_candidate_limit:
         return required[: config.root_dynamic_review_candidate_limit]
 

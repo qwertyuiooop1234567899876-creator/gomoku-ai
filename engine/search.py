@@ -62,7 +62,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.3 搜索 AI。
+    V0.16.4 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态

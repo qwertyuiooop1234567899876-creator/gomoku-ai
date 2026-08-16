@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku Full CVC Workflow V0.16.3
+title Gomoku Full CVC Workflow V0.16.4
 
 echo ========================================
 echo       Gomoku Full CVC Workflow
