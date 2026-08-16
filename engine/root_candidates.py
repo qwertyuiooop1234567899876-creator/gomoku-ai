@@ -130,6 +130,26 @@ def active_counterattack_moves(
     ]
 
 
+def tactical_root_profiles(
+    profiles: dict[Move, ThreatProfile],
+) -> dict[Move, ThreatProfile]:
+    """Keep tactical source membership independent from the quick root rank.
+
+    The cheap root order may bound ordinary positional moves, but it is not
+    tactical evidence.  A forced win, four, or open three found in the full
+    relevant pool must remain available to the source-aware root builder.
+    """
+    return {
+        move: profile
+        for move, profile in profiles.items()
+        if (
+            profile.forced_win
+            or profile.four_directions >= 1
+            or profile.open_three_directions >= 1
+        )
+    }
+
+
 def forcing_counterattack_moves(
     profiles: dict[Move, ThreatProfile],
 ) -> list[Move]:

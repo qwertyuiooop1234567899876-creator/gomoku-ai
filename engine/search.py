@@ -173,6 +173,7 @@ class SearchAI(ScoringAI):
         self._proof_candidates: tuple[ProofCandidateAnalysis, ...] = ()
         self._root_safety_probe: RootSafetyProbeResult | None = None
         self._root_safety_applied = False
+        self._root_expansion_hold_applied = False
         self._root_vcf_scan: RootVCFScanResult | None = None
         self._root_mate_scores_quarantined = False
         self._root_frontier_priority: tuple[Move, ...] = ()
@@ -344,6 +345,8 @@ class SearchAI(ScoringAI):
             reason,
             root_expansion_reason,
         )
+        if self._root_expansion_hold_applied:
+            reason += "；扩展领跑未完成等窗复核，已按原候选与 Proof 保守仲裁"
         reason = self._append_root_vcf_reason(reason)
         if self._root_mate_scores_quarantined:
             reason += "；未证明 Mate 分已降级为启发式分"
@@ -469,6 +472,7 @@ class SearchAI(ScoringAI):
         self._proof_candidates = ()
         self._root_safety_probe = None
         self._root_safety_applied = False
+        self._root_expansion_hold_applied = False
         self._root_vcf_scan = None
         self._root_mate_scores_quarantined = False
         self._root_frontier_priority = ()
@@ -678,7 +682,8 @@ class SearchAI(ScoringAI):
             self._search_phase_timeout_hit = False
             reserve = self._final_proof_reserve_seconds()
             if completed_depth > 0 and (
-                self._root_mate_scores_quarantined
+                root_candidates_expanded
+                or self._root_mate_scores_quarantined
                 or self._root_safety_trigger(
                     best_result,
                     root_history,
@@ -804,6 +809,7 @@ class SearchAI(ScoringAI):
                         )
                         root_candidates_expanded = True
                         root_expansion_reason = "unverified_advantage"
+                        self._reserve_expansion_review_time()
                         result = self._search_root(
                             board,
                             self.player,
@@ -928,6 +934,19 @@ class SearchAI(ScoringAI):
                 )
                 best_result = revised
 
+        if (
+            root_expansion_reason == "unverified_advantage"
+            and self._is_unverified_expansion_move(best_result.move)
+            and not self._expansion_leader_has_base_review(
+                best_result.move
+            )
+        ):
+            held_result = self._hold_unverified_expansion_leader(best_result)
+            self._root_expansion_hold_applied = (
+                held_result.move != best_result.move
+            )
+            best_result = held_result
+
         dynamic_probe = self._maybe_run_dynamic_root_review(
             board,
             best_result,
@@ -944,6 +963,8 @@ class SearchAI(ScoringAI):
                 revised.move != best_result.move
             )
             best_result = revised
+            if self._is_unverified_expansion_move(best_result.move):
+                self._root_expansion_hold_applied = False
         elif (
             not search_completed
             and completed_depth > 0
@@ -1010,10 +1031,19 @@ class SearchAI(ScoringAI):
         dual_frontier_bridges: list[Move] = []
 
         root_pool = self._root_profile_pool(board, legal_moves)
-        own_profiles = self._profile_moves_timed(
+        relevant_pool = self._root_relevant_pool(board, legal_moves)
+        full_own_profiles = self._profile_moves_timed(
             board,
-            root_pool,
+            relevant_pool,
             self.player,
+        )
+        own_profiles = {
+            move: full_own_profiles[move]
+            for move in root_pool
+            if move in full_own_profiles
+        }
+        own_profiles.update(
+            root_candidates.tactical_root_profiles(full_own_profiles)
         )
         opponent_profiles = self._profile_moves_timed(
             board,
@@ -1027,7 +1057,7 @@ class SearchAI(ScoringAI):
         ]
         full_opponent_profiles = self._profile_moves_timed(
             board,
-            self._root_relevant_pool(board, legal_moves),
+            relevant_pool,
             self.opponent,
         )
         opponent_forcing_moves = [
@@ -4234,6 +4264,66 @@ class SearchAI(ScoringAI):
         return self._filter_proven_losing_candidates(
             merged
         )[:expanded_limit]
+
+    def _reserve_expansion_review_time(self) -> None:
+        """Tighten PVS so an expanded root cannot consume its own audit."""
+        hard_deadline = self._time.hard_deadline
+        if hard_deadline is None:
+            return
+        reserve = root_policy.serial_verification_reserve(
+            final_proof_seconds=self._final_proof_reserve_seconds(),
+            root_review_seconds=self._root_safety_budget_seconds(),
+        )
+        review_deadline = hard_deadline - reserve
+        if self._search_phase_deadline is None:
+            self._search_phase_deadline = review_deadline
+        else:
+            self._search_phase_deadline = min(
+                self._search_phase_deadline,
+                review_deadline,
+            )
+        self._check_timeout()
+
+    def _is_unverified_expansion_move(self, move: Move) -> bool:
+        return (
+            root_candidates.CandidateSource.ROOT_EXPANSION
+            in self._root_candidate_sources.get(move, ())
+        )
+
+    def _expansion_leader_has_base_review(self, move: Move) -> bool:
+        probe = self._root_safety_probe
+        if probe is None:
+            return False
+        reviewed = {candidate.move for candidate in probe.candidates}
+        return (
+            move in reviewed
+            and any(
+                not self._is_unverified_expansion_move(candidate)
+                for candidate in reviewed
+            )
+        )
+
+    def _hold_unverified_expansion_leader(
+        self,
+        result: RootResult,
+    ) -> RootResult:
+        """Keep an unreviewed expansion leader as a challenger, not policy."""
+        base = next(
+            (
+                move
+                for move, _score in result.ranked_moves
+                if not self._is_unverified_expansion_move(move)
+            ),
+            None,
+        )
+        if base is None:
+            return result
+        scores = dict(result.ranked_moves)
+        return root_policy.promote_root_move(
+            result,
+            base,
+            score=scores[base],
+        )
 
     def _profile_moves_timed(
         self,

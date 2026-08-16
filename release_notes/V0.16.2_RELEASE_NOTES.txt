@@ -19,7 +19,17 @@ Gomoku AI V0.16.2 Full CVC Workflow
 - 原 run_arena.bat 和 run_cvc_analysis.bat 保留为独立手动入口。
 - 原 run_yixin_cvc.bat 已由完整流程入口替代并删除。
 
+根搜索修复
+----------
+- 根候选会在完整相关点集合上批量补齐己方强制胜点、冲四和活三画像，
+  战术来源不再受普通快速排序前缀限制；PVS 根宽度仍保持原上限。
+- 未证实优势触发的 root_expansion 只作为挑战者。扩展着法必须与原候选完成
+  独立等窗复核，或由后续严格 Proof 排除原候选，才能接管最终选择。
+- 扩展搜索会预留串行根复核和最终 Proof 时间，避免新增候选耗尽全部 60 秒预算。
+
 验证
 ----
+  python -B -m unittest tests.test_record_driven_repairs -v
   python -B -m unittest tests.test_cvc_workflow -v
   python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 3
