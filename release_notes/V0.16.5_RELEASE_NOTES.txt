@@ -1,0 +1,55 @@
+Gomoku AI V0.16.5 Root Decision Integrity
+==========================================
+
+问题来源
+--------
+- 单点必防根可能先因主动反击扩展超过防守 VCT 的 3 候选上限，随后又被根 VCF
+  和严格 Proof 过滤回 2～3 个幸存者；旧流程只在过滤前检查一次门槛，错过了
+  对有效幸存集合的窄分支比较。
+- UNKNOWN 风险纠偏发生在 PVS 结束后，但旧预算函数先扣除完整 Final Proof
+  预留，导致 threat_risk_override 经常得到 0 秒空探针。
+- Final Proof 会把败方证书中的截击点插入队列；候选上限或截止时间耗尽时，旧
+  兜底可能晋升一个未检查、无根来源的点，造成候选数量、排名和记录互相矛盾。
+- 中等级安静进攻前沿已经被 ThreatAnalyzer 找到，但只要它既不是高等级防守桥
+  也不是直接三/四，就可能完全进不了根候选。
+- 每个 Proof 候选没有独立时间上限，小候选集合里的 UNKNOWN 可以长期占用整块
+  证明预算。
+
+机制修复
+--------
+- 在根 VCF 和初始 Proof 过滤之后，仅对原始 MANDATORY_DEFENSE 模式、尚未运行
+  探针且剩余 2～3 个候选的根补跑一次防守 VCT；普通根和已有探针不会重复运行。
+- threat_risk_override 可借用已预留 Final Proof 时间的一半，风险探针未触发时
+  额度仍全部归 Final Proof；不会额外叠加一整块 Root Safety 预留去挤压 PVS。
+- 新增每候选 2 秒 Proof 上限和 7 秒初始 Proof 上限；Final Proof 预留按实际有效
+  根候选数缩放，UNKNOWN 仍保持 UNKNOWN，截止结果不升级为安全或证明结论。
+- 新增 certificate_intercept 来源和 final_proof_selection_basis。未检查的紧急
+  截击点会显式记录为 UNKNOWN/emergency_unknown，并进入真实候选数、排名和来源，
+  不再以 not_checked 的无来源第三着出现。
+- 新增 quiet_attack_frontier 来源：最多选择 4 个、后续等级至少 60 且至少 4 个
+  延续的安静进攻前沿；它只使用原候选集合的剩余槽位，不提高 12 点根上限，也不
+  挤掉既有防守、反击、预防或桥接来源。
+
+结构回归
+--------
+- 锁定过滤后防守 VCT 只补跑一次且不扩散到普通根。
+- 锁定中等级安静进攻前沿进入目标根，同时保留旧多前沿防守集合的既有来源。
+- 锁定 Proof 单候选上限、按有效根规模缩放的最终预留和风险共享额度。
+- 锁定证书截击点的来源、UNKNOWN 状态、截止原因与最终选择依据。
+- 所有历史局面直接构造或使用 tests/positions/ 的最小夹具；未恢复、生成或提交
+  records/ 下的旧对局。
+
+验证
+----
+  python -B -m unittest tests.test_v0165_root_integrity -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 3
+
+验证结果
+--------
+- V0.16.5 专项：9/9 通过。
+- 全量 unittest：366/366 通过，耗时 86.566 秒。
+- 固定基准重复 3 次：J9/G9/H11/J5 节点数仍为 32/19/48/23；中位耗时
+  0.234/0.159/0.642/1.544 秒。
+- 第 20 手定点复现：初始 5 候选跳过探针，根 VCF 与 Proof 过滤为 E5/E4/E9
+  三个有效幸存者后，补跑 VCT 一次并完成候选排序。

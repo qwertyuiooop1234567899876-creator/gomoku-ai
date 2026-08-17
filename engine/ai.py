@@ -222,6 +222,7 @@ class DecisionAnalysis:
     final_proof_completed: bool = False
     final_proof_selected_move: Move | None = None
     final_proof_rejected_moves: tuple[Move, ...] = ()
+    final_proof_selection_basis: str = "not_checked"
     threat_candidate_batches: int = 0
     threat_exact_descriptions: int = 0
     threat_frontier_batches: int = 0
@@ -382,6 +383,9 @@ class DecisionAnalysis:
                 }
                 for move in self.final_proof_rejected_moves
             ],
+            "final_proof_selection_basis": (
+                self.final_proof_selection_basis
+            ),
             "threat_candidate_batches": self.threat_candidate_batches,
             "threat_exact_descriptions": (
                 self.threat_exact_descriptions

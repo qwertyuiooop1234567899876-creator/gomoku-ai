@@ -47,6 +47,23 @@ def pending_proof_checks(
     return min(configured_remaining, scheduled_remaining)
 
 
+def proof_candidate_slice_seconds(
+    *,
+    remaining_seconds: float,
+    checks_left: int,
+    maximum_seconds: float,
+) -> float:
+    """Return one fair Proof slice with an explicit per-candidate ceiling."""
+    if checks_left < 1:
+        raise ValueError("checks_left must be positive")
+    if maximum_seconds <= 0:
+        raise ValueError("maximum_seconds must be positive")
+    return min(
+        maximum_seconds,
+        max(0.01, max(0.0, remaining_seconds) / checks_left),
+    )
+
+
 def is_mate_like_score(score: int) -> bool:
     return abs(score) >= MATE_SCORE - 10_000
 

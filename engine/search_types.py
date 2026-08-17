@@ -82,6 +82,8 @@ class SearchConfig:
     mandatory_defense_max_seconds: float = 8.0
     proof_time_fraction: float = 0.35
     proof_max_seconds: float = 15.0
+    proof_initial_max_seconds: float = 7.0
+    proof_candidate_max_seconds: float = 2.0
     proof_root_candidate_limit: int = 4
     proof_max_nodes: int = 150_000
     proof_max_attacker_moves: int = 10
@@ -104,6 +106,7 @@ class SearchConfig:
     root_safety_min_seconds: float = 0.75
     root_safety_extension_bonus: int = 2
     root_safety_min_completed_depth: int = 3
+    root_risk_override_shared_fraction: float = 0.5
     root_sibling_probe_time_fraction: float = 0.20
     root_sibling_probe_max_seconds: float = 12.0
     root_sibling_probe_min_seconds: float = 2.0
@@ -128,6 +131,9 @@ class SearchConfig:
     root_quiet_sibling_min_continuations: int = 3
     root_offensive_continuation_limit: int = 4
     root_offensive_continuation_min_continuations: int = 4
+    root_quiet_attack_frontier_limit: int = 4
+    root_quiet_attack_frontier_min_rank: int = 60
+    root_quiet_attack_frontier_min_continuations: int = 4
     root_dual_frontier_bridge_limit: int = 1
     root_dual_frontier_min_own_rank: int = 60
     root_dual_frontier_min_opponent_rank: int = 40
@@ -218,6 +224,14 @@ class SearchConfig:
             raise ValueError("proof_time_fraction 必须在 0～1 之间。")
         if self.proof_max_seconds <= 0:
             raise ValueError("proof_max_seconds 必须大于 0。")
+        if self.proof_initial_max_seconds <= 0:
+            raise ValueError("proof_initial_max_seconds 必须大于 0。")
+        if self.proof_initial_max_seconds > self.proof_max_seconds:
+            raise ValueError(
+                "proof_initial_max_seconds 不能大于 proof_max_seconds。"
+            )
+        if self.proof_candidate_max_seconds <= 0:
+            raise ValueError("proof_candidate_max_seconds 必须大于 0。")
         if self.proof_root_candidate_limit < 1:
             raise ValueError("proof_root_candidate_limit 必须大于 0。")
         if self.proof_max_nodes < 1:
@@ -282,6 +296,10 @@ class SearchConfig:
         if self.root_safety_min_completed_depth < 2:
             raise ValueError(
                 "root_safety_min_completed_depth 不能小于 2。"
+            )
+        if not 0 < self.root_risk_override_shared_fraction < 1:
+            raise ValueError(
+                "root_risk_override_shared_fraction 必须在 0～1 之间。"
             )
         if not 0 < self.root_sibling_probe_time_fraction < 0.5:
             raise ValueError(
@@ -372,6 +390,18 @@ class SearchConfig:
         if self.root_offensive_continuation_min_continuations < 2:
             raise ValueError(
                 "root_offensive_continuation_min_continuations 不能小于 2。"
+            )
+        if self.root_quiet_attack_frontier_limit < 0:
+            raise ValueError(
+                "root_quiet_attack_frontier_limit 不能小于 0。"
+            )
+        if self.root_quiet_attack_frontier_min_rank < 1:
+            raise ValueError(
+                "root_quiet_attack_frontier_min_rank 必须大于 0。"
+            )
+        if self.root_quiet_attack_frontier_min_continuations < 2:
+            raise ValueError(
+                "root_quiet_attack_frontier_min_continuations 不能小于 2。"
             )
         if self.root_dual_frontier_bridge_limit < 0:
             raise ValueError("root_dual_frontier_bridge_limit 不能小于 0。")

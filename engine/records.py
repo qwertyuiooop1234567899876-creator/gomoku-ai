@@ -338,6 +338,8 @@ class GameRecorder:
                             f"{move.analysis.get('final_proof_completed', False)} "
                             f"selected:"
                             f"{move.analysis.get('final_proof_selected_coordinate', '?')} "
+                            f"basis:"
+                            f"{move.analysis.get('final_proof_selection_basis', 'not_checked')} "
                             f"rejected:{rejected_text or '?'}"
                         )
 

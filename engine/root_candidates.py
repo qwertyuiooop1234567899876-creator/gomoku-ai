@@ -29,9 +29,11 @@ class CandidateSource(str, Enum):
     THREAT_FRONTIER = "threat_frontier"
     PRESSURE_PREVENTION = "pressure_prevention"
     QUIET_PREVENTION = "quiet_prevention"
+    QUIET_ATTACK_FRONTIER = "quiet_attack_frontier"
     OFFENSIVE_CONTINUATION = "offensive_continuation"
     DUAL_FRONTIER_BRIDGE = "dual_frontier_bridge"
     VCF_INTERCEPT = "vcf_intercept"
+    CERTIFICATE_INTERCEPT = "certificate_intercept"
     ROOT_EXPANSION = "root_expansion"
 
 
@@ -46,6 +48,7 @@ class RootCandidateMode(str, Enum):
 PROOF_SOURCE_PRIORITY = (
     CandidateSource.MANDATORY_DEFENSE,
     CandidateSource.VCF_INTERCEPT,
+    CandidateSource.CERTIFICATE_INTERCEPT,
     CandidateSource.THREAT_FRONTIER,
     CandidateSource.PRESSURE_PREVENTION,
     CandidateSource.QUIET_PREVENTION,
@@ -53,6 +56,7 @@ PROOF_SOURCE_PRIORITY = (
     CandidateSource.OWN_FORCING,
     CandidateSource.FORCING_COUNTERATTACK,
     CandidateSource.ACTIVE_COUNTERATTACK,
+    CandidateSource.QUIET_ATTACK_FRONTIER,
     CandidateSource.OFFENSIVE_CONTINUATION,
     CandidateSource.ROOT_EXPANSION,
     CandidateSource.ORDINARY,
@@ -78,6 +82,7 @@ class RootCandidatePlan:
     defense_probe: DefenseProbeResult | None
     reason: str
     entries: tuple[CandidateEntry, ...] = ()
+    mode: RootCandidateMode = RootCandidateMode.ORDINARY
 
 
 def classify_mode(
@@ -329,6 +334,49 @@ def frontier_defense_moves(
         ),
         limit=limit,
     )
+
+
+def quiet_attack_frontier_moves(
+    *,
+    frontiers: Iterable[ThreatFrontier],
+    minimum_rank: int,
+    minimum_continuations: int,
+    limit: int,
+    covered_moves: Iterable[Move] = (),
+) -> list[Move]:
+    """Keep bounded medium-rank quiet attacking gain points.
+
+    Strong opponent-facing bridges have their own sources.  This source keeps
+    a small number of purely offensive quiet hubs whose several continuations
+    would otherwise be invisible to the root set.  It is candidate evidence
+    only and never upgrades a move to a proof result.
+    """
+    if limit <= 0:
+        return []
+
+    covered = set(covered_moves)
+    ranked: list[tuple[int, int, int, int, Move]] = []
+    for order, frontier in enumerate(frontiers):
+        maximum_rank = max(frontier.continuation_ranks, default=0)
+        if (
+            frontier.gain_move in covered
+            or frontier.kind is not ThreatKind.QUIET
+            or len(frontier.continuations) < minimum_continuations
+            or maximum_rank < minimum_rank
+        ):
+            continue
+        ranked.append(
+            (
+                maximum_rank,
+                len(frontier.continuations),
+                sum(frontier.continuation_ranks),
+                -order,
+                frontier.gain_move,
+            )
+        )
+
+    ranked.sort(reverse=True)
+    return [item[-1] for item in ranked[:limit]]
 
 
 def pressure_prevention_moves(

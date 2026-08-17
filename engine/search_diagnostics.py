@@ -62,6 +62,7 @@ class SearchDiagnosticsSource(Protocol):
     _final_proof_completed: bool
     _final_proof_selected: Move | None
     _final_proof_rejected: tuple[Move, ...]
+    _final_proof_selection_basis: str
     _root_safety_probe: RootSafetyProbeResult | None
     _root_safety_applied: bool
     _root_vcf_scan: RootVCFScanResult | None
@@ -322,6 +323,7 @@ def build_search_analysis(
         final_proof_completed=source._final_proof_completed,
         final_proof_selected_move=source._final_proof_selected,
         final_proof_rejected_moves=source._final_proof_rejected,
+        final_proof_selection_basis=source._final_proof_selection_basis,
         threat_candidate_batches=threat_stats.candidate_batches,
         threat_exact_descriptions=threat_stats.exact_descriptions,
         threat_frontier_batches=threat_stats.frontier_batches,
