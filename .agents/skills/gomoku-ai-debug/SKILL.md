@@ -31,6 +31,32 @@ general class of positions, never one filename, sequence, hash, or coordinate.
   unless the request or established project workflow authorizes that action.
 - State what remains uncertain instead of silently expanding the task.
 
+## Use the Record-to-Fix Approval Gate
+
+For record-driven engine work, use this sequence:
+
+`new record -> read-only diagnosis -> initial recommendation -> user refinement -> independent review -> final change plan -> explicit user approval -> implementation`
+
+1. Treat a newly generated record as authorization to inspect, replay and diagnose
+   only. Sharing a record or saying “看看记录” is not authorization to edit
+   production code.
+2. Present the earliest substantive mistake, supporting evidence, uncertainty and
+   an initial recommendation before proposing code changes.
+3. Let the user refine or challenge that recommendation, then evaluate the user's
+   proposal independently against the record, engine invariants, regression risk
+   and performance cost.
+4. Disagree directly when a proposal is unsupported or harmful. Cite concrete
+   evidence, explain the failure mode or tradeoff, and offer a better alternative.
+   Do not agree merely to preserve consensus.
+5. After discussion, produce one final change plan covering root cause, target
+   invariant, code scope, non-goals, regression tests, performance validation and
+   remaining uncertainty.
+6. Wait for explicit approval of that final plan. Phrases such as “同意”,
+   “可以开始” or “按这个方案修复” after the plan count as approval.
+7. Only after approval may you modify production code, tests, version metadata or
+   release notes. If later evidence materially changes the approved scope, stop
+   and present a revised plan for approval.
+
 ## Establish Reliable Evidence
 
 1. Select the latest relevant record using timestamps and record metadata, or use
