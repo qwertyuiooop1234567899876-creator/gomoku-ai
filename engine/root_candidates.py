@@ -423,11 +423,61 @@ def pressure_prevention_moves(
     return [item[-1] for item in ranked[:limit]]
 
 
+def forcing_certificate_intercept_moves(
+    *,
+    frontiers: Iterable[ThreatFrontier],
+    forcing_moves: Iterable[Move],
+    strong_rank: int,
+    limit: int,
+) -> list[Move]:
+    """Return quiet gains directly linked to a current forcing anchor.
+
+    The returned moves are only structural certificate candidates.  The
+    caller must still simulate each defensive move and confirm that it
+    weakens the forcing profile before admitting it to the root set.
+    """
+    if limit <= 0:
+        return []
+
+    forcing = set(forcing_moves)
+    if not forcing:
+        return []
+
+    ranked: list[tuple[int, int, int, int, Move]] = []
+    for order, frontier in enumerate(frontiers):
+        if frontier.kind is not ThreatKind.QUIET:
+            continue
+        linked_ranks = [
+            rank
+            for continuation, rank in zip(
+                frontier.continuations,
+                frontier.continuation_ranks,
+                strict=True,
+            )
+            if continuation in forcing and rank >= strong_rank
+        ]
+        if not linked_ranks:
+            continue
+        ranked.append(
+            (
+                max(linked_ranks),
+                len(frontier.continuations),
+                sum(frontier.continuation_ranks),
+                -order,
+                frontier.gain_move,
+            )
+        )
+
+    ranked.sort(reverse=True)
+    return [item[-1] for item in ranked[:limit]]
+
+
 def mandatory_defense_moves(
     *,
     defense_moves: Iterable[Move],
     forcing_counterattack_moves: Iterable[Move],
     active_counterattack_moves: Iterable[Move] = (),
+    certificate_intercept_moves: Iterable[Move] = (),
     limit: int,
 ) -> list[Move]:
     """Keep direct blocks and bounded counterattack representatives.
@@ -442,9 +492,20 @@ def mandatory_defense_moves(
     defenses = tuple(defense_moves)
     forcing = tuple(forcing_counterattack_moves)
     active = tuple(active_counterattack_moves)
+    certificate_intercepts = tuple(certificate_intercept_moves)
     return merge_with_required(
-        ordered_groups=(defenses, forcing, active),
-        required_groups=(defenses, forcing, active),
+        ordered_groups=(
+            defenses,
+            certificate_intercepts,
+            forcing,
+            active,
+        ),
+        required_groups=(
+            defenses,
+            certificate_intercepts,
+            forcing,
+            active,
+        ),
         limit=limit,
     )
 

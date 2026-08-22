@@ -1,0 +1,60 @@
+Gomoku AI V0.16.7 Candidate Evidence Integrity
+================================================
+
+问题来源
+--------
+- V0.16.6 对 YiXin 第 23、25 手前，H5 已经由 ordinary 路径进入根候选，
+  但 pressure_prevention_moves 会排除所有已被其他来源覆盖的着法。H5
+  因而保留了成员资格，却丢失 pressure_prevention 证据，无法进入关键
+  根复核组和 Final Proof 前列。
+- 同根 YiXin 分析两次推荐 H5；第 23 手 F9 为可疑着法，第 25 手 J7
+  出现评价断崖。10 秒 YiXin 在相邻局面仍有 Mate/非 Mate 波动，因此
+  本版只修复可重复的证据链，不把外部 +10000 当作严格证明。
+- 第 27 手的 F11 是与当前 C11 强制点直接相连的安静前沿。黑方落 F11
+  会把 C11 从四三降为单四，但旧 MANDATORY_DEFENSE 只保留直接防点和
+  主动反击，F11 在 PVS 开始前即被排除。
+
+机制修复
+--------
+- 压力预防改为双轨：原有 covered 过滤继续负责候选槽位补充；同一排序
+  另行产出不受 covered 影响的最强证据代表。已经存在的候选只补充
+  pressure_prevention 标签，不重复占槽，也不改变根候选上限。
+- 现有关键组、root_review.finalists 和 Final Proof 队列会自动优先处理
+  该压力代表；没有新增第二套预留规则，也没有提高 finalist 或 Proof
+  候选上限。
+- 单一必防点允许加入最多一个 certificate_intercept：候选必须是与当前
+  强制锚点直接相连的高等级安静前沿，并在真实落子后降低锚点威胁等级。
+  复用既有 CERTIFICATE_INTERCEPT 来源，不新增记录枚举或证明语义。
+- 四候选必防根仍跳过上限为三的 Defense VCT；若 VCF/Proof 过滤后回落
+  到二至三候选，继续使用既有 post-filter VCT 补跑。
+
+结构回归
+--------
+- 第 23/25 手结构局面锁定：H5 只占一个候选槽，同时拥有 ordinary 与
+  pressure_prevention 来源，并进入关键复核组、finalists 和 Final Proof
+  检查上限以内。
+- 第 27 手结构局面锁定：F11 以 certificate_intercept 进入四着必防集合；
+  四候选不触发 VCT，过滤到三候选仍补跑。
+- 负向用例确保未与当前强制点直接相连的安静前沿不会成为证书拦截点。
+- 测试只锁定候选、来源和验证资格，不断言引擎最终必须选择历史坐标。
+
+非目标
+------
+- 不调整评估权重、搜索深度、Proof/VCF 预算或任何全局候选上限。
+- 不修改 root_review 仲裁规则，不把 UNKNOWN 改写为安全结论。
+- quiet_attack_frontier_moves 的类似 covered 行为留作后续实战证据观察。
+
+验证
+----
+  python -B -m unittest tests.test_v0167_candidate_evidence -v
+  python -B -m unittest tests.test_record_driven_repairs tests.test_v0165_root_integrity tests.test_v0166_arbitration_integrity -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 3
+
+验证结果
+--------
+- V0.16.7 专项与相邻机制回归：27/27 通过（3.950 秒）。
+- 候选完整性、必防共识和搜索不变量回归：22/22 通过（6.681 秒）。
+- 全量 unittest：377/377 通过（90.118 秒）。
+- 固定搜索基准保持 J9/G9/H11/J5，节点数 32/19/48/23；三次中位
+  用时 0.187/0.152/0.639/1.550 秒。

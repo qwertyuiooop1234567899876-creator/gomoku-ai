@@ -62,7 +62,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.6 搜索 AI。
+    V0.16.7 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -119,6 +119,9 @@ class SearchAI(ScoringAI):
     V0.14.8 将 PVS、最低威胁风险、安静预防和进攻延续候选统一送入
     余时复核；深度搜索与攻防前沿净增益共同仲裁，并记录各阶段耗时。
     结构复核仍是启发式，不改变严格 Proof 的三态含义。
+    V0.16.7 将压力预防的候选成员资格与证据来源分离，使已经由普通
+    路径进入根集合的强压力点仍能获得关键复核资格；单一必防点还会
+    有界保留一个真实削弱该威胁的安静证书拦截点。
     """
 
     def __init__(
@@ -965,6 +968,7 @@ class SearchAI(ScoringAI):
         forcing_counterattacks: list[Move] = []
         prevention_moves: list[Move] = []
         pressure_prevention_moves: list[Move] = []
+        pressure_prevention_evidence_moves: list[Move] = []
         offensive_continuations: list[Move] = []
         dual_frontier_bridges: list[Move] = []
         quiet_attack_frontiers: list[Move] = []
@@ -1168,12 +1172,23 @@ class SearchAI(ScoringAI):
                 : self.config.root_mandatory_active_counterattack_limit
             ]
             self._root_attack_priority = tuple(counterattack_truth_moves)
+            certificate_intercepts = (
+                self._mandatory_certificate_intercept_moves(
+                    board,
+                    forcing_moves=opponent_forcing_moves,
+                    forcing_profiles=full_opponent_profiles,
+                    opponent_frontiers=opponent_pressure_frontiers,
+                )
+                if len(opponent_forcing_moves) == 1
+                else []
+            )
             search_candidates = self._order_specific_moves(
                 board,
                 root_candidates.mandatory_defense_moves(
                     defense_moves=opponent_forcing_moves,
                     forcing_counterattack_moves=forcing_counterattacks,
                     active_counterattack_moves=counterattack_truth_moves,
+                    certificate_intercept_moves=certificate_intercepts,
                     limit=self.config.root_candidate_limit,
                 ),
                 self.player,
@@ -1193,6 +1208,10 @@ class SearchAI(ScoringAI):
                 (
                     root_candidates.CandidateSource.ACTIVE_COUNTERATTACK,
                     counterattack_truth_moves,
+                ),
+                (
+                    root_candidates.CandidateSource.CERTIFICATE_INTERCEPT,
+                    certificate_intercepts,
                 ),
             ]
             if 2 <= len(search_candidates) <= (
@@ -1224,6 +1243,8 @@ class SearchAI(ScoringAI):
                     tactical_reason = "搜索对手强制威胁的最佳防守"
             else:
                 tactical_reason = "搜索对手强制威胁的最佳防守"
+            if certificate_intercepts:
+                tactical_reason += "；已补入证书拦截点"
         elif (
             candidate_mode
             is root_candidates.RootCandidateMode.FRONTIER_DEFENSE
@@ -1388,8 +1409,22 @@ class SearchAI(ScoringAI):
                     limit=1,
                 )
             )
+            pressure_prevention_evidence_moves = (
+                root_candidates.pressure_prevention_moves(
+                    frontiers=opponent_pressure_frontiers,
+                    covered_moves=(),
+                    strong_rank=self.config.root_quiet_prevention_min_rank,
+                    minimum_continuations=max(
+                        4,
+                        self.config
+                        .root_offensive_continuation_min_continuations
+                        * 2,
+                    ),
+                    limit=1,
+                )
+            )
             self._root_pressure_prevention = tuple(
-                pressure_prevention_moves
+                pressure_prevention_evidence_moves
             )
             search_candidates = root_candidates.frontier_defense_moves(
                 frontier_moves=frontier_candidates,
@@ -1437,7 +1472,7 @@ class SearchAI(ScoringAI):
                 ),
                 (
                     root_candidates.CandidateSource.PRESSURE_PREVENTION,
-                    pressure_prevention_moves,
+                    pressure_prevention_evidence_moves,
                 ),
                 (
                     root_candidates.CandidateSource.QUIET_PREVENTION,
@@ -4268,6 +4303,66 @@ class SearchAI(ScoringAI):
             )
         ]
         return quiet[:limit]
+
+    def _mandatory_certificate_intercept_moves(
+        self,
+        board: Board,
+        *,
+        forcing_moves: list[Move],
+        forcing_profiles: dict[Move, ThreatProfile],
+        opponent_frontiers: tuple[ThreatFrontier, ...],
+    ) -> list[Move]:
+        """Keep one quiet dependency intercept for a singleton forced threat."""
+        if len(forcing_moves) != 1 or not opponent_frontiers:
+            return []
+
+        anchor = forcing_moves[0]
+        before = forcing_profiles.get(anchor)
+        if before is None:
+            return []
+
+        # Rank a few already-computed frontier links, then admit only a move
+        # whose real placement weakens the current forcing anchor.  The final
+        # root width increase remains bounded to one candidate.
+        shortlist = root_candidates.forcing_certificate_intercept_moves(
+            frontiers=opponent_frontiers,
+            forcing_moves=forcing_moves,
+            strong_rank=self.config.root_quiet_prevention_min_rank,
+            limit=4,
+        )
+        before_severity = self._threat_profile_severity(before)
+        for move in shortlist:
+            if not board.is_empty(*move):
+                continue
+            board.place(*move, self.player)
+            try:
+                after = self._profile_moves_timed(
+                    board,
+                    [anchor],
+                    self.opponent,
+                ).get(anchor)
+            finally:
+                board.undo()
+            if (
+                after is not None
+                and self._threat_profile_severity(after) < before_severity
+            ):
+                return [move]
+        return []
+
+    @staticmethod
+    def _threat_profile_severity(
+        profile: ThreatProfile,
+    ) -> tuple[int, int, int, int, int, int]:
+        """Return a deterministic threat-strength key for local downgrades."""
+        return (
+            profile.tactical_rank,
+            int(profile.immediate_win),
+            profile.open_four_directions,
+            profile.four_directions,
+            profile.open_three_directions,
+            len(profile.winning_moves),
+        )
 
     def _offensive_continuation_moves(
         self,
