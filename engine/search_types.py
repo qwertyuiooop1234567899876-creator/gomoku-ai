@@ -97,6 +97,9 @@ class SearchConfig:
     proof_final_max_seconds: float = 8.0
     proof_final_min_seconds: float = 0.25
     proof_final_candidate_limit: int = 4
+    proof_emergency_vcf_time_fraction: float = 0.08
+    proof_emergency_vcf_max_seconds: float = 0.5
+    proof_emergency_vcf_min_seconds: float = 0.05
     root_safety_enabled: bool = True
     root_safety_candidate_limit: int = 2
     root_safety_score_margin: int = 20_000
@@ -123,6 +126,10 @@ class SearchConfig:
     root_boundary_review_max_seconds: float = 4.0
     root_boundary_review_min_seconds: float = 1.0
     root_boundary_review_branch_limit: int = 6
+    root_boundary_secondary_time_fraction: float = 0.4
+    root_boundary_secondary_min_seconds: float = 1.0
+    root_boundary_secondary_min_completed_depth: int = 3
+    root_boundary_secondary_stable_leader_count: int = 3
     root_vcf_safety_enabled: bool = True
     root_vcf_safety_max_attacker_moves: int = 5
     root_vcf_safety_time_fraction: float = 0.08
@@ -138,6 +145,10 @@ class SearchConfig:
     root_quiet_attack_frontier_limit: int = 4
     root_quiet_attack_frontier_min_rank: int = 60
     root_quiet_attack_frontier_min_continuations: int = 4
+    root_broad_quiet_attack_limit: int = 1
+    root_broad_quiet_attack_min_rank: int = 40
+    root_broad_quiet_attack_min_continuations: int = 8
+    root_broad_quiet_attack_min_total_rank: int = 320
     root_dual_frontier_bridge_limit: int = 1
     root_dual_frontier_min_own_rank: int = 60
     root_dual_frontier_min_opponent_rank: int = 40
@@ -265,6 +276,26 @@ class SearchConfig:
             )
         if self.proof_final_candidate_limit < 1:
             raise ValueError("proof_final_candidate_limit 必须大于 0。")
+        if not 0 < self.proof_emergency_vcf_time_fraction < 1:
+            raise ValueError(
+                "proof_emergency_vcf_time_fraction 必须在 0～1 之间。"
+            )
+        if self.proof_emergency_vcf_max_seconds <= 0:
+            raise ValueError(
+                "proof_emergency_vcf_max_seconds 必须大于 0。"
+            )
+        if self.proof_emergency_vcf_min_seconds <= 0:
+            raise ValueError(
+                "proof_emergency_vcf_min_seconds 必须大于 0。"
+            )
+        if (
+            self.proof_emergency_vcf_min_seconds
+            > self.proof_emergency_vcf_max_seconds
+        ):
+            raise ValueError(
+                "proof_emergency_vcf_min_seconds 不能大于 "
+                "proof_emergency_vcf_max_seconds。"
+            )
         if self.root_safety_candidate_limit < 2:
             raise ValueError("root_safety_candidate_limit 不能小于 2。")
         if self.root_safety_score_margin < 0:
@@ -370,6 +401,22 @@ class SearchConfig:
             raise ValueError(
                 "root_boundary_review_branch_limit 不能小于 2。"
             )
+        if not 0 < self.root_boundary_secondary_time_fraction < 1:
+            raise ValueError(
+                "root_boundary_secondary_time_fraction 必须在 0～1 之间。"
+            )
+        if self.root_boundary_secondary_min_seconds <= 0:
+            raise ValueError(
+                "root_boundary_secondary_min_seconds 必须大于 0。"
+            )
+        if self.root_boundary_secondary_min_completed_depth < 1:
+            raise ValueError(
+                "root_boundary_secondary_min_completed_depth 必须大于 0。"
+            )
+        if self.root_boundary_secondary_stable_leader_count < 2:
+            raise ValueError(
+                "root_boundary_secondary_stable_leader_count 不能小于 2。"
+            )
         if self.root_vcf_safety_max_attacker_moves < 1:
             raise ValueError(
                 "root_vcf_safety_max_attacker_moves 必须大于 0。"
@@ -429,6 +476,22 @@ class SearchConfig:
         if self.root_quiet_attack_frontier_min_continuations < 2:
             raise ValueError(
                 "root_quiet_attack_frontier_min_continuations 不能小于 2。"
+            )
+        if self.root_broad_quiet_attack_limit < 0:
+            raise ValueError(
+                "root_broad_quiet_attack_limit 不能小于 0。"
+            )
+        if self.root_broad_quiet_attack_min_rank < 1:
+            raise ValueError(
+                "root_broad_quiet_attack_min_rank 必须大于 0。"
+            )
+        if self.root_broad_quiet_attack_min_continuations < 2:
+            raise ValueError(
+                "root_broad_quiet_attack_min_continuations 不能小于 2。"
+            )
+        if self.root_broad_quiet_attack_min_total_rank < 1:
+            raise ValueError(
+                "root_broad_quiet_attack_min_total_rank 必须大于 0。"
             )
         if self.root_dual_frontier_bridge_limit < 0:
             raise ValueError("root_dual_frontier_bridge_limit 不能小于 0。")

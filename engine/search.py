@@ -7,6 +7,7 @@ from engine.ai import (
     DefenseCandidateAnalysis,
     Move,
     ProofCandidateAnalysis,
+    RootVCFCandidateAnalysis,
     RootSafetyCandidateAnalysis,
     ScoringAI,
 )
@@ -62,7 +63,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.7 搜索 AI。
+    V0.16.8 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -122,6 +123,9 @@ class SearchAI(ScoringAI):
     V0.16.7 将压力预防的候选成员资格与证据来源分离，使已经由普通
     路径进入根集合的强压力点仍能获得关键复核资格；单一必防点还会
     有界保留一个真实削弱该威胁的安静证书拦截点。
+    V0.16.8 补齐普通根的压力证据和单槽宽安静进攻枢纽；最终
+    Proof 的未检查紧急着必须先通过单点 VCF 门禁。同边界夹值复核
+    在同一总预算内使用战术与去夹值双通道，且保留完整有界审计。
     """
 
     def __init__(
@@ -186,6 +190,7 @@ class SearchAI(ScoringAI):
         self._root_offensive_continuations: tuple[Move, ...] = ()
         self._root_dual_frontier_bridges: tuple[Move, ...] = ()
         self._root_quiet_attack_frontiers: tuple[Move, ...] = ()
+        self._root_broad_quiet_attack_frontiers: tuple[Move, ...] = ()
         self._root_own_frontiers: tuple[ThreatFrontier, ...] = ()
         self._root_attack_priority: tuple[Move, ...] = ()
         self._root_candidate_sources: dict[
@@ -215,6 +220,10 @@ class SearchAI(ScoringAI):
         self._final_proof_selection_basis = "not_checked"
         self._final_proof_expected_candidates = 0
         self._phase_timings: dict[str, float] = {}
+        self._root_review_finalists: tuple[Move, ...] = ()
+        self._root_review_trace: list[
+            tuple[str, RootSafetyProbeResult]
+        ] = []
 
     def choose_move(self, board: Board) -> Move:
         """按硬战术、VCF、限时迭代加深的顺序选择落点。"""
@@ -404,6 +413,7 @@ class SearchAI(ScoringAI):
         self._root_offensive_continuations = ()
         self._root_dual_frontier_bridges = ()
         self._root_quiet_attack_frontiers = ()
+        self._root_broad_quiet_attack_frontiers = ()
         self._root_own_frontiers = ()
         self._root_attack_priority = ()
         self._root_candidate_sources.clear()
@@ -424,6 +434,8 @@ class SearchAI(ScoringAI):
         self._final_proof_selection_basis = "not_checked"
         self._final_proof_expected_candidates = 0
         self._phase_timings.clear()
+        self._root_review_finalists = ()
+        self._root_review_trace.clear()
         self._proof_table_start_stats = self._proof_table.stats()
         self._proof_analyzer = self._new_threat_analyzer()
         self._decay_history()
@@ -972,6 +984,7 @@ class SearchAI(ScoringAI):
         offensive_continuations: list[Move] = []
         dual_frontier_bridges: list[Move] = []
         quiet_attack_frontiers: list[Move] = []
+        broad_quiet_attack_frontiers: list[Move] = []
 
         root_pool = self._root_profile_pool(board, legal_moves)
         relevant_pool = self._root_relevant_pool(board, legal_moves)
@@ -1423,6 +1436,35 @@ class SearchAI(ScoringAI):
                     limit=1,
                 )
             )
+            broad_quiet_attack_frontiers = (
+                root_candidates.broad_quiet_attack_frontier_moves(
+                    frontiers=self._root_own_frontiers,
+                    minimum_rank=(
+                        self.config.root_broad_quiet_attack_min_rank
+                    ),
+                    minimum_continuations=(
+                        self.config
+                        .root_broad_quiet_attack_min_continuations
+                    ),
+                    minimum_total_rank=(
+                        self.config.root_broad_quiet_attack_min_total_rank
+                    ),
+                    limit=self.config.root_broad_quiet_attack_limit,
+                    covered_moves=root_candidates.merge_unique(
+                        frontier_candidates,
+                        ordinary_candidates,
+                        counterattacks,
+                        forcing_counterattacks,
+                        prevention_moves,
+                        offensive_continuations,
+                        dual_frontier_bridges,
+                        quiet_attack_frontiers,
+                    ),
+                )
+            )
+            self._root_broad_quiet_attack_frontiers = tuple(
+                broad_quiet_attack_frontiers
+            )
             self._root_pressure_prevention = tuple(
                 pressure_prevention_evidence_moves
             )
@@ -1436,6 +1478,7 @@ class SearchAI(ScoringAI):
                 prevention_moves=prevention_moves,
                 offensive_continuation_moves=offensive_continuations,
                 dual_frontier_moves=dual_frontier_bridges,
+                broad_quiet_attack_moves=broad_quiet_attack_frontiers,
             )
             spare_slots = max(
                 0,
@@ -1490,6 +1533,10 @@ class SearchAI(ScoringAI):
                     root_candidates.CandidateSource.QUIET_ATTACK_FRONTIER,
                     quiet_attack_frontiers,
                 ),
+                (
+                    root_candidates.CandidateSource.BROAD_QUIET_ATTACK,
+                    broad_quiet_attack_frontiers,
+                ),
             ]
             preserve_frontier_order = True
             tactical_reason = "多重威胁启动点候选的 PVS 防守"
@@ -1505,6 +1552,8 @@ class SearchAI(ScoringAI):
                 tactical_reason += "；已补入进攻延续桥接点"
             if quiet_attack_frontiers:
                 tactical_reason += "；已补入安静进攻前沿"
+            if broad_quiet_attack_frontiers:
+                tactical_reason += "；已补入宽安静进攻枢纽"
             self._root_frontier_priority = tuple(
                 root_candidates.merge_unique(
                     (
@@ -1514,6 +1563,7 @@ class SearchAI(ScoringAI):
                     ),
                     counterattack_truth_moves,
                     offensive_continuations,
+                    broad_quiet_attack_frontiers,
                     quiet_attack_frontiers,
                     search_candidates,
                 )
@@ -1526,12 +1576,52 @@ class SearchAI(ScoringAI):
                 ply=0,
             )
             tactical_reason = "PVS 搜索最佳变化"
+            ordinary_pressure_frontiers = ()
+            if any(
+                (
+                    profile.four_directions > 0
+                    or profile.open_three_directions > 0
+                )
+                and not profile.forced_win
+                for move, profile in full_opponent_profiles.items()
+                if move in search_candidates
+            ):
+                ordinary_pressure_frontiers = (
+                    self._proof_analyzer.generate_attack_frontiers(
+                        board,
+                        self.opponent,
+                        frontier_limit=max(1, board.empty_count),
+                        continuation_limit=max(
+                            12,
+                            self.config.frontier_reply_limit * 2,
+                        ),
+                        scan_all_relevant=True,
+                        stop_requested=self._time.hard_expired,
+                    )
+                )
+            pressure_prevention_evidence_moves = (
+                root_candidates.ordinary_pressure_evidence_moves(
+                    profiles=full_opponent_profiles,
+                    frontiers=ordinary_pressure_frontiers,
+                    available_moves=search_candidates,
+                    limit=1,
+                )
+            )
+            self._root_pressure_prevention = tuple(
+                pressure_prevention_evidence_moves
+            )
             source_groups = [
                 (
                     root_candidates.CandidateSource.ORDINARY,
                     search_candidates,
-                )
+                ),
+                (
+                    root_candidates.CandidateSource.PRESSURE_PREVENTION,
+                    pressure_prevention_evidence_moves,
+                ),
             ]
+            if pressure_prevention_evidence_moves:
+                tactical_reason += "；普通根已补压力证据"
 
         provenance = root_candidates.with_sources(source_groups)
         sources_by_move = {
@@ -1943,7 +2033,20 @@ class SearchAI(ScoringAI):
         if seconds < self.config.proof_final_min_seconds:
             return result
 
-        deadline = time.perf_counter() + seconds
+        started_at = time.perf_counter()
+        deadline = started_at + seconds
+        emergency_vcf_reserve = min(
+            self.config.proof_emergency_vcf_max_seconds,
+            seconds * self.config.proof_emergency_vcf_time_fraction,
+        )
+        if (
+            emergency_vcf_reserve
+            < self.config.proof_emergency_vcf_min_seconds
+            or seconds - emergency_vcf_reserve
+            < self.config.proof_final_min_seconds
+        ):
+            emergency_vcf_reserve = 0.0
+        proof_deadline = deadline - emergency_vcf_reserve
         self._final_proof_checked = True
         proof_by_move = {
             candidate.move: candidate
@@ -1983,7 +2086,7 @@ class SearchAI(ScoringAI):
         while (
             queue
             and checks < self.config.proof_final_candidate_limit
-            and time.perf_counter() < deadline
+            and time.perf_counter() < proof_deadline
         ):
             move = queue.pop(0)
             if move in seen or not board.is_empty(*move):
@@ -2042,10 +2145,10 @@ class SearchAI(ScoringAI):
                 queued_unseen=queued_unseen,
             )
             candidate_deadline = min(
-                deadline,
+                proof_deadline,
                 now
                 + root_policy.proof_candidate_slice_seconds(
-                    remaining_seconds=deadline - now,
+                    remaining_seconds=proof_deadline - now,
                     checks_left=checks_left,
                     maximum_seconds=(
                         self.config.proof_candidate_max_seconds
@@ -2127,20 +2230,68 @@ class SearchAI(ScoringAI):
             if selected is not None:
                 selection_basis = "checked_unknown"
             if selected is None:
-                emergency = next(
-                    (
-                        move
-                        for move in queue
-                        if move not in seen and board.is_empty(*move)
-                    ),
-                    None,
-                )
+                emergencies = [
+                    move
+                    for move in dict.fromkeys(queue)
+                    if move not in seen and board.is_empty(*move)
+                ]
+                emergency: Move | None = None
+                emergency_basis = "emergency_unknown"
+                for index, move in enumerate(emergencies):
+                    now = time.perf_counter()
+                    remaining = deadline - now
+                    if (
+                        emergency_vcf_reserve <= 0
+                        or remaining
+                        < self.config.proof_emergency_vcf_min_seconds
+                    ):
+                        emergency = move
+                        break
+                    scanner = root_safety.RootVCFSafetyScanner(
+                        find_vcf=lambda position, attacker, candidate_deadline: (
+                            self._find_vcf_with_deadline(
+                                position,
+                                attacker,
+                                deadline=candidate_deadline,
+                                root_safety_channel=True,
+                            )
+                        ),
+                        node_count=lambda: self._counters.root_vcf_nodes,
+                    )
+                    candidates_left = len(emergencies) - index
+                    analysis = scanner.scan_candidate(
+                        board,
+                        move,
+                        mover=self.player,
+                        opponent=self.opponent,
+                        budget_seconds=max(
+                            self.config.proof_emergency_vcf_min_seconds,
+                            remaining / candidates_left,
+                        ),
+                        hard_deadline=deadline,
+                    )
+                    self._record_late_root_vcf_analysis(analysis)
+                    if (
+                        analysis.status
+                        == root_safety.RootCandidateSafety.PROVEN_LOSS.value
+                    ):
+                        rejected.append(move)
+                        seen.add(move)
+                        continue
+                    emergency = move
+                    if (
+                        analysis.status
+                        == root_safety.RootCandidateSafety.SURVIVES_VCF_SCAN.value
+                    ):
+                        emergency_basis = "emergency_vcf_survivor"
+                    break
+
                 if emergency is None:
                     selected = result.move
                     selection_basis = "proved_loss_fallback"
                 else:
                     selected = emergency
-                    selection_basis = "emergency_unknown"
+                    selection_basis = emergency_basis
                     emergency_analysis = ProofCandidateAnalysis(
                         move=selected,
                         state=ProofState.UNKNOWN.value,
@@ -2153,6 +2304,7 @@ class SearchAI(ScoringAI):
                     )
                     self._upsert_proof_candidate(emergency_analysis)
                     proof_by_move[selected] = emergency_analysis
+        self._final_proof_rejected = tuple(dict.fromkeys(rejected))
         self._final_proof_selected = selected
         self._final_proof_selection_basis = selection_basis
         selected_analysis = proof_by_move.get(selected)
@@ -2176,6 +2328,43 @@ class SearchAI(ScoringAI):
             score=scores.get(
                 selected,
                 self._heuristic_root_score(board, selected),
+            ),
+        )
+
+    def _record_late_root_vcf_analysis(
+        self,
+        analysis: RootVCFCandidateAnalysis,
+    ) -> None:
+        """Append bounded evidence for a late certificate candidate."""
+        if self._root_vcf_scan is None:
+            self._root_vcf_scan = RootVCFScanResult(
+                original_candidates=(analysis.move,),
+                candidates=(analysis.move,),
+                baseline_line=(),
+                analyses=(analysis,),
+                nodes=analysis.nodes,
+                elapsed_seconds=analysis.elapsed_seconds,
+            )
+            return
+
+        previous = self._root_vcf_scan
+        analyses = tuple(
+            item
+            for item in previous.analyses
+            if item.move != analysis.move
+        ) + (analysis,)
+        self._root_vcf_scan = replace(
+            previous,
+            original_candidates=tuple(
+                dict.fromkeys((*previous.original_candidates, analysis.move))
+            ),
+            candidates=tuple(
+                dict.fromkeys((*previous.candidates, analysis.move))
+            ),
+            analyses=analyses,
+            nodes=previous.nodes + analysis.nodes,
+            elapsed_seconds=(
+                previous.elapsed_seconds + analysis.elapsed_seconds
             ),
         )
 
@@ -2735,6 +2924,7 @@ class SearchAI(ScoringAI):
         offensive_moves = root_candidates.merge_unique(
             self._root_offensive_continuations,
             self._root_dual_frontier_bridges,
+            self._root_broad_quiet_attack_frontiers,
             self._root_quiet_attack_frontiers,
         )
         active_moves = tuple(
@@ -2778,6 +2968,7 @@ class SearchAI(ScoringAI):
             (() if lowest_risk is None else (lowest_risk,)),
             self._root_dual_frontier_bridges,
             self._root_offensive_continuations,
+            self._root_broad_quiet_attack_frontiers,
             self._root_quiet_attack_frontiers,
             quiet_moves,
             self._root_attack_priority,
@@ -2790,6 +2981,7 @@ class SearchAI(ScoringAI):
             critical_groups=critical_groups,
             preferred_groups=preferred_groups,
         )
+        self._root_review_finalists = tuple(finalists)
         pending = [move for move in finalists if move != result.move]
         if not pending:
             return None
@@ -2826,6 +3018,7 @@ class SearchAI(ScoringAI):
             )
             if latest is None:
                 continue
+            self._root_review_trace.append(("primary", latest))
             boundary_reviewed = False
             if self._needs_boundary_tie_escalation(latest):
                 boundary_reviewed = True
@@ -2866,16 +3059,26 @@ class SearchAI(ScoringAI):
             for move in self._root_pressure_prevention
             if move in available_set
         )
+        broad_quiet_attack = tuple(
+            move
+            for move in self._root_broad_quiet_attack_frontiers
+            if move in available_set and move not in pressure
+        )
         frontier = tuple(
             move
             for move in ordered
             if (
                 move not in pressure
+                and move not in broad_quiet_attack
                 and root_candidates.CandidateSource.THREAT_FRONTIER
                 in self._root_candidate_sources.get(move, ())
             )
         )
-        return tuple(group for group in (pressure, frontier) if group)
+        return tuple(
+            group
+            for group in (pressure, broad_quiet_attack, frontier)
+            if group
+        )
 
     def _best_structural_challenger(
         self,
@@ -2910,6 +3113,9 @@ class SearchAI(ScoringAI):
         target_depth_override: int = 7,
         start_depth: int | None = None,
         branch_candidate_limit_override: int | None = None,
+        quiet_frontier_extension_override: bool | None = None,
+        recalibrate_mate_like_override: bool | None = None,
+        reject_mate_like: bool = False,
     ) -> RootSafetyProbeResult | None:
         pair = [result.move, challenger]
         structure_scores = {
@@ -2931,15 +3137,29 @@ class SearchAI(ScoringAI):
             in self._root_candidate_sources.get(move, ())
             for move in pair
         )
+        challenger_score = root_scores.get(challenger)
+        if challenger_score is None:
+            challenger_score = self._heuristic_root_score(
+                board,
+                challenger,
+            )
+        quiet_frontier_extension = (
+            not mandatory_defense_pair
+            if quiet_frontier_extension_override is None
+            else quiet_frontier_extension_override
+        )
         probe = self._run_root_safety_probe(
             board,
             pair,
             trigger="dynamic_remaining_review",
-            pvs_gap=abs(root_scores[result.move] - root_scores[challenger]),
+            pvs_gap=abs(
+                root_scores.get(result.move, result.score)
+                - challenger_score
+            ),
             main_rank_stable=True,
             completed_depth=completed_depth,
             budget_seconds=budget_seconds,
-            quiet_frontier_extension=not mandatory_defense_pair,
+            quiet_frontier_extension=quiet_frontier_extension,
             target_depth_override=target_depth_override,
             minimum_stable_depth=(
                 self.config.root_dynamic_review_min_completed_depth
@@ -2964,7 +3184,12 @@ class SearchAI(ScoringAI):
                     else None
                 )
             ),
-            recalibrate_mate_like=not mandatory_defense_pair,
+            recalibrate_mate_like=(
+                not mandatory_defense_pair
+                if recalibrate_mate_like_override is None
+                else recalibrate_mate_like_override
+            ),
+            reject_mate_like=reject_mate_like,
             credible_score_margin=(
                 self.config.root_safety_score_margin
                 if mandatory_defense_pair
@@ -3023,20 +3248,39 @@ class SearchAI(ScoringAI):
         fallback_move: Move,
     ) -> RootSafetyProbeResult:
         escalation_budget = self._boundary_tie_escalation_budget_seconds()
+        secondary_budget = 0.0
+        if escalation_budget >= (
+            self.config.root_boundary_review_min_seconds
+            + self.config.root_boundary_secondary_min_seconds
+        ):
+            secondary_budget = min(
+                max(
+                    self.config.root_boundary_secondary_min_seconds,
+                    escalation_budget
+                    * self.config.root_boundary_secondary_time_fraction,
+                ),
+                escalation_budget
+                - self.config.root_boundary_review_min_seconds,
+            )
+        tactical_budget = max(0.0, escalation_budget - secondary_budget)
         escalated = None
-        if escalation_budget > 0:
+        if tactical_budget >= self.config.root_boundary_review_min_seconds:
             escalated = self._run_dynamic_pair_review(
                 board,
                 result,
                 challenger,
                 completed_depth=completed_depth,
-                budget_seconds=escalation_budget,
+                budget_seconds=tactical_budget,
                 target_depth_override=self.config.max_depth,
                 start_depth=max(3, initial_probe.completed_depth + 1),
                 branch_candidate_limit_override=(
                     self.config.root_boundary_review_branch_limit
                 ),
             )
+            if escalated is not None:
+                self._root_review_trace.append(
+                    ("boundary_tactical", escalated)
+                )
         total_requested = (
             initial_probe.requested_budget_seconds + escalation_budget
         )
@@ -3050,7 +3294,51 @@ class SearchAI(ScoringAI):
                 escalation_budget_seconds=escalation_budget,
                 boundary_tie_detected=True,
             )
+
         unresolved = escalated or initial_probe
+        if (
+            secondary_budget
+            >= self.config.root_boundary_secondary_min_seconds
+            and self._same_saturated_boundary(unresolved)
+        ):
+            secondary = self._run_dynamic_pair_review(
+                board,
+                result,
+                challenger,
+                completed_depth=completed_depth,
+                budget_seconds=secondary_budget,
+                target_depth_override=self.config.max_depth,
+                start_depth=1,
+                branch_candidate_limit_override=(
+                    self.config.root_boundary_review_branch_limit
+                ),
+                quiet_frontier_extension_override=False,
+                recalibrate_mate_like_override=False,
+                reject_mate_like=True,
+            )
+            if secondary is not None:
+                self._root_review_trace.append(
+                    ("boundary_secondary", secondary)
+                )
+                approved = self._boundary_secondary_approved_move(
+                    secondary
+                )
+                if approved is not None:
+                    approved_secondary = replace(
+                        secondary,
+                        approved_move=approved,
+                        selection_basis=(
+                            "boundary_secondary_equal_window"
+                        ),
+                        requested_budget_seconds=total_requested,
+                        escalation_budget_seconds=escalation_budget,
+                        boundary_tie_detected=True,
+                    )
+                    self._root_review_trace[-1] = (
+                        "boundary_secondary",
+                        approved_secondary,
+                    )
+                    return approved_secondary
         return replace(
             unresolved,
             approved_move=fallback_move,
@@ -3059,6 +3347,73 @@ class SearchAI(ScoringAI):
             escalation_budget_seconds=escalation_budget,
             boundary_tie_detected=True,
         )
+
+    @staticmethod
+    def _same_saturated_boundary(
+        probe: RootSafetyProbeResult,
+    ) -> bool:
+        return (
+            len(probe.candidates) == 2
+            and len({candidate.score for candidate in probe.candidates}) == 1
+            and all(
+                abs(candidate.score) == HEURISTIC_SCORE_LIMIT
+                for candidate in probe.candidates
+            )
+        )
+
+    def _boundary_secondary_approved_move(
+        self,
+        probe: RootSafetyProbeResult,
+    ) -> Move | None:
+        if (
+            len(probe.candidates) != 2
+            or probe.completed_depth
+            < self.config.root_boundary_secondary_min_completed_depth
+            or any(
+                abs(candidate.score) >= HEURISTIC_SCORE_LIMIT
+                for candidate in probe.candidates
+            )
+        ):
+            return None
+
+        stable_count = (
+            self.config.root_boundary_secondary_stable_leader_count
+        )
+        if (
+            len(probe.leader_history) < stable_count
+            or len(set(probe.leader_history[-stable_count:])) != 1
+        ):
+            return None
+        leader = probe.leader_history[-1]
+        pair = {candidate.move for candidate in probe.candidates}
+
+        proof_states = {
+            candidate.move: candidate.state
+            for candidate in self._proof_candidates
+            if candidate.move in pair
+        }
+        if (
+            proof_states.get(leader) == ProofState.PROVEN_WIN.value
+            or any(
+                move != leader
+                and state == ProofState.PROVEN_LOSS.value
+                for move, state in proof_states.items()
+            )
+        ):
+            return None
+
+        if self._root_vcf_scan is not None:
+            vcf_states = {
+                candidate.move: candidate.status
+                for candidate in self._root_vcf_scan.analyses
+                if candidate.move in pair
+            }
+            if (
+                vcf_states.get(leader)
+                == root_safety.RootCandidateSafety.PROVEN_LOSS.value
+            ):
+                return None
+        return leader
 
     def _boundary_tie_escalation_budget_seconds(self) -> float:
         remaining = self._time.remaining_seconds
@@ -3136,6 +3491,7 @@ class SearchAI(ScoringAI):
         extension_depth_override: int | None = None,
         branch_candidate_limit_override: int | None = None,
         recalibrate_mate_like: bool = True,
+        reject_mate_like: bool = False,
         credible_score_margin: int | None = None,
     ) -> RootSafetyProbeResult | None:
         """Compare near-tied moves independently with full root windows.
@@ -3252,10 +3608,13 @@ class SearchAI(ScoringAI):
             except SearchTimeout:
                 break
 
-            if recalibrate_mate_like and any(
+            contains_mate_like = any(
                 self._is_mate_like_score(candidate.score)
                 for candidate in ranked
-            ):
+            )
+            if reject_mate_like and contains_mate_like:
+                break
+            if recalibrate_mate_like and contains_mate_like:
                 if quiet_frontier_extension:
                     ranked = [
                         RootSafetyCandidateAnalysis(

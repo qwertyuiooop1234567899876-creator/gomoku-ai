@@ -95,6 +95,10 @@ class TestV0166ArbitrationIntegrity(unittest.TestCase):
             requested_budget_seconds=2.0,
         )
         ai = SearchAI(BLACK, max_depth=8, time_limit_seconds=60.0)
+        ai.config = replace(
+            ai.config,
+            root_boundary_secondary_min_seconds=3.0,
+        )
         ai._begin_move_search()
 
         with (

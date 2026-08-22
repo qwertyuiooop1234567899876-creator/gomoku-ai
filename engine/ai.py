@@ -115,6 +115,53 @@ class RootSafetyCandidateAnalysis:
 
 
 @dataclass(frozen=True, slots=True)
+class RootReviewPairAnalysis:
+    """One bounded pair comparison retained for root-review audit."""
+
+    channel: str
+    trigger: str
+    completed_depth: int
+    nodes: int
+    candidates: tuple[RootSafetyCandidateAnalysis, ...]
+    leader_history: tuple[Move, ...] = ()
+    approved_move: Move | None = None
+    selection_basis: str | None = None
+    requested_budget_seconds: float = 0.0
+    boundary_tie_detected: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "channel": self.channel,
+            "trigger": self.trigger,
+            "completed_depth": self.completed_depth,
+            "nodes": self.nodes,
+            "candidates": [
+                candidate.to_dict() for candidate in self.candidates
+            ],
+            "leader_history": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.leader_history
+            ],
+            "approved_move": (
+                None
+                if self.approved_move is None
+                else list(self.approved_move)
+            ),
+            "approved_coordinate": (
+                None
+                if self.approved_move is None
+                else format_move(*self.approved_move)
+            ),
+            "selection_basis": self.selection_basis,
+            "requested_budget_seconds": self.requested_budget_seconds,
+            "boundary_tie_detected": self.boundary_tie_detected,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SearchPhaseTiming:
     """Wall-clock time attributed to one top-level decision phase."""
 
@@ -261,6 +308,11 @@ class DecisionAnalysis:
     review_boundary_tie_detected: bool = False
     review_budget_seconds: float = 0.0
     review_escalation_budget_seconds: float = 0.0
+    root_review_finalists: tuple[Move, ...] = ()
+    root_review_pairs: tuple[RootReviewPairAnalysis, ...] = ()
+    root_review_source_coverage: tuple[
+        tuple[str, tuple[Move, ...]], ...
+    ] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -471,6 +523,29 @@ class DecisionAnalysis:
             "review_escalation_budget_seconds": (
                 self.review_escalation_budget_seconds
             ),
+            "root_review_finalists": [
+                {
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for move in self.root_review_finalists
+            ],
+            "root_review_pairs": [
+                pair.to_dict() for pair in self.root_review_pairs
+            ],
+            "root_review_source_coverage": [
+                {
+                    "source": source,
+                    "moves": [
+                        {
+                            "move": list(move),
+                            "coordinate": format_move(*move),
+                        }
+                        for move in moves
+                    ],
+                }
+                for source, moves in self.root_review_source_coverage
+            ],
         }
 
 

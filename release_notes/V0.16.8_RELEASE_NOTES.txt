@@ -1,0 +1,73 @@
+Gomoku AI V0.16.8 Root Safety Completion
+=========================================
+
+问题来源
+--------
+- V0.16.7 普通根候选仍只记 ordinary 来源。实战 D7 虽在根集合内，
+  但因缺少 pressure_prevention 证据而无法进入关键复核组。
+- 对 YiXin 第 15 手的 F7 有 11 个等级 40 后续，但全局等级 60
+  门槛使它在 PVS 之前消失。
+- 自对弈第 29 手 F9 以 emergency_unknown 落子，而同根单点 VCF
+  只需 1 节点就能证明对手 D8 连攻；该紧急通道缺少落子前门禁。
+- 边界平局中，单纯续加战术延伸会让两候选同时饱和到
+  ±100,000,000；直接关闭安静延伸又会退回更浅的静态分。
+
+机制修复
+--------
+- 普通模式保持根成员不变，对已入集合的对手压力点补充最强
+  pressure_prevention 证据。证据以后续总强度和宽度排序，不重复
+  占槽，不提高根候选上限。
+- 增加最多一着 broad_quiet_attack 第二通道：仅接纳等级至少
+  40、后续至少 8、累计强度至少 320 的异常宽安静进攻枢纽。
+  全局安静前沿门槛仍为 60。
+- Final Proof 事前保留最多 0.5 秒的紧急 VCF 切片。后加入且未做
+  Proof 的证书拦截点会按原坐标单独扫描，已证对手 VCF 的着法
+  不再由 emergency_unknown 直接返回。有界未命中仍保持 UNKNOWN，
+  不升级为严格安全。
+- 边界升级总预算不变，内部拆为原战术延伸通道与有最低 1 秒
+  额度的次级同窗通道。仅当战术通道仍是同符号边界夹值时才
+  运行次级通道；结果必须为普通启发式区间、最低深度 3、连续
+  3 层同一领跑，且不得与 Proof/VCF 严格证据冲突。
+
+审计与记录
+----------
+- 诊断开关开启且实际触发动态复核时，JSON 记录全部有界 pair
+  探针、finalists、渠道、领跑历史与各来源实际被验证的着法。
+- TXT 只增加一行复核摘要，非触发手和关闭 diagnostics 时不写入全量
+  pair 审计，控制记录体积。
+- 新增任何着法都保留来源标签和 UNKNOWN 语义，不恢复或重建历史
+  records。
+
+结构回归
+--------
+- YiXin 第 15 手前缀：F7 以单一 broad_quiet_attack 槽进入根集合和
+  关键复核组；低宽度反例不通过。
+- 自对弈第 23 手前缀：D7 仍是唯一成员，同时具有 ordinary 与
+  pressure_prevention 来源。
+- 自对弈第 29 手前缀：F9 的单点根 VCF 门禁以 D8 为证书得到
+  proven_loss，Final Proof 不再返回该紧急着。
+- 双通道回归覆盖最低预算、同夹值触发、已可区分不触发、稳定深度
+  与 Proof 冲突拦截。审计回归覆盖记录体积开关。
+- 测试只锁定候选宽度、证据来源、UNKNOWN 语义和预算不变式，
+  不断言引擎必然选中历史坐标或已提升对 YiXin 胜率。
+
+非目标
+------
+- 不改评估权重、全局候选上限、Proof 三态或核心 PVS/Negamax 搜索树。
+- Native Negamax/TT/走法生成/评估整体下沉作为 V0.16.8 之后的独立工程，
+  本版不引入第二套 ABI。
+
+验证命令
+--------
+  python -B -m unittest tests.test_v0168_root_completion -v
+  python -B -m unittest tests.test_v0165_root_integrity tests.test_v0166_arbitration_integrity tests.test_v0167_candidate_evidence -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 3
+
+验证结果
+--------
+- V0.16.8 专项、相邻仲裁/Proof/VCF 与记录回归：52/52 通过
+  （5.630 秒）。
+- 全量 unittest：389/389 通过（87.609 秒），无失败、无跳过。
+- 固定搜索基准保持 J9/G9/H11/J5，节点数 32/19/48/23；三次中位
+  用时 0.199/0.167/0.650/1.560 秒。

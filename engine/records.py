@@ -430,6 +430,29 @@ class GameRecorder:
                             f"score={candidate.get('score', 0):+,}"
                             f"{suffix}"
                         )
+                    review_pairs = move.analysis.get(
+                        "root_review_pairs",
+                        [],
+                    )
+                    if review_pairs:
+                        finalists = move.analysis.get(
+                            "root_review_finalists",
+                            [],
+                        )
+                        finalist_text = ",".join(
+                            item.get("coordinate", "?")
+                            for item in finalists
+                        )
+                        channels = ",".join(
+                            pair.get("channel", "?")
+                            for pair in review_pairs
+                        )
+                        lines.append(
+                            "     "
+                            f"root_review_audit=pairs:{len(review_pairs)} "
+                            f"finalists:{finalist_text or '?'} "
+                            f"channels:{channels}"
+                        )
 
                 if move.analysis.get("root_vcf_checked", False):
                     baseline = move.analysis.get(

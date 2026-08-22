@@ -275,7 +275,10 @@ class TestV0165RootIntegrity(unittest.TestCase):
             "final_proof_budget_exhausted",
             analyses[intercept].cutoff_reason,
         )
-        self.assertEqual("emergency_unknown", ai._final_proof_selection_basis)
+        self.assertEqual(
+            "emergency_vcf_survivor",
+            ai._final_proof_selection_basis,
+        )
         self.assertEqual(ProofState.UNKNOWN.value, ai._final_proof_state)
 
 

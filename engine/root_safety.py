@@ -159,6 +159,38 @@ class RootVCFSafetyScanner:
     rescue_survivor_threshold: int = 1
     clock: Clock = time.perf_counter
 
+    def scan_candidate(
+        self,
+        board: Board,
+        move: Move,
+        *,
+        mover: int,
+        opponent: int,
+        budget_seconds: float | None,
+        hard_deadline: float | None,
+    ) -> RootVCFCandidateAnalysis:
+        """Screen one late root candidate without baseline substitution.
+
+        Final-Proof may discover a certificate intercept after the normal
+        root scan has finished.  That exact point must be screened in place;
+        merging the baseline witness here could silently replace it with a
+        different move and leave the emergency choice unchecked.
+        """
+        started_at = self.clock()
+        deadline = self._global_deadline(
+            started_at,
+            budget_seconds,
+            hard_deadline,
+        )
+        analyses = self._scan_candidates(
+            board,
+            [move],
+            mover=mover,
+            opponent=opponent,
+            global_deadline=deadline,
+        )
+        return analyses[0]
+
     def scan(
         self,
         board: Board,

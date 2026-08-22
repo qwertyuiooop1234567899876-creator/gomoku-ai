@@ -30,6 +30,7 @@ class CandidateSource(str, Enum):
     PRESSURE_PREVENTION = "pressure_prevention"
     QUIET_PREVENTION = "quiet_prevention"
     QUIET_ATTACK_FRONTIER = "quiet_attack_frontier"
+    BROAD_QUIET_ATTACK = "broad_quiet_attack"
     OFFENSIVE_CONTINUATION = "offensive_continuation"
     DUAL_FRONTIER_BRIDGE = "dual_frontier_bridge"
     VCF_INTERCEPT = "vcf_intercept"
@@ -56,6 +57,7 @@ PROOF_SOURCE_PRIORITY = (
     CandidateSource.OWN_FORCING,
     CandidateSource.FORCING_COUNTERATTACK,
     CandidateSource.ACTIVE_COUNTERATTACK,
+    CandidateSource.BROAD_QUIET_ATTACK,
     CandidateSource.QUIET_ATTACK_FRONTIER,
     CandidateSource.OFFENSIVE_CONTINUATION,
     CandidateSource.ROOT_EXPANSION,
@@ -303,6 +305,7 @@ def frontier_defense_moves(
     prevention_moves: Iterable[Move] = (),
     offensive_continuation_moves: Iterable[Move] = (),
     dual_frontier_moves: Iterable[Move] = (),
+    broad_quiet_attack_moves: Iterable[Move] = (),
 ) -> list[Move]:
     """Build a complete but capped frontier-defense root set."""
     frontier = tuple(frontier_moves)
@@ -313,6 +316,7 @@ def frontier_defense_moves(
     prevention = tuple(prevention_moves)
     offensive_continuations = tuple(offensive_continuation_moves)
     dual_frontiers = tuple(dual_frontier_moves)
+    broad_quiet_attacks = tuple(broad_quiet_attack_moves)
     return merge_with_required(
         ordered_groups=(
             frontier,
@@ -321,6 +325,7 @@ def frontier_defense_moves(
             pressure_prevention,
             prevention,
             dual_frontiers,
+            broad_quiet_attacks,
             counterattacks,
             offensive_continuations,
         ),
@@ -330,6 +335,7 @@ def frontier_defense_moves(
             pressure_prevention,
             prevention,
             dual_frontiers,
+            broad_quiet_attacks,
             counterattacks,
         ),
         limit=limit,
@@ -372,6 +378,113 @@ def quiet_attack_frontier_moves(
                 sum(frontier.continuation_ranks),
                 -order,
                 frontier.gain_move,
+            )
+        )
+
+    ranked.sort(reverse=True)
+    return [item[-1] for item in ranked[:limit]]
+
+
+def broad_quiet_attack_frontier_moves(
+    *,
+    frontiers: Iterable[ThreatFrontier],
+    minimum_rank: int,
+    minimum_continuations: int,
+    minimum_total_rank: int,
+    limit: int,
+    covered_moves: Iterable[Move] = (),
+) -> list[Move]:
+    """Keep one exceptionally broad lower-rank quiet attack hub.
+
+    This is a second, narrow admission lane rather than a global lowering of
+    the ordinary quiet-frontier rank gate.  It rewards breadth only after both
+    a minimum continuation count and a minimum total rank are satisfied.
+    """
+    if limit <= 0:
+        return []
+
+    covered = set(covered_moves)
+    ranked: list[tuple[int, int, int, int, Move]] = []
+    for order, frontier in enumerate(frontiers):
+        maximum_rank = max(frontier.continuation_ranks, default=0)
+        total_rank = sum(frontier.continuation_ranks)
+        if (
+            frontier.gain_move in covered
+            or frontier.kind is not ThreatKind.QUIET
+            or maximum_rank < minimum_rank
+            or len(frontier.continuations) < minimum_continuations
+            or total_rank < minimum_total_rank
+        ):
+            continue
+        ranked.append(
+            (
+                len(frontier.continuations),
+                total_rank,
+                maximum_rank,
+                -order,
+                frontier.gain_move,
+            )
+        )
+
+    ranked.sort(reverse=True)
+    return [item[-1] for item in ranked[:limit]]
+
+
+def ordinary_pressure_evidence_moves(
+    *,
+    profiles: dict[Move, ThreatProfile],
+    frontiers: Iterable[ThreatFrontier] = (),
+    available_moves: Iterable[Move],
+    limit: int,
+) -> list[Move]:
+    """Label already-selected ordinary moves that occupy direct pressure.
+
+    Membership is deliberately fixed by ``available_moves``.  The helper only
+    restores defensive provenance for a non-forced opponent open-three/four
+    point when no multi-frontier mode was activated.
+    """
+    if limit <= 0:
+        return []
+
+    frontier_by_move = {
+        frontier.gain_move: frontier for frontier in frontiers
+    }
+    ranked: list[tuple[int, int, int, int, int, int, int, Move]] = []
+    for order, move in enumerate(dict.fromkeys(available_moves)):
+        profile = profiles.get(move)
+        if (
+            profile is None
+            or profile.forced_win
+            or (
+                profile.four_directions == 0
+                and profile.open_three_directions == 0
+            )
+        ):
+            continue
+        frontier = frontier_by_move.get(move)
+        continuation_count = (
+            len(frontier.continuations) if frontier is not None else 0
+        )
+        total_rank = (
+            sum(frontier.continuation_ranks)
+            if frontier is not None
+            else 0
+        )
+        maximum_rank = (
+            max(frontier.continuation_ranks, default=0)
+            if frontier is not None
+            else 0
+        )
+        ranked.append(
+            (
+                total_rank,
+                continuation_count,
+                maximum_rank,
+                profile.tactical_rank,
+                profile.four_directions,
+                profile.open_three_directions,
+                -order,
+                move,
             )
         )
 

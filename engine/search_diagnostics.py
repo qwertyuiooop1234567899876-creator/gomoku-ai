@@ -16,6 +16,7 @@ from engine.ai import (
     DecisionAnalysis,
     Move,
     ProofCandidateAnalysis,
+    RootReviewPairAnalysis,
     SearchPhaseTiming,
 )
 from engine.evaluator import EvaluationConfig, ThreatProfile
@@ -67,6 +68,8 @@ class SearchDiagnosticsSource(Protocol):
     _root_safety_applied: bool
     _root_vcf_scan: RootVCFScanResult | None
     _root_mate_scores_quarantined: bool
+    _root_review_finalists: tuple[Move, ...]
+    _root_review_trace: list[tuple[str, RootSafetyProbeResult]]
     _phase_timings: dict[str, float]
 
 
@@ -123,6 +126,9 @@ def compose_search_reason(
                 "boundary_tie_pvs_fallback": (
                     "；边界平局升级复核仍未完成，"
                     "显式回退 PVS 候选"
+                ),
+                "boundary_secondary_equal_window": (
+                    "；边界夹值由无安静延伸次级同窗证据裁决"
                 ),
             }
             reason += dynamic_messages.get(
@@ -257,6 +263,54 @@ def build_search_analysis(
     safety_probe = source._root_safety_probe
     root_vcf = source._root_vcf_scan
     counters = source._counters
+    review_pairs: tuple[RootReviewPairAnalysis, ...] = ()
+    review_finalists: tuple[Move, ...] = ()
+    review_source_coverage: tuple[
+        tuple[str, tuple[Move, ...]], ...
+    ] = ()
+    if source.diagnostics and source._root_review_trace:
+        review_pairs = tuple(
+            RootReviewPairAnalysis(
+                channel=channel,
+                trigger=probe.trigger,
+                completed_depth=probe.completed_depth,
+                nodes=probe.nodes,
+                candidates=probe.candidates,
+                leader_history=probe.leader_history,
+                approved_move=probe.approved_move,
+                selection_basis=probe.selection_basis,
+                requested_budget_seconds=(
+                    probe.requested_budget_seconds
+                ),
+                boundary_tie_detected=probe.boundary_tie_detected,
+            )
+            for channel, probe in source._root_review_trace
+        )
+        review_finalists = source._root_review_finalists
+        reviewed_moves = tuple(
+            dict.fromkeys(
+                candidate.move
+                for _channel, probe in source._root_review_trace
+                for candidate in probe.candidates
+            )
+        )
+        review_source_coverage = tuple(
+            (
+                candidate_source.value,
+                tuple(
+                    move
+                    for move in reviewed_moves
+                    if candidate_source
+                    in source._root_candidate_sources.get(move, ())
+                ),
+            )
+            for candidate_source in root_candidates.CandidateSource
+            if any(
+                candidate_source
+                in source._root_candidate_sources.get(move, ())
+                for move in reviewed_moves
+            )
+        )
 
     return DecisionAnalysis(
         selected_move=selected_move,
@@ -431,4 +485,7 @@ def build_search_analysis(
             if safety_probe is None
             else safety_probe.escalation_budget_seconds
         ),
+        root_review_finalists=review_finalists,
+        root_review_pairs=review_pairs,
+        root_review_source_coverage=review_source_coverage,
     )
