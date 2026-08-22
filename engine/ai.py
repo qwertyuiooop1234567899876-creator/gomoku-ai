@@ -255,6 +255,12 @@ class DecisionAnalysis:
     mate_scores_quarantined: bool = False
     phase_timings: tuple[SearchPhaseTiming, ...] = ()
     root_safety_selection_basis: str | None = None
+    review_arbitration_state: str = "not_checked"
+    review_completed_depth: int = 0
+    review_rank_stable: bool = False
+    review_boundary_tie_detected: bool = False
+    review_budget_seconds: float = 0.0
+    review_escalation_budget_seconds: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -454,6 +460,16 @@ class DecisionAnalysis:
             ],
             "root_safety_selection_basis": (
                 self.root_safety_selection_basis
+            ),
+            "review_arbitration_state": self.review_arbitration_state,
+            "review_completed_depth": self.review_completed_depth,
+            "review_rank_stable": self.review_rank_stable,
+            "review_boundary_tie_detected": (
+                self.review_boundary_tie_detected
+            ),
+            "review_budget_seconds": self.review_budget_seconds,
+            "review_escalation_budget_seconds": (
+                self.review_escalation_budget_seconds
             ),
         }
 

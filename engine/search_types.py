@@ -119,6 +119,10 @@ class SearchConfig:
     root_dynamic_review_min_seconds: float = 2.0
     root_dynamic_review_min_completed_depth: int = 5
     root_dynamic_review_structure_margin: int = 3_000
+    root_boundary_review_shared_fraction: float = 0.5
+    root_boundary_review_max_seconds: float = 4.0
+    root_boundary_review_min_seconds: float = 1.0
+    root_boundary_review_branch_limit: int = 6
     root_vcf_safety_enabled: bool = True
     root_vcf_safety_max_attacker_moves: int = 5
     root_vcf_safety_time_fraction: float = 0.08
@@ -343,6 +347,29 @@ class SearchConfig:
             raise ValueError("root_dynamic_review_min_completed_depth 不能小于 2。")
         if self.root_dynamic_review_structure_margin < 0:
             raise ValueError("root_dynamic_review_structure_margin 不能小于 0。")
+        if not 0 < self.root_boundary_review_shared_fraction < 1:
+            raise ValueError(
+                "root_boundary_review_shared_fraction 必须在 0～1 之间。"
+            )
+        if self.root_boundary_review_max_seconds <= 0:
+            raise ValueError(
+                "root_boundary_review_max_seconds 必须大于 0。"
+            )
+        if self.root_boundary_review_min_seconds <= 0:
+            raise ValueError(
+                "root_boundary_review_min_seconds 必须大于 0。"
+            )
+        if (
+            self.root_boundary_review_min_seconds
+            > self.root_boundary_review_max_seconds
+        ):
+            raise ValueError(
+                "root_boundary_review_min_seconds 不能大于最大值。"
+            )
+        if self.root_boundary_review_branch_limit < 2:
+            raise ValueError(
+                "root_boundary_review_branch_limit 不能小于 2。"
+            )
         if self.root_vcf_safety_max_attacker_moves < 1:
             raise ValueError(
                 "root_vcf_safety_max_attacker_moves 必须大于 0。"
@@ -522,6 +549,9 @@ class RootSafetyProbeResult:
     leader_history: tuple[Move, ...] = ()
     approved_move: Move | None = None
     selection_basis: str = "equal_window"
+    requested_budget_seconds: float = 0.0
+    escalation_budget_seconds: float = 0.0
+    boundary_tie_detected: bool = False
 
     @property
     def best_move(self) -> Move | None:

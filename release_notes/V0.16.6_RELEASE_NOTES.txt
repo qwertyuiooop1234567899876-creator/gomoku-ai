@@ -1,0 +1,60 @@
+Gomoku AI V0.16.6 Review Arbitration Integrity
+==============================================
+
+问题来源
+--------
+- V0.16.5 自对弈第 17 手的 H6 与 G10 都已进入动态同窗复核，但选择性
+  威胁延伸把两个候选同时夹到 -100,000,000 启发式边界；探针只完成
+  深度 2 就回退浅层 PVS，最终选了 YiXin 配对子局确认的直接败着 H6。
+- 旧记录只保存复核完成深度和节点数，没有保存请求预算、升级预算、
+  边界平局检测和仲裁完整性。V0.16.5 该手 root_review 阶段实际耗时
+  3.817 秒，但无法从历史 JSON 精确还原单对候选当时申请的预算。
+- 30 秒 YiXin 冷启动复盘两次稳定确认：对 YiXin 第 11 手前白方约 +50，
+  K9 后约 +60，而实战 G5 后稳定跳到 +10000。该手 K9 已被生成、保留并进入
+  Defense VCT/动态复核，但排名未稳定时记录仅显示 pvs_fallback。
+
+机制修复
+--------
+- 当两个动态复核候选同时命中精确启发式夹值边界、且深度低于可信
+  门槛时，不再立即执行普通 pvs_fallback，而是先触发一次只包含该候选对、
+  更窄子分支且允许更深层次的升级同窗复核。近 Mate 分不会被误当成精确夹值边界。
+- 升级复核只借用已预留 Final Proof 的最多一半，默认上限 4 秒、最小 1 秒、
+  子分支上限 6；未触发时不增加固定预留，不额外挤压 PVS。
+- 升级复核仍无法形成可信结论时，棋局仍有明确出口：回退原 PVS 候选，
+  但 selection_basis 改为 boundary_tie_pvs_fallback，与正常 pvs_fallback 区分。
+- approve_move 仍保持纯仲裁；是否需要补搜、借用多少预算和何时终止均由
+  search.py 的协调层负责。
+
+记录与可观测性
+--------------
+- 新增 review_arbitration_state：not_checked / completed /
+  insufficient_depth / boundary_tie_unresolved。
+- 新增 review_completed_depth、review_rank_stable、
+  review_boundary_tie_detected、review_budget_seconds 和
+  review_escalation_budget_seconds，并贯通 DecisionAnalysis、JSON 与 TXT 记录。
+- 排名未稳定或未到可信层次而回退 PVS 时显式记为 insufficient_depth；
+  双边界升级仍未解决时记为 boundary_tie_unresolved。
+
+结构回归
+--------
+- 使用第 17 手前 16 手的最小局面直接构造 H6/G10 仲裁条件，不恢复或复制
+  records/ 棋谱。
+- 锁定“先升级、再显式回退”的调用顺序、共享预算上限、近 Mate 负向边界、
+  已完成升级可以改选，以及四种仲裁记录状态。
+
+验证
+----
+  python -B -m unittest tests.test_v0166_arbitration_integrity -v
+  python -B -m unittest discover -s tests -p "test_*.py" -v
+  python -B search_benchmark.py --repeat 3
+
+验证结果
+--------
+- V0.16.6 专项：7/7 通过。
+- 相关动态复核、mandatory-defense、UNKNOWN、Proof 与记录回归：55/55 通过。
+- 全量 unittest：373/373 通过，最终轮耗时 88.278 秒。
+- 固定基准重复 3 次：J9/G9/H11/J5 节点数仍为 32/19/48/23；最终轮中位耗时
+  0.200/0.155/0.628/1.559 秒。
+- 第 17 手实际局面内存复跑：基础候选对申请约 1.385 秒，升级层借用 4.0 秒，
+  总申请约 5.385 秒；完成深度从历史记录的 2 提高到 3，但仍未稳定，正确记为
+  boundary_tie_unresolved 并回退 H6。这证明升级与记录机制生效，不证明已修正实战选点。

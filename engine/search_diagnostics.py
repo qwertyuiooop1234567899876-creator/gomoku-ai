@@ -120,6 +120,10 @@ def compose_search_reason(
                 "frontier_balance": "；动态余时复核按攻防前沿净增益改选",
                 "equal_window": "；动态余时同窗深层复核完成",
                 "pvs_fallback": "；动态余时复核未形成稳定改选证据",
+                "boundary_tie_pvs_fallback": (
+                    "；边界平局升级复核仍未完成，"
+                    "显式回退 PVS 候选"
+                ),
             }
             reason += dynamic_messages.get(
                 root_safety_probe.selection_basis,
@@ -161,6 +165,31 @@ def compose_search_reason(
     if final_proof_checked:
         return reason + "；最终候选未取得严格 Proof 结论"
     return reason
+
+
+def review_arbitration_state(
+    probe: RootSafetyProbeResult | None,
+    config: SearchConfig,
+) -> str:
+    """Describe whether the recorded root evidence reached a decision."""
+    if probe is None:
+        return "not_checked"
+    if probe.selection_basis == "boundary_tie_pvs_fallback":
+        return "boundary_tie_unresolved"
+    minimum_depth = (
+        config.root_dynamic_review_min_completed_depth
+        if probe.trigger == "dynamic_remaining_review"
+        else config.root_safety_min_completed_depth
+    )
+    if (
+        probe.selection_basis == "pvs_fallback"
+        and (
+            probe.completed_depth < minimum_depth
+            or not probe.rank_stable
+        )
+    ):
+        return "insufficient_depth"
+    return "completed"
 
 
 def build_search_analysis(
@@ -376,5 +405,30 @@ def build_search_analysis(
         ),
         root_safety_selection_basis=(
             None if safety_probe is None else safety_probe.selection_basis
+        ),
+        review_arbitration_state=review_arbitration_state(
+            safety_probe,
+            source.config,
+        ),
+        review_completed_depth=(
+            0 if safety_probe is None else safety_probe.completed_depth
+        ),
+        review_rank_stable=(
+            False if safety_probe is None else safety_probe.rank_stable
+        ),
+        review_boundary_tie_detected=(
+            False
+            if safety_probe is None
+            else safety_probe.boundary_tie_detected
+        ),
+        review_budget_seconds=(
+            0.0
+            if safety_probe is None
+            else safety_probe.requested_budget_seconds
+        ),
+        review_escalation_budget_seconds=(
+            0.0
+            if safety_probe is None
+            else safety_probe.escalation_budget_seconds
         ),
     )

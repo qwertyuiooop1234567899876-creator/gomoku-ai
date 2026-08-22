@@ -62,7 +62,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.5 搜索 AI。
+    V0.16.6 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -2791,15 +2791,28 @@ class SearchAI(ScoringAI):
             )
             if latest is None:
                 continue
+            boundary_reviewed = False
+            if self._needs_boundary_tie_escalation(latest):
+                boundary_reviewed = True
+                latest = self._escalate_boundary_tie_review(
+                    board,
+                    pair_result,
+                    challenger,
+                    initial_probe=latest,
+                    completed_depth=completed_depth,
+                    fallback_move=current,
+                )
             previous = current
             current = self._apply_root_safety_probe(
                 pair_result,
                 latest,
             ).move
-            if current != previous:
+            if current != previous or boundary_reviewed:
                 # The highest-priority completed comparison has already
                 # changed the leader.  Do not let a later, smaller time slice
-                # reverse it with weaker source-only evidence.
+                # reverse it with weaker source-only evidence.  An escalated
+                # boundary tie also consumes the only shared verification
+                # slice, so preserve its explicit unresolved outcome.
                 break
 
         if latest is None:
@@ -2859,6 +2872,9 @@ class SearchAI(ScoringAI):
         *,
         completed_depth: int,
         budget_seconds: float,
+        target_depth_override: int = 7,
+        start_depth: int | None = None,
+        branch_candidate_limit_override: int | None = None,
     ) -> RootSafetyProbeResult | None:
         pair = [result.move, challenger]
         structure_scores = {
@@ -2889,21 +2905,29 @@ class SearchAI(ScoringAI):
             completed_depth=completed_depth,
             budget_seconds=budget_seconds,
             quiet_frontier_extension=not mandatory_defense_pair,
-            target_depth_override=7,
+            target_depth_override=target_depth_override,
             minimum_stable_depth=(
                 self.config.root_dynamic_review_min_completed_depth
             ),
             stable_leader_count=(2 if mandatory_defense_pair else 3),
-            start_depth=(1 if mandatory_defense_pair else 2),
+            start_depth=(
+                start_depth
+                if start_depth is not None
+                else (1 if mandatory_defense_pair else 2)
+            ),
             extension_depth_override=(
                 self.config.threat_extension_depth
                 if mandatory_defense_pair
                 else None
             ),
             branch_candidate_limit_override=(
-                max(self.config.branch_candidate_limit, 12)
-                if mandatory_defense_pair
-                else None
+                branch_candidate_limit_override
+                if branch_candidate_limit_override is not None
+                else (
+                    max(self.config.branch_candidate_limit, 12)
+                    if mandatory_defense_pair
+                    else None
+                )
             ),
             recalibrate_mate_like=not mandatory_defense_pair,
             credible_score_margin=(
@@ -2935,6 +2959,89 @@ class SearchAI(ScoringAI):
             probe,
             approved_move=approved,
             selection_basis=basis,
+            requested_budget_seconds=budget_seconds,
+        )
+
+    def _needs_boundary_tie_escalation(
+        self,
+        probe: RootSafetyProbeResult,
+    ) -> bool:
+        return (
+            len(probe.candidates) == 2
+            and probe.completed_depth
+            < self.config.root_dynamic_review_min_completed_depth
+            and len({candidate.score for candidate in probe.candidates}) == 1
+            and all(
+                abs(candidate.score) == HEURISTIC_SCORE_LIMIT
+                for candidate in probe.candidates
+            )
+        )
+
+    def _escalate_boundary_tie_review(
+        self,
+        board: Board,
+        result: RootResult,
+        challenger: Move,
+        *,
+        initial_probe: RootSafetyProbeResult,
+        completed_depth: int,
+        fallback_move: Move,
+    ) -> RootSafetyProbeResult:
+        escalation_budget = self._boundary_tie_escalation_budget_seconds()
+        escalated = None
+        if escalation_budget > 0:
+            escalated = self._run_dynamic_pair_review(
+                board,
+                result,
+                challenger,
+                completed_depth=completed_depth,
+                budget_seconds=escalation_budget,
+                target_depth_override=self.config.max_depth,
+                start_depth=max(3, initial_probe.completed_depth + 1),
+                branch_candidate_limit_override=(
+                    self.config.root_boundary_review_branch_limit
+                ),
+            )
+        total_requested = (
+            initial_probe.requested_budget_seconds + escalation_budget
+        )
+        if (
+            escalated is not None
+            and escalated.selection_basis != "pvs_fallback"
+        ):
+            return replace(
+                escalated,
+                requested_budget_seconds=total_requested,
+                escalation_budget_seconds=escalation_budget,
+                boundary_tie_detected=True,
+            )
+        unresolved = escalated or initial_probe
+        return replace(
+            unresolved,
+            approved_move=fallback_move,
+            selection_basis="boundary_tie_pvs_fallback",
+            requested_budget_seconds=total_requested,
+            escalation_budget_seconds=escalation_budget,
+            boundary_tie_detected=True,
+        )
+
+    def _boundary_tie_escalation_budget_seconds(self) -> float:
+        remaining = self._time.remaining_seconds
+        if remaining is None:
+            return 0.0
+        shared_reserve = (
+            self._final_proof_reserve_seconds()
+            * self.config.root_boundary_review_shared_fraction
+        )
+        budget = min(
+            self.config.root_boundary_review_max_seconds,
+            shared_reserve,
+            max(0.0, remaining - 0.25),
+        )
+        return (
+            budget
+            if budget >= self.config.root_boundary_review_min_seconds
+            else 0.0
         )
 
     def _dynamic_review_budget_seconds(self) -> float:
@@ -3186,6 +3293,7 @@ class SearchAI(ScoringAI):
             nodes=probe._counters.nodes,
             candidates=latest,
             leader_history=tuple(leader_history),
+            requested_budget_seconds=budget_seconds,
         )
 
     def _apply_root_safety_probe(
