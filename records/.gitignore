@@ -1,6 +1,2 @@
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.vscode/
-records/
+# Keep generated records; ignore only incomplete transient writes.
+*.tmp

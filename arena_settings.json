@@ -1,0 +1,16 @@
+{
+  "black": {
+    "engine_name": "search",
+    "max_depth": 8,
+    "time_limit_seconds": 60.0
+  },
+  "white": {
+    "engine_name": "search",
+    "max_depth": 8,
+    "time_limit_seconds": 60.0
+  },
+  "watch": false,
+  "show_evaluation": false,
+  "delay_seconds": 0.0,
+  "save_record": true
+}
