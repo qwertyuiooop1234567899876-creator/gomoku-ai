@@ -1,14 +1,14 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku AI Arena V0.16.4
+title Gomoku AI Arena
 
 echo ========================================
-echo        Gomoku AI Arena V0.16.4
+echo        Gomoku AI Arena
 echo ========================================
 echo.
 
-if not exist "arena.py" goto no_arena
+if not exist "app\arena.py" goto no_arena
 
 python -c "import sys" >nul 2>nul
 if %errorlevel%==0 goto use_python
@@ -28,7 +28,7 @@ goto run_arena
 
 :run_arena
 set "PYTHONUTF8=1"
-%PY_CMD% -X utf8 arena.py
+%PY_CMD% -X utf8 -m app.arena
 set "EXIT_CODE=%ERRORLEVEL%"
 if "%EXIT_CODE%"=="0" exit /b 0
 
@@ -39,7 +39,7 @@ pause
 exit /b %EXIT_CODE%
 
 :no_arena
-echo ERROR: arena.py was not found in:
+echo ERROR: app\arena.py was not found in:
 echo %CD%
 echo.
 echo Put this BAT file in the gomoku-ai project folder.

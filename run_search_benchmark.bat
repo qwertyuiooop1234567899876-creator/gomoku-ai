@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-python search_benchmark.py --repeat 3 --json search-benchmark-results.json
+python -m tools.search_benchmark --repeat 3 --json search-benchmark-results.json
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.

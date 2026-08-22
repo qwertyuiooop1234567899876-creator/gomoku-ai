@@ -10,7 +10,7 @@ from engine.arena_settings import AISelection
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ANALYSIS_PROGRAM = PROJECT_ROOT / "cvc_analysis.py"
+ANALYSIS_MODULE = "tools.cvc_analysis"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +45,8 @@ def analyze_record(record_path: Path) -> None:
             sys.executable,
             "-X",
             "utf8",
-            str(ANALYSIS_PROGRAM),
+            "-m",
+            ANALYSIS_MODULE,
             str(record_path),
         ],
         cwd=PROJECT_ROOT,

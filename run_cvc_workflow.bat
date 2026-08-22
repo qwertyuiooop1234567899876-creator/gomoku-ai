@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku Full CVC Workflow V0.16.4
+title Gomoku Full CVC Workflow
 
 echo ========================================
 echo       Gomoku Full CVC Workflow
@@ -13,8 +13,8 @@ echo 3. SearchAI vs YiXin
 echo 4. Analyze the new YiXin record
 echo.
 
-if not exist "cvc_workflow.py" goto no_program
-if not exist "cvc_analysis.py" goto no_program
+if not exist "tools\cvc_workflow.py" goto no_program
+if not exist "tools\cvc_analysis.py" goto no_program
 if not exist "yixin\engine.exe" goto no_engine
 
 python -c "import sys" >nul 2>nul
@@ -35,7 +35,7 @@ goto run_workflow
 
 :run_workflow
 set "PYTHONUTF8=1"
-%PY_CMD% -X utf8 cvc_workflow.py
+%PY_CMD% -X utf8 -m tools.cvc_workflow
 set "EXIT_CODE=%ERRORLEVEL%"
 if "%EXIT_CODE%"=="0" exit /b 0
 
@@ -47,7 +47,7 @@ pause
 exit /b %EXIT_CODE%
 
 :no_program
-echo ERROR: cvc_workflow.py or cvc_analysis.py was not found in:
+echo ERROR: tools\cvc_workflow.py or tools\cvc_analysis.py was not found in:
 echo %CD%
 echo.
 pause

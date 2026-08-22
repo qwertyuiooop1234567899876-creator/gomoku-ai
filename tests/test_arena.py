@@ -4,7 +4,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from arena import (
+from app.arena import (
     _analysis_to_dict,
     _close_players,
     create_ai,
@@ -154,11 +154,11 @@ class TestArenaAnalysisCompatibility(unittest.TestCase):
 
         with (
             patch(
-                "arena.create_ai",
+                "app.arena.create_ai",
                 side_effect=lambda _selection, player: RowAI(player),
             ),
             patch(
-                "arena.GameRecorder.save",
+                "app.arena.GameRecorder.save",
                 return_value=RecordPaths(
                     txt=Path("finished.txt"),
                     json=Path("finished.json"),
@@ -228,9 +228,9 @@ class TestArenaYixinEvaluationBar(unittest.TestCase):
             return RowAI(player)
 
         with (
-            patch("arena.create_ai", side_effect=make_ai),
+            patch("app.arena.create_ai", side_effect=make_ai),
             patch(
-                "arena.YixinPositionEvaluator.from_settings",
+                "app.arena.YixinPositionEvaluator.from_settings",
                 return_value=evaluator,
             ),
             redirect_stdout(io.StringIO()) as output,

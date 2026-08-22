@@ -1,14 +1,14 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Gomoku CVC YiXin Analysis V0.16.4
+title Gomoku CVC YiXin Analysis
 
 echo ========================================
 echo         CVC YiXin Analysis
 echo ========================================
 echo.
 
-if not exist "cvc_analysis.py" goto no_program
+if not exist "tools\cvc_analysis.py" goto no_program
 if not exist "yixin\engine.exe" goto no_engine
 
 set "RECORD_PATH=%~1"
@@ -34,7 +34,7 @@ goto run_analysis
 
 :run_analysis
 set "PYTHONUTF8=1"
-%PY_CMD% -X utf8 cvc_analysis.py "%RECORD_PATH%"
+%PY_CMD% -X utf8 -m tools.cvc_analysis "%RECORD_PATH%"
 set "EXIT_CODE=%ERRORLEVEL%"
 if "%EXIT_CODE%"=="0" exit /b 0
 
@@ -45,7 +45,7 @@ pause
 exit /b %EXIT_CODE%
 
 :no_program
-echo ERROR: cvc_analysis.py was not found.
+echo ERROR: tools\cvc_analysis.py was not found.
 echo.
 pause
 exit /b 1

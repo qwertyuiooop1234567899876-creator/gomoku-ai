@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import build_native
+from tools import build_native
 
 
 class TestAtomicNativeBuild(unittest.TestCase):

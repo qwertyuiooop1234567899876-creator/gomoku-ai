@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cvc_analysis import (
+from tools.cvc_analysis import (
     analyze_cvc_payload,
     classify_move,
     render_analysis_text,

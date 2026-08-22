@@ -5,7 +5,7 @@
 依赖方向保持为：
 
 ```text
-根目录兼容入口 / BAT
+        根目录 BAT
           |
           v
        app/        tools/
@@ -17,7 +17,8 @@
 - `engine/` 不导入 `app/` 或 `tools/`，因此可以独立测试和复用。
 - `app/` 负责用户交互与对局编排，不承载搜索算法。
 - `tools/` 负责离线分析、构建、基准和自动流程，不承载 UI 状态。
-- 根目录 Python 文件只做兼容转发；实际功能只在包内维护一份。
+- 根目录不保留 Python 转发壳；BAT 直接通过 `python -m`
+  运行包内模块。
 
 ## 搜索模块边界
 
@@ -42,20 +43,22 @@
 
 因此，下一批适合抽离的是纯根规划数据构建或可冻结的根阶段上下文；不适合抽离的是仅把现有方法搬进 `SearchMixin`。
 
-## 兼容入口
+## 入口管理
 
-根目录的 `arena.py`、`main.py`、`gomoku_*.py`、`cvc_*.py` 和各类 benchmark/build 脚本会把模块身份转发给包内实现。这同时保证：
+根目录只保留用户可双击的 BAT。正式 Python 入口为：
 
-- 旧 BAT 和用户命令继续工作；
-- 测试对旧模块路径的 patch 仍命中真实实现；
-- 新代码可以逐步改用清晰的包路径。
+- `python -m app.cli`、`python -m app.arena`
+- `python -m app.desktop_ui`、`python -m app.web_ui`
+- `python -m tools.cvc_analysis`、`python -m tools.cvc_workflow`
+- `python -m tools.build_native`、`python -m tools.search_benchmark`
 
-确认所有外部使用方迁移后，才考虑在未来的大版本删除兼容层。
+测试与内部导入也只使用这些正式包路径，避免两套模块身份。
 
 ## 运行数据与回归数据
 
 - `records/`：仅保存用户当前运行产生的数据，整个目录由根 `.gitignore` 排除。
 - `tests/positions/`：只保存最小化、可审查的结构回归局面。
 - `release_notes/`：只保存版本更新日志。
+- `tools/_local/`：本机临时复盘脚本，由 Git 忽略，不作为正式工具发布。
 
 测试、Git 操作和发布脚本不得从历史提交恢复 `records/` 中已经删除或移动的棋谱。

@@ -7,14 +7,14 @@ from unittest.mock import patch
 
 from engine.board import BLACK, WHITE, Board
 from engine.game import parse_move
-from gomoku_ui import (
+from app.desktop_ui import (
     BoardGeometry,
     ClickConfirmation,
     GomokuApp,
     normalized_ai_selection,
 )
-from gomoku_web_ui import WebGameController
-from gomoku_ui_common import clone_board
+from app.ui_common import clone_board
+from app.web_ui import WebGameController
 
 
 class _BlockingAI:
@@ -92,7 +92,7 @@ class TestUIAISelection(unittest.TestCase):
 class TestWebGameController(unittest.TestCase):
     def test_second_click_commits_human_move_and_starts_ai(self) -> None:
         release = Event()
-        with patch("gomoku_web_ui.create_ai", return_value=_BlockingAI(release)):
+        with patch("app.web_ui.create_ai", return_value=_BlockingAI(release)):
             controller = WebGameController()
         try:
             first = controller.select(*parse_move("A1"))
@@ -120,12 +120,15 @@ class TestWebGameController(unittest.TestCase):
 
     def test_browser_backend_does_not_import_tk_desktop_ui(self) -> None:
         project_root = Path(__file__).parents[1]
-        backend = (project_root / "gomoku_web_ui.py").read_text(encoding="utf-8")
-        launcher = (project_root / "run_game_web.bat").read_text(encoding="utf-8")
+        backend = (project_root / "app" / "web_ui.py").read_text(
+            encoding="utf-8"
+        )
+        launcher = (project_root / "run_game_web.bat").read_text(
+            encoding="utf-8"
+        )
 
         self.assertNotIn("import tkinter", backend)
-        self.assertNotIn("from gomoku_ui import", backend)
-        self.assertIn("gomoku_web_ui.py", launcher)
+        self.assertIn("-m app.web_ui", launcher)
 
 
 class TestTkDesktopWindow(unittest.TestCase):
@@ -144,7 +147,7 @@ class TestTkDesktopWindow(unittest.TestCase):
         fake_ai = _BlockingAI(Event())
         app = None
         try:
-            with patch("gomoku_ui.create_ai", return_value=fake_ai):
+            with patch("app.desktop_ui.create_ai", return_value=fake_ai):
                 app = GomokuApp(root)
             root.update_idletasks()
 

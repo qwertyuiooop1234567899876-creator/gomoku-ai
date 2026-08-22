@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from engine.board import BLACK, WHITE
-from main import choose_human_player, create_computer, create_recorder
+from app.cli import choose_human_player, create_computer, create_recorder
 
 
 class TestSideSelection(unittest.TestCase):

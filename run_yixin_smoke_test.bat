@@ -1,9 +1,9 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title YiXin Protocol Smoke Test V0.16.4
+title YiXin Protocol Smoke Test
 
-if not exist "yixin_smoke_test.py" goto no_program
+if not exist "tools\yixin_smoke_test.py" goto no_program
 if not exist "yixin\engine.exe" goto no_engine
 
 python -c "import sys" >nul 2>nul
@@ -13,14 +13,14 @@ if not defined PY_CMD if %errorlevel%==0 set "PY_CMD=py -3"
 if not defined PY_CMD goto no_python
 
 set "PYTHONUTF8=1"
-%PY_CMD% -X utf8 yixin_smoke_test.py
+%PY_CMD% -X utf8 -m tools.yixin_smoke_test
 set "EXIT_CODE=%ERRORLEVEL%"
 echo.
 pause
 exit /b %EXIT_CODE%
 
 :no_program
-echo ERROR: yixin_smoke_test.py was not found.
+echo ERROR: tools\yixin_smoke_test.py was not found.
 echo.
 pause
 exit /b 1

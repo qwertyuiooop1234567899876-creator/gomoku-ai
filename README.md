@@ -17,11 +17,13 @@ release_notes/  统一版本更新日志
 records/        本机运行生成的当前对局与分析，不作为源码或回归夹具
 ```
 
-项目根目录中的同名 `.py` 文件是稳定兼容入口。已有 BAT、命令行、测试和外部脚本可以继续使用原命令；新代码应从 `app.*`、`tools.*` 或 `engine.*` 导入实际实现。
+根目录只保留 BAT 启动器、配置与项目文档；Python 代码统一放在
+`app.*`、`tools.*` 或 `engine.*` 包内。BAT 直接使用 `python -m`
+运行正式模块，不再经过根目录转发壳。
 
 ## 常用入口
 
-- `run_game.bat`：命令行人机对弈。
+- `run_game.bat`：桌面棋盘 UI，Tk 不可用时自动转浏览器 UI。
 - `run_game_web.bat`：浏览器棋盘 UI。
 - `run_arena.bat`：交互式引擎对弈。
 - `run_cvc_analysis.bat`：分析指定棋谱。
@@ -32,8 +34,9 @@ records/        本机运行生成的当前对局与分析，不作为源码或�
 也可以直接使用模块入口，例如：
 
 ```powershell
-python -B -m app.arena --help
-python -B -m app.web_ui --help
+python -B -m app.arena
+python -B -m app.cli
+python -B -m app.web_ui
 python -B -m tools.cvc_analysis --help
 python -B -m tools.search_benchmark --help
 ```
@@ -44,7 +47,7 @@ python -B -m tools.search_benchmark --help
 
 ```powershell
 python -B -m unittest discover -s tests -p "test_*.py" -v
-python -B search_benchmark.py --repeat 3
+python -B -m tools.search_benchmark --repeat 3
 ```
 
 架构边界和继续拆分 `engine/search.py` 的原则见

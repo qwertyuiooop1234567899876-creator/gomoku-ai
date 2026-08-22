@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import cvc_workflow
-from arena import GameResult
+from app.arena import GameResult
+from tools import cvc_workflow
 from engine.records import RecordPaths
 
 
@@ -24,6 +24,17 @@ def fake_result(json_path: Path) -> GameResult:
 
 
 class TestCVCWorkflow(unittest.TestCase):
+    def test_analysis_runs_the_package_module(self) -> None:
+        record = Path("example.json").resolve()
+        with patch("tools.cvc_workflow.subprocess.run") as run:
+            cvc_workflow.analyze_record(record)
+
+        command = run.call_args.args[0]
+        self.assertIn("-m", command)
+        self.assertIn("tools.cvc_analysis", command)
+        self.assertNotIn("cvc_analysis.py", command)
+        self.assertEqual(cvc_workflow.PROJECT_ROOT, run.call_args.kwargs["cwd"])
+
     def test_default_flow_uses_expected_engines_and_limits(self) -> None:
         selfplay, yixin = cvc_workflow.default_stages()
 
@@ -50,10 +61,10 @@ class TestCVCWorkflow(unittest.TestCase):
 
             with (
                 patch(
-                    "cvc_workflow.play_game",
+                    "tools.cvc_workflow.play_game",
                     side_effect=[fake_result(path) for path in records],
                 ) as play,
-                patch("cvc_workflow.analyze_record") as analyze,
+                patch("tools.cvc_workflow.analyze_record") as analyze,
             ):
                 returned = cvc_workflow.run_workflow()
 
@@ -74,11 +85,11 @@ class TestCVCWorkflow(unittest.TestCase):
             record.write_text("{}", encoding="utf-8")
             with (
                 patch(
-                    "cvc_workflow.play_game",
+                    "tools.cvc_workflow.play_game",
                     return_value=fake_result(record),
                 ) as play,
                 patch(
-                    "cvc_workflow.analyze_record",
+                    "tools.cvc_workflow.analyze_record",
                     side_effect=subprocess.CalledProcessError(2, "analysis"),
                 ),
             ):

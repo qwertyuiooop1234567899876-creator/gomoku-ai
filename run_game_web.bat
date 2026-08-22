@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 title Gomoku AI - Browser UI
 
-if not exist "gomoku_web_ui.py" goto no_program
+if not exist "app\web_ui.py" goto no_program
 
 if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
 if not defined PY_CMD python -c "import sys" >nul 2>nul
@@ -13,7 +13,7 @@ if not defined PY_CMD if %errorlevel%==0 set "PY_CMD=py -3"
 if not defined PY_CMD goto no_python
 
 set "PYTHONUTF8=1"
-%PY_CMD% -X utf8 gomoku_web_ui.py
+%PY_CMD% -X utf8 -m app.web_ui
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
     echo.
@@ -23,7 +23,7 @@ if not "%EXIT_CODE%"=="0" (
 exit /b %EXIT_CODE%
 
 :no_program
-echo ERROR: gomoku_web_ui.py was not found in:
+echo ERROR: app\web_ui.py was not found in:
 echo %CD%
 echo.
 pause

@@ -9,7 +9,7 @@ from engine.settings import (
     load_search_settings,
     save_search_settings,
 )
-from main import choose_search_settings, create_computer
+from app.cli import choose_search_settings, create_computer
 
 
 class TestSearchSettings(unittest.TestCase):

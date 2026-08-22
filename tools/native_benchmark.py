@@ -32,7 +32,7 @@ CASES = (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-BENCHMARK_PROGRAM = PROJECT_ROOT / "native_benchmark.py"
+BENCHMARK_MODULE = "tools.native_benchmark"
 
 
 def run_worker(repeat: int) -> dict[str, object]:
@@ -92,7 +92,8 @@ def child_result(*, native: bool, repeat: int) -> dict[str, object]:
     completed = subprocess.run(
         [
             sys.executable,
-            str(BENCHMARK_PROGRAM),
+            "-m",
+            BENCHMARK_MODULE,
             "--worker",
             "--repeat",
             str(repeat),
@@ -120,7 +121,10 @@ def main() -> int:
     python_result = child_result(native=False, repeat=args.repeat)
     native_result = child_result(native=True, repeat=args.repeat)
     if not native_result["native"]["available"]:
-        print("NativeCore未加载，请先运行：python build_native.py --clean")
+        print(
+            "NativeCore未加载，请先运行："
+            "python -m tools.build_native --clean"
+        )
         return 2
 
     print(f"Gomoku NativeCore benchmark | repeat={args.repeat}")

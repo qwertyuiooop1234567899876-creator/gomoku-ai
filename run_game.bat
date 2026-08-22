@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 title Gomoku AI - Board UI
 
-if not exist "gomoku_ui.py" goto no_program
+if not exist "app\desktop_ui.py" goto no_program
 
 if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
 if not defined PY_CMD python -c "import sys" >nul 2>nul
@@ -16,12 +16,12 @@ set "PYTHONUTF8=1"
 %PY_CMD% -X utf8 -c "import tkinter as tk; root=tk.Tk(); root.withdraw(); root.destroy()" >nul 2>nul
 if errorlevel 1 goto browser_ui
 
-%PY_CMD% -X utf8 gomoku_ui.py
+%PY_CMD% -X utf8 -m app.desktop_ui
 goto ui_finished
 
 :browser_ui
 echo Tcl/Tk is unavailable. Starting the local browser UI.
-%PY_CMD% -X utf8 gomoku_web_ui.py
+%PY_CMD% -X utf8 -m app.web_ui
 
 :ui_finished
 set "EXIT_CODE=%ERRORLEVEL%"
@@ -33,7 +33,7 @@ if not "%EXIT_CODE%"=="0" (
 exit /b %EXIT_CODE%
 
 :no_program
-echo ERROR: gomoku_ui.py was not found in:
+echo ERROR: app\desktop_ui.py was not found in:
 echo %CD%
 echo.
 pause

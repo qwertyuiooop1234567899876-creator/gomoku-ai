@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-python build_native.py --clean
+python -m tools.build_native --clean
 if errorlevel 1 (
   echo.
   echo NativeCore build failed.

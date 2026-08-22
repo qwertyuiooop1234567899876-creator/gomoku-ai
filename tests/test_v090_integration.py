@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-import arena
-import main
+from app import arena
+from app import cli as main
 from engine.ai import (
     ProofCandidateAnalysis,
     RootSafetyCandidateAnalysis,
