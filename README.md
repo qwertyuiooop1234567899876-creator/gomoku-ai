@@ -42,6 +42,12 @@ python -B -m tools.search_benchmark --help
 python -B -m tools.native_search_baseline --help
 ```
 
+`tools.native_search_baseline` 的 full-window 语义实验可显式设置
+`--threat-extension-depth` 与 `--branch-candidate-limit`；候选/叶面 trace
+默认关闭以保持性能基线可比。安静前沿和 Defense VCT 分别只能使用
+`dynamic-pair` 与 `defense-vct` 独立模式。命令与解释见
+[`docs/NATIVE_SEARCH_BASELINE.md`](docs/NATIVE_SEARCH_BASELINE.md)。
+
 ## 验证
 
 项目不依赖第三方 Python 包，测试使用标准库 `unittest`：

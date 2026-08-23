@@ -5,8 +5,11 @@ from dataclasses import replace
 
 from engine.ai import (
     DefenseCandidateAnalysis,
+    FinalProofEmergencyVCFCandidateAnalysis,
+    FinalProofEmergencyVCFProvenance,
     Move,
     ProofCandidateAnalysis,
+    RootReviewUnpairedFinalistAnalysis,
     RootVCFCandidateAnalysis,
     RootSafetyCandidateAnalysis,
     ScoringAI,
@@ -63,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.8 搜索 AI。
+    V0.16.9 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -126,6 +129,9 @@ class SearchAI(ScoringAI):
     V0.16.8 补齐普通根的压力证据和单槽宽安静进攻枢纽；最终
     Proof 的未检查紧急着必须先通过单点 VCF 门禁。同边界夹值复核
     在同一总预算内使用战术与去夹值双通道，且保留完整有界审计。
+    V0.16.9 不改变选着语义，为 Final-Proof 紧急 VCF 门禁增加独立
+    有界来源记录，并记录未进入动态 pair 的 finalists 及剩余预算；
+    固定局面工具将主 PVS、安静前沿复核和 Defense VCT 分渠道实验。
     """
 
     def __init__(
@@ -223,12 +229,18 @@ class SearchAI(ScoringAI):
         self._final_proof_rejected: tuple[Move, ...] = ()
         self._final_proof_selected: Move | None = None
         self._final_proof_selection_basis = "not_checked"
+        self._final_proof_emergency_vcf: (
+            FinalProofEmergencyVCFProvenance | None
+        ) = None
         self._final_proof_expected_candidates = 0
         self._phase_timings: dict[str, float] = {}
         self._root_review_finalists: tuple[Move, ...] = ()
         self._root_review_trace: list[
             tuple[str, RootSafetyProbeResult]
         ] = []
+        self._root_review_unpaired_finalists: tuple[
+            RootReviewUnpairedFinalistAnalysis, ...
+        ] = ()
 
     def choose_move(self, board: Board) -> Move:
         """按硬战术、VCF、限时迭代加深的顺序选择落点。"""
@@ -440,10 +452,12 @@ class SearchAI(ScoringAI):
         self._final_proof_rejected = ()
         self._final_proof_selected = None
         self._final_proof_selection_basis = "not_checked"
+        self._final_proof_emergency_vcf = None
         self._final_proof_expected_candidates = 0
         self._phase_timings.clear()
         self._root_review_finalists = ()
         self._root_review_trace.clear()
+        self._root_review_unpaired_finalists = ()
         self._proof_table_start_stats = self._proof_table.stats()
         self._proof_analyzer = self._new_threat_analyzer()
         self._decay_history()
@@ -2068,6 +2082,13 @@ class SearchAI(ScoringAI):
         ):
             emergency_vcf_reserve = 0.0
         proof_deadline = deadline - emergency_vcf_reserve
+        emergency_vcf_attempted = False
+        emergency_vcf_started_at: float | None = None
+        emergency_vcf_candidate_count = 0
+        emergency_vcf_candidates: list[
+            FinalProofEmergencyVCFCandidateAnalysis
+        ] = []
+        emergency_vcf_selected_before: Move | None = None
         self._final_proof_checked = True
         proof_by_move = {
             candidate.move: candidate
@@ -2256,6 +2277,12 @@ class SearchAI(ScoringAI):
                     for move in dict.fromkeys(queue)
                     if move not in seen and board.is_empty(*move)
                 ]
+                # This is the same fallback the audit would choose without
+                # the emergency gate.  Keep it separate from the original
+                # PVS leader so provenance measures only gate influence.
+                emergency_vcf_selected_before = (
+                    emergencies[0] if emergencies else result.move
+                )
                 emergency: Move | None = None
                 emergency_basis = "emergency_unknown"
                 for index, move in enumerate(emergencies):
@@ -2268,6 +2295,9 @@ class SearchAI(ScoringAI):
                     ):
                         emergency = move
                         break
+                    emergency_vcf_attempted = True
+                    if emergency_vcf_started_at is None:
+                        emergency_vcf_started_at = now
                     scanner = root_safety.RootVCFSafetyScanner(
                         find_vcf=lambda position, attacker, candidate_deadline: (
                             self._find_vcf_with_deadline(
@@ -2292,6 +2322,28 @@ class SearchAI(ScoringAI):
                         hard_deadline=deadline,
                     )
                     self._record_late_root_vcf_analysis(analysis)
+                    emergency_vcf_candidate_count += 1
+                    if (
+                        len(emergency_vcf_candidates)
+                        < self.config.proof_final_candidate_limit
+                    ):
+                        emergency_vcf_candidates.append(
+                            FinalProofEmergencyVCFCandidateAnalysis(
+                                move=analysis.move,
+                                status=analysis.status,
+                                completed=analysis.completed,
+                                nodes=analysis.nodes,
+                                elapsed_seconds=analysis.elapsed_seconds,
+                                cutoff_reason=(
+                                    # RootVCFSafetyScanner exposes no finer
+                                    # cutoff enum: every unfinished late scan
+                                    # is bounded by this candidate deadline.
+                                    None
+                                    if analysis.completed
+                                    else "deadline"
+                                ),
+                            )
+                        )
                     if (
                         analysis.status
                         == root_safety.RootCandidateSafety.PROVEN_LOSS.value
@@ -2328,6 +2380,44 @@ class SearchAI(ScoringAI):
         self._final_proof_rejected = tuple(dict.fromkeys(rejected))
         self._final_proof_selected = selected
         self._final_proof_selection_basis = selection_basis
+        emergency_vcf_selected_before = (
+            selected
+            if emergency_vcf_selected_before is None
+            else emergency_vcf_selected_before
+        )
+        self._final_proof_emergency_vcf = (
+            FinalProofEmergencyVCFProvenance(
+                attempted=emergency_vcf_attempted,
+                reserved_seconds=emergency_vcf_reserve,
+                used_seconds=(
+                    0.0
+                    if emergency_vcf_started_at is None
+                    else max(
+                        0.0,
+                        time.perf_counter() - emergency_vcf_started_at,
+                    )
+                ),
+                selected_before=emergency_vcf_selected_before,
+                selected_after=selected,
+                changed_selection=(
+                    emergency_vcf_attempted
+                    and selected != emergency_vcf_selected_before
+                ),
+                candidate_count=emergency_vcf_candidate_count,
+                candidates_truncated=(
+                    len(emergency_vcf_candidates)
+                    < emergency_vcf_candidate_count
+                ),
+                candidates=(
+                    tuple(emergency_vcf_candidates)
+                    if (
+                        self.diagnostics
+                        or emergency_vcf_attempted
+                    )
+                    else ()
+                ),
+            )
+        )
         selected_analysis = proof_by_move.get(selected)
         if selected_analysis is None:
             self._final_proof_state = "not_checked"
@@ -3003,12 +3093,28 @@ class SearchAI(ScoringAI):
             preferred_groups=preferred_groups,
         )
         self._root_review_finalists = tuple(finalists)
+        self._root_review_unpaired_finalists = ()
         pending = [move for move in finalists if move != result.move]
         if not pending:
+            self._record_root_review_unpaired_finalists(
+                finalists,
+                entered_moves=set(),
+                reason="no_challenger",
+                remaining_budget_seconds=max(
+                    0.0,
+                    deadline - time.perf_counter(),
+                ),
+            )
             return None
 
         current = result.move
         latest: RootSafetyProbeResult | None = None
+        entered_moves: set[Move] = set()
+        unpaired_reason = "not_reached"
+        unpaired_remaining_budget = max(
+            0.0,
+            deadline - time.perf_counter(),
+        )
         for index, challenger in enumerate(pending):
             if challenger == current:
                 continue
@@ -3024,12 +3130,15 @@ class SearchAI(ScoringAI):
                 else fair_budget
             )
             if pair_budget < 0.5:
+                unpaired_reason = "insufficient_pair_budget"
+                unpaired_remaining_budget = max(0.0, remaining)
                 break
             pair_result = root_policy.promote_root_move(
                 result,
                 current,
                 score=root_scores[current],
             )
+            entered_moves.update((current, challenger))
             latest = self._run_dynamic_pair_review(
                 board,
                 pair_result,
@@ -3062,11 +3171,55 @@ class SearchAI(ScoringAI):
                 # reverse it with weaker source-only evidence.  An escalated
                 # boundary tie also consumes the only shared verification
                 # slice, so preserve its explicit unresolved outcome.
+                unpaired_reason = (
+                    "selection_changed"
+                    if current != previous
+                    else "boundary_tie_escalated"
+                )
+                unpaired_remaining_budget = max(
+                    0.0,
+                    deadline - time.perf_counter(),
+                )
                 break
 
+        self._record_root_review_unpaired_finalists(
+            finalists,
+            entered_moves=entered_moves,
+            reason=unpaired_reason,
+            remaining_budget_seconds=unpaired_remaining_budget,
+        )
         if latest is None:
             return None
         return replace(latest, approved_move=current)
+
+    def _record_root_review_unpaired_finalists(
+        self,
+        finalists: list[Move],
+        *,
+        entered_moves: set[Move],
+        reason: str,
+        remaining_budget_seconds: float,
+    ) -> None:
+        """Record only finalists that never entered a pair comparison.
+
+        The pair trace already preserves completed/attempted comparisons.  A
+        separate compact list is therefore sufficient to explain why a
+        finalist was never compared without duplicating scores or sources.
+        Here "entered" means `_run_dynamic_pair_review` was invoked; a call
+        counts even when it returns ``None`` under its own time boundary.
+        """
+        self._root_review_unpaired_finalists = tuple(
+            RootReviewUnpairedFinalistAnalysis(
+                move=move,
+                reason=reason,
+                remaining_budget_seconds=max(
+                    0.0,
+                    remaining_budget_seconds,
+                ),
+            )
+            for move in finalists
+            if move not in entered_moves
+        )
 
     def _critical_root_review_groups(
         self,

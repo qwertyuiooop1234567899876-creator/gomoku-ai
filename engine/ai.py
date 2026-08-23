@@ -205,6 +205,100 @@ class RootVCFCandidateAnalysis:
 
 
 @dataclass(frozen=True, slots=True)
+class FinalProofEmergencyVCFCandidateAnalysis:
+    """One late emergency-VCF gate kept separate from the root-wide scan."""
+
+    move: Move
+    status: str
+    completed: bool
+    nodes: int
+    elapsed_seconds: float
+    cutoff_reason: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "move": list(self.move),
+            "coordinate": format_move(*self.move),
+            "status": self.status,
+            "completed": self.completed,
+            "nodes": self.nodes,
+            "elapsed_seconds": self.elapsed_seconds,
+            "cutoff_reason": self.cutoff_reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class FinalProofEmergencyVCFProvenance:
+    """Bounded provenance for Final-Proof's late VCF fallback.
+
+    The emergency gate remains a selection safety check, not a proof-state
+    conversion.  ``selected_before`` is the fallback Final-Proof would use
+    immediately before the emergency gate, so this provenance isolates the
+    gate's own effect rather than an earlier Final-Proof selection change.
+    ``candidates`` stores only a bounded prefix while ``candidate_count``
+    makes any omitted tail explicit.
+    """
+
+    attempted: bool
+    reserved_seconds: float
+    used_seconds: float
+    selected_before: Move | None
+    selected_after: Move | None
+    changed_selection: bool
+    candidate_count: int = 0
+    candidates_truncated: bool = False
+    candidates: tuple[FinalProofEmergencyVCFCandidateAnalysis, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "attempted": self.attempted,
+            "reserved_seconds": self.reserved_seconds,
+            "used_seconds": self.used_seconds,
+            "selected_before": (
+                None
+                if self.selected_before is None
+                else list(self.selected_before)
+            ),
+            "selected_before_coordinate": (
+                None
+                if self.selected_before is None
+                else format_move(*self.selected_before)
+            ),
+            "selected_after": (
+                None
+                if self.selected_after is None
+                else list(self.selected_after)
+            ),
+            "selected_after_coordinate": (
+                None
+                if self.selected_after is None
+                else format_move(*self.selected_after)
+            ),
+            "changed_selection": self.changed_selection,
+            "candidate_count": self.candidate_count,
+            "candidates_truncated": self.candidates_truncated,
+            "candidates": [candidate.to_dict() for candidate in self.candidates],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RootReviewUnpairedFinalistAnalysis:
+    """A finalist that did not receive a root-review pair comparison."""
+
+    move: Move
+    reason: str
+    remaining_budget_seconds: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "move": list(self.move),
+            "coordinate": format_move(*self.move),
+            "reason": self.reason,
+            "remaining_budget_seconds": self.remaining_budget_seconds,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionAnalysis:
     selected_move: Move
     reason: str
@@ -270,6 +364,7 @@ class DecisionAnalysis:
     final_proof_selected_move: Move | None = None
     final_proof_rejected_moves: tuple[Move, ...] = ()
     final_proof_selection_basis: str = "not_checked"
+    final_proof_emergency_vcf: FinalProofEmergencyVCFProvenance | None = None
     threat_candidate_batches: int = 0
     threat_exact_descriptions: int = 0
     threat_frontier_batches: int = 0
@@ -312,6 +407,9 @@ class DecisionAnalysis:
     root_review_pairs: tuple[RootReviewPairAnalysis, ...] = ()
     root_review_source_coverage: tuple[
         tuple[str, tuple[Move, ...]], ...
+    ] = ()
+    root_review_unpaired_finalists: tuple[
+        RootReviewUnpairedFinalistAnalysis, ...
     ] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -444,6 +542,11 @@ class DecisionAnalysis:
             "final_proof_selection_basis": (
                 self.final_proof_selection_basis
             ),
+            "final_proof_emergency_vcf": (
+                None
+                if self.final_proof_emergency_vcf is None
+                else self.final_proof_emergency_vcf.to_dict()
+            ),
             "threat_candidate_batches": self.threat_candidate_batches,
             "threat_exact_descriptions": (
                 self.threat_exact_descriptions
@@ -545,6 +648,9 @@ class DecisionAnalysis:
                     ],
                 }
                 for source, moves in self.root_review_source_coverage
+            ],
+            "root_review_unpaired_finalists": [
+                item.to_dict() for item in self.root_review_unpaired_finalists
             ],
         }
 

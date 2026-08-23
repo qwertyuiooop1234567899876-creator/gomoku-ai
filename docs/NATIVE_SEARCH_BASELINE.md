@@ -10,13 +10,84 @@ J11。最小夹具保存 12 手有序历史和 Zobrist 哈希，不依赖或恢�
 复现实验：
 
 ```powershell
-python -B -m tools.native_search_baseline --mode full-window --depths 1-9
+python -B -m tools.native_search_baseline --mode full-window --depths 1-9 --threat-extension-depth 2 --branch-candidate-limit 8
+python -B -m tools.native_search_baseline --mode full-window --depths 8 --threat-extension-depth 2 --branch-candidate-limit 8 --candidate-trace-limit 12 --candidate-sample-limit 8 --leaf-trace-limit 12
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 1000
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 3000
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 6000
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 9000
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 10000
 ```
+
+用于参数语义矩阵时，固定深度和两个候选不变，只改变主 PVS 的
+`--threat-extension-depth` 与 `--branch-candidate-limit`：
+
+```powershell
+foreach ($extension in 0, 2, 4) {
+    foreach ($branch in 8, 12) {
+        python -B -m tools.native_search_baseline --mode full-window --depths 8 --threat-extension-depth $extension --branch-candidate-limit $branch --candidate-trace-limit 12 --candidate-sample-limit 8 --leaf-trace-limit 12
+    }
+}
+```
+
+`full-window` 只运行主 PVS。默认不启用 trace，且直接使用普通
+`SearchAI`，因此历史 Native 性能基线的默认计时不加入追踪器开销。
+`--candidate-trace-limit` 和 `--leaf-trace-limit` 都是显式 opt-in；前者
+按 `(ply, 剩余深度, 延伸深度)` 保留有界候选集合样本，后者只报告有界的
+叶面**返回分类**与分数，不声称提供精确终止原因或完整评价分解。
+
+安静前沿绝不能作为 `full-window` 的开关。它只能通过独立动态 pair
+复核路径测试：
+
+```powershell
+python -B -m tools.native_search_baseline --mode dynamic-pair --depths 8 --threat-extension-depth 2 --branch-candidate-limit 12 --quiet-frontier --review-budget 10
+```
+
+Defense VCT 也有独立模式，不能伪装为主 PVS 参数：
+
+```powershell
+python -B -m tools.native_search_baseline --mode defense-vct --depths 3 --time-limit 10
+```
+
+工具只重建 `tests/positions/` 中的最小夹具；除用户明确传入 `--json`
+外不写入文件，也不会读取、恢复或生成 `records/` 内容。
+
+## V0.16.8 参数观察矩阵（本机）
+
+以下 d8 的 branch=8 运行启用了 4 层候选摘要和 4 条叶面返回分类，故墙钟
+只用于同组观察，不作为无 trace 的性能门禁。所有格都是独立、冷启动、单
+候选全窗口主 PVS；分数不是严格 Proof。
+
+| d8 branch | 延伸 | F7：分数 / 节点 / 延伸 / 秒 | J11：分数 / 节点 / 延伸 / 秒 |
+|---:|---:|:---|:---|
+| 8 | 0 | -909,000 / 8,106 / 0 / 14.449 | -1,007,100 / 8,204 / 0 / 14.932 |
+| 8 | 2 | -979,000 / 7,495 / 8,357 / 23.333 | -999,000 / 6,591 / 7,092 / 20.377 |
+| 8 | 4 | -899,300 / 8,381 / 18,434 / 45.152 | -999,999,988 / 6,893 / 14,995 / 36.855 |
+| 12 | 2 | -899,100 / 30,370 / 29,744 / 95.823 | -970,100 / 30,063 / 32,645 / 107.042 |
+
+branch=12、延伸=0 的 d8 成对进程在 60 秒没有产生完成结果，按外部运行
+上限中止；延伸=4 的 branch=12 未运行。这个超时本身说明宽度的成本显著，
+不能被描述成一个完成深度的比较结果。
+
+为分离宽度敏感性，又在无 trace 的 d6 做了快速对照：
+
+| d6 延伸 / branch | F7：分数 / 节点 / 秒 | J11：分数 / 节点 / 秒 |
+|:---|:---|:---|
+| 0 / 8 | -987,300 / 1,187 / 1.778 | -999,000 / 1,116 / 1.707 |
+| 0 / 12 | -909,400 / 3,232 / 5.113 | -987,500 / 2,910 / 4.684 |
+| 2 / 8 | -892,000 / 1,232 / 4.577 | -990,000 / 1,294 / 4.587 |
+| 2 / 12 | -908,900 / 3,184 / 10.935 | -908,200 / 3,702 / 13.663 |
+
+候选摘要显示 branch=8 的内部层保持 8 个有序候选上限；延伸为 0 的 sampled
+叶面返回为 `extension_limit_static`，延伸为 2/4 的 sampled 返回多为
+`forcing_extension`。这些是有界工具 trace，不是完整叶面覆盖或评价分解。
+d6 的延伸=2、branch=12 中 J11 仅高 700 分，表明宽度敏感性，但不能单独
+证明候选成员、Proof 三态或 root 选择不变量被违反。
+
+因此目前还不能写出“结构条件 → 组件违反不变量 → 错误选着”的通用根因；
+本轮没有修改任何搜索选择语义、评估权重或全局参数。下一步应利用新增的
+候选/叶面 trace 与 Final-Proof/root-review provenance，寻找可结构化复现的
+不变量违例，而不是把这一局面的结果编码成特判。
 
 ## 冷启动全窗口结果
 

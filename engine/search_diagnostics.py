@@ -14,9 +14,11 @@ from engine import root_candidates, root_safety
 from engine.ai import (
     CandidateAnalysis,
     DecisionAnalysis,
+    FinalProofEmergencyVCFProvenance,
     Move,
     ProofCandidateAnalysis,
     RootReviewPairAnalysis,
+    RootReviewUnpairedFinalistAnalysis,
     SearchPhaseTiming,
 )
 from engine.evaluator import EvaluationConfig, ThreatProfile
@@ -64,12 +66,16 @@ class SearchDiagnosticsSource(Protocol):
     _final_proof_selected: Move | None
     _final_proof_rejected: tuple[Move, ...]
     _final_proof_selection_basis: str
+    _final_proof_emergency_vcf: FinalProofEmergencyVCFProvenance | None
     _root_safety_probe: RootSafetyProbeResult | None
     _root_safety_applied: bool
     _root_vcf_scan: RootVCFScanResult | None
     _root_mate_scores_quarantined: bool
     _root_review_finalists: tuple[Move, ...]
     _root_review_trace: list[tuple[str, RootSafetyProbeResult]]
+    _root_review_unpaired_finalists: tuple[
+        RootReviewUnpairedFinalistAnalysis, ...
+    ]
     _phase_timings: dict[str, float]
 
 
@@ -268,6 +274,9 @@ def build_search_analysis(
     review_source_coverage: tuple[
         tuple[str, tuple[Move, ...]], ...
     ] = ()
+    review_unpaired_finalists: tuple[
+        RootReviewUnpairedFinalistAnalysis, ...
+    ] = ()
     if source.diagnostics and source._root_review_trace:
         review_pairs = tuple(
             RootReviewPairAnalysis(
@@ -310,6 +319,10 @@ def build_search_analysis(
                 in source._root_candidate_sources.get(move, ())
                 for move in reviewed_moves
             )
+        )
+    if source.diagnostics or source._root_review_unpaired_finalists:
+        review_unpaired_finalists = (
+            source._root_review_unpaired_finalists
         )
 
     return DecisionAnalysis(
@@ -407,6 +420,7 @@ def build_search_analysis(
         final_proof_selected_move=source._final_proof_selected,
         final_proof_rejected_moves=source._final_proof_rejected,
         final_proof_selection_basis=source._final_proof_selection_basis,
+        final_proof_emergency_vcf=source._final_proof_emergency_vcf,
         threat_candidate_batches=threat_stats.candidate_batches,
         threat_exact_descriptions=threat_stats.exact_descriptions,
         threat_frontier_batches=threat_stats.frontier_batches,
@@ -488,4 +502,5 @@ def build_search_analysis(
         root_review_finalists=review_finalists,
         root_review_pairs=review_pairs,
         root_review_source_coverage=review_source_coverage,
+        root_review_unpaired_finalists=review_unpaired_finalists,
     )

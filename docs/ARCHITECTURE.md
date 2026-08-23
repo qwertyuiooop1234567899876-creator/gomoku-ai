@@ -60,13 +60,19 @@ NativeCore 的唯一构建入口是 `python -m tools.build_native`（根目录
 Native 整体搜索下沉前的固定局面基线入口为：
 
 ```powershell
-python -B -m tools.native_search_baseline --mode full-window --depths 1-8
+python -B -m tools.native_search_baseline --mode full-window --depths 1-8 --threat-extension-depth 2 --branch-candidate-limit 8
+python -B -m tools.native_search_baseline --mode full-window --depths 8 --threat-extension-depth 4 --branch-candidate-limit 12 --candidate-trace-limit 12 --leaf-trace-limit 12
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 9000
 ```
 
 基线夹具必须保存有序走子历史。TT 等价门禁比较完整内容摘要，而不只
 比较最终着法；限时棋谱无法保证重建同一份热 TT，因此冷启动固定节点
 基线是跨 Python/C++ 实现的第一层真值。
+
+`full-window` 的候选/叶面 trace 是工具专用的显式 opt-in，默认执行普通
+`SearchAI`，不改变 Native 性能基线的计时。安静前沿只可在
+`--mode dynamic-pair --quiet-frontier` 中研究；Defense VCT 只可在
+`--mode defense-vct` 中研究，二者都不是主 PVS 开关。
 
 测试与内部导入也只使用这些正式包路径，避免两套模块身份。
 

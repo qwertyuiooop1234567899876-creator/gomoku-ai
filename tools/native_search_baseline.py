@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 from pathlib import Path
@@ -11,7 +11,7 @@ from typing import Iterable
 from engine.board import BLACK, WHITE, Board
 from engine.game import format_move, parse_move
 from engine.search import SearchAI
-from engine.search_types import INFINITY, RootResult, TTEntry
+from engine.search_types import INFINITY, MATE_SCORE, RootResult, TTEntry
 from engine.version import ENGINE_VERSION
 
 
@@ -27,6 +27,234 @@ class BaselineCase:
     history: tuple[str, ...]
     candidates: tuple[str, ...]
     expected_hash: int
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateLayerSummary:
+    """A bounded representative of one internal PVS candidate layer."""
+
+    ply: int
+    remaining_depth: int
+    extension_depth: int
+    calls: int
+    minimum_candidates: int
+    maximum_candidates: int
+    sample_moves: tuple[str, ...]
+    sample_truncated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LeafTrace:
+    """One opt-in heuristic category from the baseline-only tracer."""
+
+    ply: int
+    remaining_depth: int
+    extension_depth: int
+    score: int
+    trace_category: str
+    principal_variation: tuple[str, ...]
+
+
+@dataclass(slots=True)
+class _CandidateLayerAccumulator:
+    ply: int
+    remaining_depth: int
+    extension_depth: int
+    calls: int = 0
+    minimum_candidates: int = 0
+    maximum_candidates: int = 0
+    sample_moves: tuple[str, ...] = ()
+    sample_truncated: bool = False
+
+
+class _TracingSearchAI(SearchAI):
+    """Tool-only bounded trace without adding production search overhead."""
+
+    def __init__(
+        self,
+        *args: object,
+        candidate_trace_limit: int,
+        candidate_sample_limit: int,
+        leaf_trace_limit: int,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._baseline_candidate_trace_limit = candidate_trace_limit
+        self._baseline_candidate_sample_limit = candidate_sample_limit
+        self._baseline_leaf_trace_limit = leaf_trace_limit
+        self._baseline_context: list[tuple[int, int, int]] = []
+        self._baseline_candidate_layers: dict[
+            tuple[int, int, int], _CandidateLayerAccumulator
+        ] = {}
+        self._baseline_candidate_trace_truncated = False
+        self._baseline_leaf_trace: list[LeafTrace] = []
+        self._baseline_leaf_trace_truncated = False
+
+    def _negamax(
+        self,
+        board: Board,
+        player: int,
+        depth: int,
+        alpha: int,
+        beta: int,
+        *,
+        ply: int,
+        extension_depth: int,
+    ) -> tuple[int, tuple[tuple[int, int], ...]]:
+        self._baseline_context.append((ply, depth, extension_depth))
+        try:
+            score, variation = super()._negamax(
+                board,
+                player,
+                depth,
+                alpha,
+                beta,
+                ply=ply,
+                extension_depth=extension_depth,
+            )
+        finally:
+            self._baseline_context.pop()
+        if depth <= 0:
+            self._record_leaf_trace(
+                ply=ply,
+                depth=depth,
+                extension_depth=extension_depth,
+                score=score,
+                variation=variation,
+            )
+        return score, variation
+
+    def _ordered_moves(
+        self,
+        board: Board,
+        player: int,
+        *,
+        at_root: bool,
+        ply: int,
+        limit: int | None = None,
+        tt_move: tuple[int, int] | None = None,
+        use_search_heuristics: bool = True,
+    ) -> list[tuple[int, int]]:
+        moves = super()._ordered_moves(
+            board,
+            player,
+            at_root=at_root,
+            ply=ply,
+            limit=limit,
+            tt_move=tt_move,
+            use_search_heuristics=use_search_heuristics,
+        )
+        if not at_root:
+            self._record_candidate_layer(moves)
+        return moves
+
+    def _record_candidate_layer(
+        self,
+        moves: list[tuple[int, int]],
+    ) -> None:
+        if (
+            self._baseline_candidate_trace_limit <= 0
+            or not self._baseline_context
+        ):
+            return
+        key = self._baseline_context[-1]
+        accumulator = self._baseline_candidate_layers.get(key)
+        if accumulator is None:
+            if (
+                len(self._baseline_candidate_layers)
+                >= self._baseline_candidate_trace_limit
+            ):
+                self._baseline_candidate_trace_truncated = True
+                return
+            accumulator = _CandidateLayerAccumulator(
+                ply=key[0],
+                remaining_depth=key[1],
+                extension_depth=key[2],
+            )
+            self._baseline_candidate_layers[key] = accumulator
+        candidate_count = len(moves)
+        accumulator.calls += 1
+        if accumulator.calls == 1:
+            accumulator.minimum_candidates = candidate_count
+            accumulator.maximum_candidates = candidate_count
+            accumulator.sample_moves = tuple(
+                format_move(*move)
+                for move in moves[: self._baseline_candidate_sample_limit]
+            )
+            accumulator.sample_truncated = (
+                candidate_count > self._baseline_candidate_sample_limit
+            )
+            return
+        accumulator.minimum_candidates = min(
+            accumulator.minimum_candidates,
+            candidate_count,
+        )
+        accumulator.maximum_candidates = max(
+            accumulator.maximum_candidates,
+            candidate_count,
+        )
+
+    def _record_leaf_trace(
+        self,
+        *,
+        ply: int,
+        depth: int,
+        extension_depth: int,
+        score: int,
+        variation: tuple[tuple[int, int], ...],
+    ) -> None:
+        if self._baseline_leaf_trace_limit <= 0:
+            return
+        if len(self._baseline_leaf_trace) >= self._baseline_leaf_trace_limit:
+            self._baseline_leaf_trace_truncated = True
+            return
+        trace_category = "no_forcing_static"
+        if abs(score) >= MATE_SCORE - ply:
+            trace_category = "terminal_or_forced"
+        elif variation:
+            trace_category = "forcing_extension"
+        elif extension_depth <= 0:
+            trace_category = "extension_limit_static"
+        self._baseline_leaf_trace.append(
+            LeafTrace(
+                ply=ply,
+                remaining_depth=depth,
+                extension_depth=extension_depth,
+                score=score,
+                trace_category=trace_category,
+                principal_variation=tuple(
+                    format_move(*move) for move in variation
+                ),
+            )
+        )
+
+    def baseline_trace(
+        self,
+    ) -> tuple[
+        tuple[CandidateLayerSummary, ...],
+        bool,
+        tuple[LeafTrace, ...],
+        bool,
+    ]:
+        layers = tuple(
+            CandidateLayerSummary(
+                ply=item.ply,
+                remaining_depth=item.remaining_depth,
+                extension_depth=item.extension_depth,
+                calls=item.calls,
+                minimum_candidates=item.minimum_candidates,
+                maximum_candidates=item.maximum_candidates,
+                sample_moves=item.sample_moves,
+                sample_truncated=item.sample_truncated,
+            )
+            for _key, item in sorted(self._baseline_candidate_layers.items())
+        )
+        return (
+            layers,
+            self._baseline_candidate_trace_truncated,
+            tuple(self._baseline_leaf_trace),
+            self._baseline_leaf_trace_truncated,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +274,13 @@ class SearchRun:
     tt_entries: int
     tt_digest: str
     tt_bounds: dict[str, int]
+    threat_extension_depth: int
+    branch_candidate_limit: int
+    extensions: int
+    candidate_layers: tuple[CandidateLayerSummary, ...] = ()
+    candidate_trace_truncated: bool = False
+    leaf_trace: tuple[LeafTrace, ...] = ()
+    leaf_trace_truncated: bool = False
 
 
 def load_case(path: Path = DEFAULT_FIXTURE) -> BaselineCase:
@@ -132,6 +367,19 @@ def _format_result(
     elapsed_seconds: float,
 ) -> SearchRun:
     count, digest, bounds = tt_summary(ai._transposition_table)
+    trace_snapshot = getattr(ai, "baseline_trace", None)
+    if callable(trace_snapshot):
+        (
+            candidate_layers,
+            candidate_trace_truncated,
+            leaf_trace,
+            leaf_trace_truncated,
+        ) = trace_snapshot()
+    else:
+        candidate_layers = ()
+        candidate_trace_truncated = False
+        leaf_trace = ()
+        leaf_trace_truncated = False
     return SearchRun(
         mode=mode,
         requested_depth=requested_depth,
@@ -161,6 +409,13 @@ def _format_result(
         tt_entries=count,
         tt_digest=digest,
         tt_bounds=bounds,
+        threat_extension_depth=ai.config.threat_extension_depth,
+        branch_candidate_limit=ai.config.branch_candidate_limit,
+        extensions=ai._counters.extensions,
+        candidate_layers=candidate_layers,
+        candidate_trace_truncated=candidate_trace_truncated,
+        leaf_trace=leaf_trace,
+        leaf_trace_truncated=leaf_trace_truncated,
     )
 
 
@@ -168,17 +423,37 @@ def run_full_window_candidate(
     case: BaselineCase,
     coordinate: str,
     depth: int,
+    *,
+    threat_extension_depth: int = 2,
+    branch_candidate_limit: int = 8,
+    candidate_trace_limit: int = 0,
+    candidate_sample_limit: int = 8,
+    leaf_trace_limit: int = 0,
 ) -> SearchRun:
     board = build_board(case)
     before = board_state(board)
     move = parse_move(coordinate, board.size)
     if not board.is_empty(*move):
         raise ValueError(f"候选点不是空位：{coordinate}")
-    ai = SearchAI(
-        case.player,
-        max_depth=depth,
-        time_limit_seconds=None,
-    )
+    if candidate_trace_limit > 0 or leaf_trace_limit > 0:
+        ai = _TracingSearchAI(
+            case.player,
+            max_depth=depth,
+            time_limit_seconds=None,
+            threat_extension_depth=threat_extension_depth,
+            branch_candidate_limit=branch_candidate_limit,
+            candidate_trace_limit=candidate_trace_limit,
+            candidate_sample_limit=candidate_sample_limit,
+            leaf_trace_limit=leaf_trace_limit,
+        )
+    else:
+        ai = SearchAI(
+            case.player,
+            max_depth=depth,
+            time_limit_seconds=None,
+            threat_extension_depth=threat_extension_depth,
+            branch_candidate_limit=branch_candidate_limit,
+        )
     ai._begin_move_search()
     started_at = time.perf_counter()
     result = ai._search_root(
@@ -210,6 +485,8 @@ def run_iterative_pair(
     depth: int,
     *,
     node_limit: int | None,
+    threat_extension_depth: int = 2,
+    branch_candidate_limit: int = 8,
 ) -> SearchRun:
     board = build_board(case)
     before = board_state(board)
@@ -222,6 +499,8 @@ def run_iterative_pair(
         max_depth=depth,
         time_limit_seconds=None,
         node_limit=node_limit,
+        threat_extension_depth=threat_extension_depth,
+        branch_candidate_limit=branch_candidate_limit,
     )
     ai._begin_move_search()
     started_at = time.perf_counter()
@@ -249,6 +528,175 @@ def run_iterative_pair(
     )
 
 
+def run_dynamic_pair(
+    case: BaselineCase,
+    depth: int,
+    *,
+    review_budget_seconds: float,
+    quiet_frontier_extension: bool,
+    threat_extension_depth: int,
+    branch_candidate_limit: int,
+) -> SearchRun:
+    """Run the quiet-frontier experiment through dynamic pair review only."""
+    board = build_board(case)
+    before = board_state(board)
+    candidates = [
+        parse_move(coordinate, board.size)
+        for coordinate in case.candidates
+    ]
+    if len(candidates) != 2:
+        raise ValueError("dynamic-pair 基线需要恰好两个候选。")
+    ai = SearchAI(
+        case.player,
+        max_depth=depth,
+        time_limit_seconds=review_budget_seconds,
+        branch_candidate_limit=branch_candidate_limit,
+        threat_extension_depth=threat_extension_depth,
+    )
+    ai._begin_move_search()
+    seed = RootResult(
+        move=candidates[0],
+        score=0,
+        principal_variation=(candidates[0],),
+        ranked_moves=((candidates[0], 0), (candidates[1], 0)),
+    )
+    started_at = time.perf_counter()
+    probe = ai._run_dynamic_pair_review(
+        board,
+        seed,
+        candidates[1],
+        completed_depth=depth,
+        budget_seconds=review_budget_seconds,
+        target_depth_override=depth,
+        branch_candidate_limit_override=branch_candidate_limit,
+        quiet_frontier_extension_override=quiet_frontier_extension,
+    )
+    elapsed = time.perf_counter() - started_at
+    if board_state(board) != before:
+        raise RuntimeError("dynamic-pair 复核污染了棋盘或有序历史。")
+    if probe is None:
+        result = None
+        completed = False
+        completed_depth = 0
+        stop_reason = "dynamic_pair_unavailable"
+    else:
+        ranked = tuple(
+            (candidate.move, candidate.score)
+            for candidate in probe.candidates
+        )
+        selected = probe.best_move or seed.move
+        score = next(
+            (score for move, score in ranked if move == selected),
+            seed.score,
+        )
+        variation = next(
+            (
+                candidate.principal_variation
+                for candidate in probe.candidates
+                if candidate.move == selected
+            ),
+            (selected,),
+        )
+        result = RootResult(
+            move=selected,
+            score=score,
+            principal_variation=variation,
+            ranked_moves=ranked,
+        )
+        completed = probe.completed_depth >= depth
+        completed_depth = probe.completed_depth
+        stop_reason = "dynamic_pair_completed"
+    run = _format_result(
+        ai,
+        mode=(
+            "dynamic_pair:quiet"
+            if quiet_frontier_extension
+            else "dynamic_pair:normal"
+        ),
+        requested_depth=depth,
+        node_limit=None,
+        completed=completed,
+        completed_depth=completed_depth,
+        stop_reason=stop_reason,
+        result=result,
+        elapsed_seconds=elapsed,
+    )
+    actual_extension_depth = (
+        max(
+            6,
+            threat_extension_depth + ai.config.root_safety_extension_bonus,
+        )
+        if quiet_frontier_extension
+        else (
+            threat_extension_depth
+            + ai.config.root_safety_extension_bonus
+        )
+    )
+    return replace(run, threat_extension_depth=actual_extension_depth)
+
+
+def run_defense_vct_pair(
+    case: BaselineCase,
+    depth: int,
+    *,
+    time_limit_seconds: float,
+) -> SearchRun:
+    """Run the narrow Defense-VCT channel as a separate experiment mode."""
+    board = build_board(case)
+    before = board_state(board)
+    candidates = [
+        parse_move(coordinate, board.size)
+        for coordinate in case.candidates
+    ]
+    ai = SearchAI(
+        case.player,
+        max_depth=depth,
+        time_limit_seconds=time_limit_seconds,
+    )
+    ai.config = replace(ai.config, defense_vct_probe_depth=depth)
+    ai._begin_move_search()
+    started_at = time.perf_counter()
+    probe = ai._run_defense_vct_probe(board, case.player, candidates)
+    elapsed = time.perf_counter() - started_at
+    if board_state(board) != before:
+        raise RuntimeError("Defense-VCT 探针污染了棋盘或有序历史。")
+    if probe is None:
+        result = None
+        completed = False
+        completed_depth = 0
+        stop_reason = "defense_vct_incomplete"
+    else:
+        best = probe.candidates[0]
+        result = RootResult(
+            move=best.move,
+            score=best.score,
+            principal_variation=best.principal_variation,
+            ranked_moves=tuple(
+                (candidate.move, candidate.score)
+                for candidate in probe.candidates
+            ),
+        )
+        completed = probe.completed_depth >= depth
+        completed_depth = probe.completed_depth
+        stop_reason = "defense_vct_completed"
+    run = _format_result(
+        ai,
+        mode="defense_vct",
+        requested_depth=depth,
+        node_limit=None,
+        completed=completed,
+        completed_depth=completed_depth,
+        stop_reason=stop_reason,
+        result=result,
+        elapsed_seconds=elapsed,
+    )
+    return replace(
+        run,
+        threat_extension_depth=ai.config.defense_vct_extension_depth,
+        branch_candidate_limit=ai.config.defense_vct_branch_limit,
+    )
+
+
 def run_production(
     case: BaselineCase,
     depth: int,
@@ -256,12 +704,16 @@ def run_production(
     time_limit_seconds: float | None,
     node_limit: int | None,
     warm_history: bool = False,
+    threat_extension_depth: int = 2,
+    branch_candidate_limit: int = 8,
 ) -> SearchRun:
     ai = SearchAI(
         case.player,
         max_depth=depth,
         time_limit_seconds=time_limit_seconds,
         node_limit=node_limit,
+        threat_extension_depth=threat_extension_depth,
+        branch_candidate_limit=branch_candidate_limit,
         diagnostics=True,
     )
     if warm_history:
@@ -335,17 +787,28 @@ def parse_depths(text: str) -> tuple[int, ...]:
 
 def print_runs(runs: Iterable[SearchRun]) -> None:
     print(
-        f"{'Mode':20} {'Req':>3} {'Done':>4} {'Move':>5} "
-        f"{'Score':>11} {'Nodes':>9} {'Seconds':>9} {'Stop'}"
+        f"{'Mode':20} {'Req':>3} {'Done':>4} {'Ext':>3} {'Br':>3} "
+        f"{'Move':>5} {'Score':>11} {'Nodes':>9} {'Exts':>5} "
+        f"{'Seconds':>9} {'Stop'}"
     )
-    print("-" * 92)
+    print("-" * 112)
     for run in runs:
         print(
             f"{run.mode:20} {run.requested_depth:>3} "
-            f"{run.completed_depth:>4} {(run.selected_move or '-'):>5} "
+            f"{run.completed_depth:>4} {run.threat_extension_depth:>3} "
+            f"{run.branch_candidate_limit:>3} "
+            f"{(run.selected_move or '-'):>5} "
             f"{(run.score if run.score is not None else '-'):>11} "
-            f"{run.nodes:>9} {run.elapsed_seconds:>8.3f}s "
+            f"{run.nodes:>9} {run.extensions:>5} "
+            f"{run.elapsed_seconds:>8.3f}s "
             f"{run.stop_reason}"
+        )
+        print(
+            " " * 7
+            + "pv="
+            + (" ".join(run.principal_variation) or "-")
+            + " | tt="
+            + f"{run.tt_entries}/{run.tt_digest[:16]}/{run.tt_bounds}"
         )
         if len(run.ranked_moves) > 1:
             print(
@@ -356,6 +819,34 @@ def print_runs(runs: Iterable[SearchRun]) -> None:
                     for move, score in run.ranked_moves
                 )
             )
+        for layer in run.candidate_layers:
+            sample = ",".join(layer.sample_moves) or "-"
+            suffix = "…" if layer.sample_truncated else ""
+            print(
+                " " * 7
+                + "layer="
+                + (
+                    f"ply{layer.ply}/d{layer.remaining_depth}/"
+                    f"e{layer.extension_depth} "
+                    f"calls={layer.calls} candidates="
+                    f"{layer.minimum_candidates}-{layer.maximum_candidates} "
+                    f"sample=[{sample}{suffix}]"
+                )
+            )
+        if run.candidate_trace_truncated:
+            print("       candidate_layers=truncated")
+        for leaf in run.leaf_trace:
+            variation = " ".join(leaf.principal_variation) or "-"
+            print(
+                " " * 7
+                + (
+                    f"leaf=ply{leaf.ply}/d{leaf.remaining_depth}/"
+                    f"e{leaf.extension_depth} {leaf.trace_category} "
+                    f"score={leaf.score} pv={variation}"
+                )
+            )
+        if run.leaf_trace_truncated:
+            print("       leaf_trace=truncated")
 
 
 def main() -> int:
@@ -365,7 +856,13 @@ def main() -> int:
     parser.add_argument("--fixture", type=Path, default=DEFAULT_FIXTURE)
     parser.add_argument(
         "--mode",
-        choices=("full-window", "iterative", "production"),
+        choices=(
+            "full-window",
+            "iterative",
+            "production",
+            "dynamic-pair",
+            "defense-vct",
+        ),
         default="full-window",
     )
     parser.add_argument(
@@ -373,8 +870,62 @@ def main() -> int:
         default="1-8",
         help="深度范围，例如 1-8 或 4,6,8。",
     )
+    parser.add_argument(
+        "--candidate",
+        action="append",
+        help="仅 full-window：指定一个或多个夹具候选，可重复传入。",
+    )
     parser.add_argument("--node-limit", type=int)
     parser.add_argument("--time-limit", type=float)
+    parser.add_argument(
+        "--threat-extension-depth",
+        type=int,
+        default=2,
+        help=(
+            "主 PVS 的威胁延伸层数（full-window 默认 2；"
+            "不会开启安静前沿）。"
+        ),
+    )
+    parser.add_argument(
+        "--branch-candidate-limit",
+        type=int,
+        default=8,
+        help="主 PVS 的非根候选上限（默认 8）。",
+    )
+    parser.add_argument(
+        "--candidate-trace-limit",
+        type=int,
+        default=0,
+        help="显式启用 full-window 每层候选摘要的最大层数；0 禁用（默认）。",
+    )
+    parser.add_argument(
+        "--candidate-sample-limit",
+        type=int,
+        default=8,
+        help="每层候选摘要保留的有序样本数（默认 8）。",
+    )
+    parser.add_argument(
+        "--leaf-trace-limit",
+        type=int,
+        default=0,
+        help=(
+            "显式启用 full-window 的有界叶面返回 trace；"
+            "0 保持关闭（默认）。"
+        ),
+    )
+    parser.add_argument(
+        "--quiet-frontier",
+        action="store_true",
+        help=(
+            "仅 dynamic-pair 模式：在该独立复核中开启安静前沿延伸。"
+        ),
+    )
+    parser.add_argument(
+        "--review-budget",
+        type=float,
+        default=10.0,
+        help="dynamic-pair 的独立复核预算秒数（默认 10）。",
+    )
     parser.add_argument(
         "--warm-history",
         action="store_true",
@@ -384,14 +935,58 @@ def main() -> int:
     args = parser.parse_args()
     if args.node_limit is not None and args.node_limit < 1:
         parser.error("--node-limit 必须大于 0。")
+    if args.time_limit is not None and args.time_limit <= 0:
+        parser.error("--time-limit 必须大于 0。")
+    if args.threat_extension_depth < 0:
+        parser.error("--threat-extension-depth 不能小于 0。")
+    if args.branch_candidate_limit < 1:
+        parser.error("--branch-candidate-limit 必须大于 0。")
+    if args.candidate_trace_limit < 0:
+        parser.error("--candidate-trace-limit 不能小于 0。")
+    if args.candidate_sample_limit < 1:
+        parser.error("--candidate-sample-limit 必须大于 0。")
+    if args.leaf_trace_limit < 0:
+        parser.error("--leaf-trace-limit 不能小于 0。")
+    if args.review_budget <= 0:
+        parser.error("--review-budget 必须大于 0。")
+    if args.quiet_frontier and args.mode != "dynamic-pair":
+        parser.error("--quiet-frontier 只能在 --mode dynamic-pair 使用。")
+    if args.leaf_trace_limit and args.mode != "full-window":
+        parser.error("--leaf-trace-limit 只能在 --mode full-window 使用。")
+    if args.candidate is not None and args.mode != "full-window":
+        parser.error("--candidate 只能在 --mode full-window 使用。")
     case = load_case(args.fixture)
+    selected_coordinates = (
+        case.candidates
+        if args.candidate is None
+        else tuple(args.candidate)
+    )
+    unknown_coordinates = [
+        coordinate
+        for coordinate in selected_coordinates
+        if coordinate not in case.candidates
+    ]
+    if unknown_coordinates:
+        parser.error(
+            "--candidate 必须来自夹具候选："
+            + ", ".join(case.candidates)
+        )
     depths = parse_depths(args.depths)
     runs: list[SearchRun] = []
     for depth in depths:
         if args.mode == "full-window":
             runs.extend(
-                run_full_window_candidate(case, coordinate, depth)
-                for coordinate in case.candidates
+                run_full_window_candidate(
+                    case,
+                    coordinate,
+                    depth,
+                    threat_extension_depth=args.threat_extension_depth,
+                    branch_candidate_limit=args.branch_candidate_limit,
+                    candidate_trace_limit=args.candidate_trace_limit,
+                    candidate_sample_limit=args.candidate_sample_limit,
+                    leaf_trace_limit=args.leaf_trace_limit,
+                )
+                for coordinate in selected_coordinates
             )
         elif args.mode == "iterative":
             runs.append(
@@ -399,9 +994,11 @@ def main() -> int:
                     case,
                     depth,
                     node_limit=args.node_limit,
+                    threat_extension_depth=args.threat_extension_depth,
+                    branch_candidate_limit=args.branch_candidate_limit,
                 )
             )
-        else:
+        elif args.mode == "production":
             runs.append(
                 run_production(
                     case,
@@ -409,6 +1006,31 @@ def main() -> int:
                     time_limit_seconds=args.time_limit,
                     node_limit=args.node_limit,
                     warm_history=args.warm_history,
+                    threat_extension_depth=args.threat_extension_depth,
+                    branch_candidate_limit=args.branch_candidate_limit,
+                )
+            )
+        elif args.mode == "dynamic-pair":
+            runs.append(
+                run_dynamic_pair(
+                    case,
+                    depth,
+                    review_budget_seconds=args.review_budget,
+                    quiet_frontier_extension=args.quiet_frontier,
+                    threat_extension_depth=args.threat_extension_depth,
+                    branch_candidate_limit=args.branch_candidate_limit,
+                )
+            )
+        else:
+            runs.append(
+                run_defense_vct_pair(
+                    case,
+                    depth,
+                    time_limit_seconds=(
+                        args.time_limit
+                        if args.time_limit is not None
+                        else args.review_budget
+                    ),
                 )
             )
     print(
