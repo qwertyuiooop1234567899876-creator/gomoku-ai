@@ -39,6 +39,7 @@ python -B -m app.cli
 python -B -m app.web_ui
 python -B -m tools.cvc_analysis --help
 python -B -m tools.search_benchmark --help
+python -B -m tools.native_search_baseline --help
 ```
 
 ## 验证

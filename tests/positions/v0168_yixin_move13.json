@@ -1,0 +1,15 @@
+{
+  "format": "gomoku-search-baseline-v1",
+  "source_engine_version": "0.16.8",
+  "board_size": 15,
+  "name": "yixin_black_move_13",
+  "player": 1,
+  "history": [
+    "H8", "H9", "G7", "I9", "G9", "I7",
+    "I8", "G8", "F8", "H10", "J8", "I10"
+  ],
+  "candidates": ["F7", "J11"],
+  "played": "F7",
+  "external_review": "J11",
+  "zobrist_hash": 2149914533821582188
+}

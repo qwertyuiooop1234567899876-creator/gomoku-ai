@@ -9,8 +9,18 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "native" / "gomoku_native.cpp"
+SOURCE_DIRECTORY = ROOT / "native"
 OUTPUT_DIRECTORY = ROOT / "native" / "bin"
+
+
+def source_paths() -> tuple[Path, ...]:
+    """Return every native translation unit in deterministic order."""
+    sources = tuple(sorted(SOURCE_DIRECTORY.glob("*.cpp")))
+    if not sources:
+        raise RuntimeError(
+            f"NativeCore 没有可编译的C++源文件：{SOURCE_DIRECTORY}"
+        )
+    return sources
 
 
 def output_path() -> Path:
@@ -24,6 +34,7 @@ def output_path() -> Path:
 def compiler_command(*, output: Path | None = None) -> list[str]:
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     selected_output = output or output_path()
+    sources = source_paths()
     if sys.platform == "win32" and shutil.which("cl"):
         return [
             "cl",
@@ -32,8 +43,8 @@ def compiler_command(*, output: Path | None = None) -> list[str]:
             "/O2",
             "/EHsc",
             "/LD",
-            f"/Fo:{OUTPUT_DIRECTORY / 'gomoku_native.obj'}",
-            str(SOURCE),
+            f"/Fo:{OUTPUT_DIRECTORY}\\",
+            *(str(source) for source in sources),
             "/link",
             f"/OUT:{selected_output}",
             f"/IMPLIB:{OUTPUT_DIRECTORY / 'gomoku_native.lib'}",
@@ -62,9 +73,12 @@ def compiler_command(*, output: Path | None = None) -> list[str]:
             installation = query.stdout.strip()
             vcvars = Path(installation) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
             if installation and vcvars.is_file():
+                quoted_sources = " ".join(
+                    f'"{source}"' for source in sources
+                )
                 compile_text = (
                     f'call "{vcvars}" >nul && cl /nologo /std:c++17 /O2 /EHsc /LD '
-                    f'/Fo:"{OUTPUT_DIRECTORY / "gomoku_native.obj"}" "{SOURCE}" /link '
+                    f'/Fo:"{OUTPUT_DIRECTORY}\\" {quoted_sources} /link '
                     f'/OUT:"{selected_output}" /IMPLIB:"{OUTPUT_DIRECTORY / "gomoku_native.lib"}"'
                 )
                 return ["cmd", "/d", "/s", "/c", compile_text]
@@ -82,7 +96,8 @@ def compiler_command(*, output: Path | None = None) -> list[str]:
         command.append("-fPIC")
     else:
         command.extend(["-static-libgcc", "-static-libstdc++"])
-    command.extend([str(SOURCE), "-o", str(selected_output)])
+    command.extend(str(source) for source in sources)
+    command.extend(["-o", str(selected_output)])
     return command
 
 

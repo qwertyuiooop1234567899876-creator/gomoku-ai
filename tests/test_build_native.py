@@ -10,6 +10,21 @@ from tools import build_native
 
 
 class TestAtomicNativeBuild(unittest.TestCase):
+    def test_compiler_command_includes_every_cpp_source(self) -> None:
+        first = Path("native/first.cpp")
+        second = Path("native/second.cpp")
+        with (
+            patch.object(build_native, "source_paths", return_value=(first, second)),
+            patch.object(build_native.sys, "platform", "linux"),
+            patch.object(build_native.shutil, "which", return_value="g++"),
+        ):
+            command = build_native.compiler_command(
+                output=Path("native/bin/gomoku_native.so")
+            )
+
+        self.assertIn(str(first), command)
+        self.assertIn(str(second), command)
+
     def test_failed_build_keeps_existing_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_directory = Path(directory)

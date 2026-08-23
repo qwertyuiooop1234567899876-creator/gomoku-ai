@@ -52,6 +52,22 @@
 - `python -m tools.cvc_analysis`、`python -m tools.cvc_workflow`
 - `python -m tools.build_native`、`python -m tools.search_benchmark`
 
+NativeCore 的唯一构建入口是 `python -m tools.build_native`（根目录
+`build_native.bat` 只负责调用该模块）。构建器按确定顺序编译
+`native/*.cpp` 的全部翻译单元，并在成功后原子替换运行库；项目不再
+保留另一套未被启动器调用的构建定义。
+
+Native 整体搜索下沉前的固定局面基线入口为：
+
+```powershell
+python -B -m tools.native_search_baseline --mode full-window --depths 1-8
+python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 9000
+```
+
+基线夹具必须保存有序走子历史。TT 等价门禁比较完整内容摘要，而不只
+比较最终着法；限时棋谱无法保证重建同一份热 TT，因此冷启动固定节点
+基线是跨 Python/C++ 实现的第一层真值。
+
 测试与内部导入也只使用这些正式包路径，避免两套模块身份。
 
 ## 运行数据与回归数据

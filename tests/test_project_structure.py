@@ -27,6 +27,7 @@ class TestPackageEntrypoints(unittest.TestCase):
             "tools.cvc_workflow",
             "tools.manual_scenarios",
             "tools.native_benchmark",
+            "tools.native_search_baseline",
             "tools.search_benchmark",
             "tools.yixin_smoke_test",
         )

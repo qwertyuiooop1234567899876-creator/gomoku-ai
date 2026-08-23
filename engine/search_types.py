@@ -51,6 +51,7 @@ class SearchConfig:
 
     max_depth: int = 3
     time_limit_seconds: float | None = 2.0
+    main_search_node_limit: int | None = None
     root_candidate_limit: int = 12
     branch_candidate_limit: int = 8
     preselection_factor: int = 3
@@ -173,6 +174,11 @@ class SearchConfig:
             )
         ):
             raise ValueError("time_limit_seconds 必须大于 0 或为 None。")
+        if (
+            self.main_search_node_limit is not None
+            and self.main_search_node_limit < 1
+        ):
+            raise ValueError("main_search_node_limit 必须大于 0 或为 None。")
         if self.root_candidate_limit < 1:
             raise ValueError("root_candidate_limit 必须大于 0。")
         if self.branch_candidate_limit < 1:

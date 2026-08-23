@@ -134,6 +134,7 @@ class SearchAI(ScoringAI):
         *,
         max_depth: int = 3,
         time_limit_seconds: float | None = 2.0,
+        node_limit: int | None = None,
         root_candidate_limit: int = 12,
         branch_candidate_limit: int = 8,
         threat_extension_depth: int = 2,
@@ -151,6 +152,7 @@ class SearchAI(ScoringAI):
         self.config = SearchConfig(
             max_depth=max_depth,
             time_limit_seconds=time_limit_seconds,
+            main_search_node_limit=node_limit,
             root_candidate_limit=root_candidate_limit,
             branch_candidate_limit=branch_candidate_limit,
             threat_extension_depth=threat_extension_depth,
@@ -212,6 +214,9 @@ class SearchAI(ScoringAI):
         ] = {}
         self._search_phase_deadline: float | None = None
         self._search_phase_timeout_hit = False
+        self._main_search_node_limit: int | None = None
+        self._main_search_node_start = 0
+        self._main_search_node_limit_hit = False
         self._final_proof_checked = False
         self._final_proof_state = "not_checked"
         self._final_proof_completed = False
@@ -426,6 +431,9 @@ class SearchAI(ScoringAI):
         self._quick_order_cache.clear()
         self._search_phase_deadline = None
         self._search_phase_timeout_hit = False
+        self._main_search_node_limit = None
+        self._main_search_node_start = 0
+        self._main_search_node_limit_hit = False
         self._final_proof_checked = False
         self._final_proof_state = "not_checked"
         self._final_proof_completed = False
@@ -573,8 +581,16 @@ class SearchAI(ScoringAI):
         preserve_frontier_order: bool,
         allow_near_loss_expansion: bool,
         defense_probe: DefenseProbeResult | None,
+        node_limit: int | None = None,
     ) -> IterativeSearchOutcome:
         """Run iterative PVS and return data needed by final reporting."""
+        if node_limit is None:
+            node_limit = self.config.main_search_node_limit
+        if node_limit is not None and node_limit < 1:
+            raise ValueError("node_limit 必须大于 0 或为 None。")
+        self._main_search_node_limit = node_limit
+        self._main_search_node_start = self._counters.nodes
+        self._main_search_node_limit_hit = False
         search_candidates = self._filter_proven_losing_candidates(
             search_candidates
         )
@@ -789,9 +805,13 @@ class SearchAI(ScoringAI):
                 self._interrupted_depth = depth
                 search_completed = False
                 stop_reason = (
-                    "verification_reserve"
-                    if self._search_phase_timeout_hit
-                    else "hard_deadline"
+                    "node_limit"
+                    if self._main_search_node_limit_hit
+                    else (
+                        "verification_reserve"
+                        if self._search_phase_timeout_hit
+                        else "hard_deadline"
+                    )
                 )
                 break
 
@@ -841,6 +861,7 @@ class SearchAI(ScoringAI):
                 )
 
         self._search_phase_deadline = None
+        self._main_search_node_limit = None
         self._phase_timings["main_pvs"] = (
             self._phase_timings.get("main_pvs", 0.0)
             + time.perf_counter()
@@ -4157,6 +4178,7 @@ class SearchAI(ScoringAI):
         ply: int,
         extension_depth: int,
     ) -> tuple[int, tuple[Move, ...]]:
+        self._check_node_limit()
         self._counters.nodes += 1
         self._check_timeout()
 
@@ -5588,6 +5610,15 @@ class SearchAI(ScoringAI):
             self._search_phase_timeout_hit = True
             raise SearchTimeout
         if self._time.hard_expired():
+            raise SearchTimeout
+
+    def _check_node_limit(self) -> None:
+        """Stop only the main PVS after its reproducible node allowance."""
+        if self._main_search_node_limit is None:
+            return
+        used = self._counters.nodes - self._main_search_node_start
+        if used >= self._main_search_node_limit:
+            self._main_search_node_limit_hit = True
             raise SearchTimeout
 
     def _check_vcf_timeout(self) -> None:
