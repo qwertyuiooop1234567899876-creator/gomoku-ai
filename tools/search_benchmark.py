@@ -193,10 +193,10 @@ def print_report(report: dict[str, object]) -> None:
         f"repeat={report['repeat']}"
     )
     print(
-        f"{'Case':22} {'Move':>5} {'Median':>10} "
-        f"{'Depth':>7} {'Nodes':>9} {'NPS':>9}"
+        f"{'Case':22} {'Move':>5} {'Whole':>10} "
+        f"{'Depth':>7} {'PVS Nodes':>9} {'Eff.NPS*':>9}"
     )
-    print("-" * 68)
+    print("-" * 72)
     for case in report["cases"]:
         runs = case["runs"]
         representative = min(
@@ -214,6 +214,12 @@ def print_report(report: dict[str, object]) -> None:
             f"{representative['nodes']:>9} "
             f"{case['median_nps']:>9}"
         )
+    print()
+    print(
+        "* Eff.NPS = PVS nodes / whole choose_move time; "
+        "it includes candidate generation, VCF/VCT, Proof and root review."
+    )
+    print("  It is a whole-move throughput indicator, not PVS-core NPS.")
 
 
 def main() -> None:
