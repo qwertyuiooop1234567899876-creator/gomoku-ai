@@ -31,6 +31,24 @@ records/        本机运行生成的当前对局与分析，不作为源码或�
 - `run_search_benchmark.bat`：搜索性能基准。
 - `build_native.bat`：构建 NativeCore。
 
+### Telegram 通知
+
+项目提供无第三方依赖的 Telegram Bot 通知入口。先在本机设置
+`TELEGRAM_BOT_TOKEN`；向机器人发送过 `/start` 后，可以直接测试：
+
+```powershell
+python -B -m tools.telegram_notify --get-chat-id
+python -B -m tools.telegram_notify --test
+```
+
+也可以设置 `TELEGRAM_CHAT_ID` 固定接收者，再发送自定义消息：
+
+```powershell
+python -B -m tools.telegram_notify "测试消息"
+```
+
+Token 只从环境变量读取，不写入项目文件，也不会进入 Git。
+
 也可以直接使用模块入口，例如：
 
 ```powershell

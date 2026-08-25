@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -7,10 +8,21 @@ from pathlib import Path
 
 from app.arena import GameResult, play_game
 from engine.arena_settings import AISelection
+from tools.telegram_notify import send_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ANALYSIS_MODULE = "tools.cvc_analysis"
+
+
+def _notify(text: str) -> None:
+    """Send optional progress notifications without making workflows brittle."""
+    if not os.environ.get("TELEGRAM_BOT_TOKEN", "").strip():
+        return
+    try:
+        send_message(text)
+    except Exception as error:  # noqa: BLE001 - notification is best effort
+        print(f"Telegram notification skipped: {error}", file=sys.stderr)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,10 +87,12 @@ def run_workflow() -> tuple[Path, ...]:
         )
         record_path = _saved_json(result, label=stage.label)
         records.append(record_path)
+        _notify(f"Gomoku AI：{stage.label} 对局完成\n{record_path.name}")
 
         print()
         print(f"Analyzing the new record: {record_path}")
         analyze_record(record_path)
+        _notify(f"Gomoku AI：{stage.label} 复盘完成\n{record_path.name}")
 
     return tuple(records)
 
@@ -88,12 +102,14 @@ def main() -> int:
         records = run_workflow()
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"Workflow failed: {error}", file=sys.stderr)
+        _notify(f"Gomoku AI：工作流失败\n{error}")
         return 1
 
     print()
     print("All games and analyses completed successfully.")
     for record in records:
         print(f"  {record}")
+    _notify("Gomoku AI：完整对局与复盘流程已完成。")
     return 0
 
 
