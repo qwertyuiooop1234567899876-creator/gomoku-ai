@@ -33,10 +33,13 @@ class BenchmarkCase:
 @dataclass(frozen=True, slots=True)
 class BenchmarkRun:
     elapsed_seconds: float
+    main_search_elapsed_seconds: float
+    other_elapsed_seconds: float
     selected_move: str
     completed_depth: int
     nodes: int
     nps: int
+    main_search_nps: int
     proof_nodes: int
     vcf_nodes: int
     root_vcf_nodes: int
@@ -153,12 +156,25 @@ def run_once(
             f"{case.name}: 预期 {case.expected_move}，实际 {selected_text}。"
         )
 
+    phase_timings = {
+        timing.phase: timing.elapsed_seconds
+        for timing in analysis.phase_timings
+    }
+    main_search_elapsed = phase_timings.get("main_pvs", 0.0)
+    main_search_nps = (
+        int(analysis.nodes / main_search_elapsed)
+        if main_search_elapsed > 0
+        else 0
+    )
     return BenchmarkRun(
         elapsed_seconds=elapsed,
+        main_search_elapsed_seconds=main_search_elapsed,
+        other_elapsed_seconds=max(0.0, elapsed - main_search_elapsed),
         selected_move=selected_text,
         completed_depth=analysis.search_depth,
         nodes=analysis.nodes,
         nps=analysis.nps,
+        main_search_nps=main_search_nps,
         proof_nodes=analysis.proof_nodes,
         vcf_nodes=analysis.vcf_nodes,
         root_vcf_nodes=analysis.root_vcf_nodes,
@@ -182,6 +198,15 @@ def summarize_case(
         "min_elapsed_seconds": min(run.elapsed_seconds for run in runs),
         "max_elapsed_seconds": max(run.elapsed_seconds for run in runs),
         "median_nps": int(statistics.median(run.nps for run in runs)),
+        "median_main_search_elapsed_seconds": statistics.median(
+            run.main_search_elapsed_seconds for run in runs
+        ),
+        "median_other_elapsed_seconds": statistics.median(
+            run.other_elapsed_seconds for run in runs
+        ),
+        "median_main_search_nps": int(
+            statistics.median(run.main_search_nps for run in runs)
+        ),
         "runs": [asdict(run) for run in runs],
     }
 
@@ -193,10 +218,10 @@ def print_report(report: dict[str, object]) -> None:
         f"repeat={report['repeat']}"
     )
     print(
-        f"{'Case':22} {'Move':>5} {'Whole':>10} "
-        f"{'Depth':>7} {'PVS Nodes':>9} {'Eff.NPS*':>9}"
+        f"{'Case':22} {'Move':>5} {'Whole':>8} {'Main':>8} "
+        f"{'Other':>8} {'Depth':>5} {'PVSNodes':>8} {'MainNPS':>8}"
     )
-    print("-" * 72)
+    print("-" * 86)
     for case in report["cases"]:
         runs = case["runs"]
         representative = min(
@@ -209,17 +234,22 @@ def print_report(report: dict[str, object]) -> None:
         print(
             f"{case['name']:22} "
             f"{representative['selected_move']:>5} "
-            f"{case['median_elapsed_seconds']:>9.3f}s "
-            f"{representative['completed_depth']:>7} "
-            f"{representative['nodes']:>9} "
-            f"{case['median_nps']:>9}"
+            f"{case['median_elapsed_seconds']:>7.3f}s "
+            f"{case['median_main_search_elapsed_seconds']:>7.3f}s "
+            f"{case['median_other_elapsed_seconds']:>7.3f}s "
+            f"{representative['completed_depth']:>5} "
+            f"{representative['nodes']:>8} "
+            f"{case['median_main_search_nps']:>8}"
         )
     print()
     print(
-        "* Eff.NPS = PVS nodes / whole choose_move time; "
-        "it includes candidate generation, VCF/VCT, Proof and root review."
+        "Whole=full move  Main=main PVS phase  "
+        "Other=candidate/VCF/VCT/Proof/review overhead"
     )
-    print("  It is a whole-move throughput indicator, not PVS-core NPS.")
+    print(
+        "MainNPS=PVSNodes/Main (main-search speed, "
+        "not whole-move throughput)."
+    )
 
 
 def main() -> None:
