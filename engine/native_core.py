@@ -15,6 +15,10 @@ ABI_VERSION = 1
 STATUS_NOT_FOUND = 0
 STATUS_FOUND = 1
 STATUS_CUTOFF = 2
+STATUS_MAIN_SEARCH_UNSUPPORTED = -2
+MAIN_SEARCH_SCHEMA_VERSION = 1
+MAIN_SEARCH_FLAG_PVS = 1 << 0
+MAIN_SEARCH_FLAG_TT = 1 << 1
 MIN_BOARD_SIZE = 5
 MAX_BOARD_SIZE = 25
 
@@ -43,11 +47,63 @@ class NativeVCFResult:
         return self.status == STATUS_CUTOFF
 
 
+@dataclass(frozen=True, slots=True)
+class NativeMainSearchProbe:
+    status: int
+    input_digest: int
+
+
+class _MainSearchRequestV1(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("schema_version", ctypes.c_uint32),
+        ("cells", ctypes.POINTER(ctypes.c_uint8)),
+        ("board_size", ctypes.c_int32),
+        ("history_indices", ctypes.POINTER(ctypes.c_int32)),
+        ("history_players", ctypes.POINTER(ctypes.c_uint8)),
+        ("history_count", ctypes.c_int32),
+        ("player", ctypes.c_int32),
+        ("root_candidates", ctypes.POINTER(ctypes.c_int32)),
+        ("root_candidate_count", ctypes.c_int32),
+        ("depth", ctypes.c_int32),
+        ("node_limit", ctypes.c_int64),
+        ("branch_candidate_limit", ctypes.c_int32),
+        ("preselection_factor", ctypes.c_int32),
+        ("candidate_radius", ctypes.c_int32),
+        ("recent_move_count", ctypes.c_int32),
+        ("threat_extension_depth", ctypes.c_int32),
+        ("flags", ctypes.c_uint32),
+    ]
+
+
+class _MainSearchResultV1(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("schema_version", ctypes.c_uint32),
+        ("status", ctypes.c_int32),
+        ("completed_depth", ctypes.c_int32),
+        ("stop_reason", ctypes.c_int32),
+        ("best_move", ctypes.c_int32),
+        ("score", ctypes.c_int32),
+        ("nodes", ctypes.c_int64),
+        ("tt_entries", ctypes.c_int64),
+        ("input_digest", ctypes.c_uint64),
+        ("tt_digest", ctypes.c_uint64),
+        ("root_scores", ctypes.POINTER(ctypes.c_int32)),
+        ("root_score_capacity", ctypes.c_int32),
+        ("root_score_count", ctypes.c_int32),
+        ("principal_variation", ctypes.POINTER(ctypes.c_int32)),
+        ("pv_capacity", ctypes.c_int32),
+        ("pv_length", ctypes.c_int32),
+    ]
+
+
 class NativeCore:
     """Version-independent C ABI wrapper with a safe Python fallback path."""
 
     def __init__(self) -> None:
         self._library: ctypes.CDLL | None = None
+        self._main_search_available = False
         self._path: Path | None = None
         self._error: str | None = None
         self._load()
@@ -70,6 +126,7 @@ class NativeCore:
             "abi_version": ABI_VERSION if self.available else None,
             "path": None if self._path is None else str(self._path),
             "error": self._error,
+            "main_search_available": self._main_search_available,
         }
 
     def _load(self) -> None:
@@ -124,6 +181,18 @@ class NativeCore:
                 int_pointer, ctypes.c_int, int_pointer, int_pointer,
             ]
             library.gn_find_vcf.restype = ctypes.c_int
+            try:
+                library.gn_main_search_v1.argtypes = [
+                    ctypes.POINTER(_MainSearchRequestV1),
+                    ctypes.POINTER(_MainSearchResultV1),
+                ]
+                library.gn_main_search_v1.restype = ctypes.c_int
+                self._main_search_available = True
+            except AttributeError:
+                # ABI 1 remains compatible with pre-main-search runtimes. The
+                # production kernels stay available while the new coarse
+                # search capability is compiled and verified independently.
+                self._main_search_available = False
         except (AttributeError, OSError) as exc:
             self._error = f"原生库加载失败：{exc}"
             return
@@ -342,6 +411,126 @@ class NativeCore:
             for index in range(line_length.value)
         )
         return NativeVCFResult(status=status, line=line, nodes=nodes.value)
+
+    @staticmethod
+    def main_search_input_digest(
+        board: Board,
+        player: int,
+        root_candidates: Sequence[Move],
+        *,
+        depth: int,
+        node_limit: int | None,
+        branch_candidate_limit: int,
+        preselection_factor: int,
+        candidate_radius: int,
+        recent_move_count: int,
+        threat_extension_depth: int,
+        flags: int,
+    ) -> int:
+        values: list[int] = [MAIN_SEARCH_SCHEMA_VERSION, board.size]
+        values.extend(cell for row in board.grid for cell in row)
+        values.append(len(board.move_history))
+        for row, column, stone in board.move_history:
+            values.extend((row * board.size + column, stone))
+        values.extend((player, len(root_candidates)))
+        values.extend(row * board.size + column for row, column in root_candidates)
+        values.extend((
+            depth,
+            0 if node_limit is None else node_limit,
+            branch_candidate_limit,
+            preselection_factor,
+            candidate_radius,
+            recent_move_count,
+            threat_extension_depth,
+            flags,
+        ))
+        digest = 1_469_598_103_934_665_603
+        for value in values:
+            for shift in range(0, 64, 8):
+                digest ^= (value >> shift) & 0xFF
+                digest = (digest * 1_099_511_628_211) & ((1 << 64) - 1)
+        return digest
+
+    def probe_main_search_contract(
+        self,
+        board: Board,
+        player: int,
+        root_candidates: Sequence[Move],
+        *,
+        depth: int,
+        node_limit: int | None,
+        branch_candidate_limit: int,
+        preselection_factor: int,
+        candidate_radius: int,
+        recent_move_count: int,
+        threat_extension_depth: int,
+        use_pvs: bool,
+        use_transposition_table: bool,
+    ) -> NativeMainSearchProbe | None:
+        library = self._library
+        if (
+            library is None
+            or not self._main_search_available
+            or not self._supports_board(board)
+        ):
+            return None
+        if not root_candidates:
+            raise ValueError("Native主搜索至少需要一个根候选。")
+        grid = self._grid(board)
+        history_indices = (ctypes.c_int32 * len(board.move_history))(*(
+            row * board.size + column
+            for row, column, _stone in board.move_history
+        ))
+        history_players = (ctypes.c_uint8 * len(board.move_history))(*(
+            stone for _row, _column, stone in board.move_history
+        ))
+        encoded_candidates = (ctypes.c_int32 * len(root_candidates))(*(
+            row * board.size + column for row, column in root_candidates
+        ))
+        flags = (
+            (MAIN_SEARCH_FLAG_PVS if use_pvs else 0)
+            | (MAIN_SEARCH_FLAG_TT if use_transposition_table else 0)
+        )
+        request = _MainSearchRequestV1(
+            struct_size=ctypes.sizeof(_MainSearchRequestV1),
+            schema_version=MAIN_SEARCH_SCHEMA_VERSION,
+            cells=grid,
+            board_size=board.size,
+            history_indices=history_indices,
+            history_players=history_players,
+            history_count=len(board.move_history),
+            player=player,
+            root_candidates=encoded_candidates,
+            root_candidate_count=len(root_candidates),
+            depth=depth,
+            node_limit=0 if node_limit is None else node_limit,
+            branch_candidate_limit=branch_candidate_limit,
+            preselection_factor=preselection_factor,
+            candidate_radius=candidate_radius,
+            recent_move_count=recent_move_count,
+            threat_extension_depth=threat_extension_depth,
+            flags=flags,
+        )
+        root_scores = (ctypes.c_int32 * len(root_candidates))()
+        principal_variation = (ctypes.c_int32 * (board.size * board.size))()
+        result = _MainSearchResultV1(
+            struct_size=ctypes.sizeof(_MainSearchResultV1),
+            schema_version=MAIN_SEARCH_SCHEMA_VERSION,
+            root_scores=root_scores,
+            root_score_capacity=len(root_candidates),
+            principal_variation=principal_variation,
+            pv_capacity=board.size * board.size,
+        )
+        status = library.gn_main_search_v1(
+            ctypes.byref(request),
+            ctypes.byref(result),
+        )
+        if status == -1:
+            raise RuntimeError("Native主搜索ABI请求无效。")
+        return NativeMainSearchProbe(
+            status=status,
+            input_digest=result.input_digest,
+        )
 
 
 native_core = NativeCore()
