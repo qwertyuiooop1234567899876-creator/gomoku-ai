@@ -393,6 +393,7 @@ def broad_quiet_attack_frontier_moves(
     minimum_total_rank: int,
     limit: int,
     covered_moves: Iterable[Move] = (),
+    tied_limit: int = 0,
 ) -> list[Move]:
     """Keep one exceptionally broad lower-rank quiet attack hub.
 
@@ -427,7 +428,16 @@ def broad_quiet_attack_frontier_moves(
         )
 
     ranked.sort(reverse=True)
-    return [item[-1] for item in ranked[:limit]]
+    selected = ranked[:limit]
+    if tied_limit > 0 and len(ranked) > limit:
+        boundary = selected[-1][:3]
+        selected.extend(
+            item
+            for item in ranked[limit:]
+            if item[:3] == boundary
+        )
+        selected = selected[: limit + tied_limit]
+    return [item[-1] for item in selected]
 
 
 def ordinary_pressure_evidence_moves(

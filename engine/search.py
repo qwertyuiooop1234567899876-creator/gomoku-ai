@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.9 搜索 AI。
+    V0.16.10 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -132,6 +132,9 @@ class SearchAI(ScoringAI):
     V0.16.9 不改变选着语义，为 Final-Proof 紧急 VCF 门禁增加独立
     有界来源记录，并记录未进入动态 pair 的 finalists 及剩余预算；
     固定局面工具将主 PVS、安静前沿复核和 Defense VCT 分渠道实验。
+    V0.16.10 在根集合有空位时保留一个与首选完全同级的宽安静进攻
+    枢纽，并让动态复核先执行 leader 与关键 finalist 的实际配对，
+    不再由全池结构预评分耗尽唯一复核切片。
     """
 
     def __init__(
@@ -1471,7 +1474,7 @@ class SearchAI(ScoringAI):
                     limit=1,
                 )
             )
-            broad_quiet_attack_frontiers = (
+            broad_quiet_attack_options = (
                 root_candidates.broad_quiet_attack_frontier_moves(
                     frontiers=self._root_own_frontiers,
                     minimum_rank=(
@@ -1485,6 +1488,7 @@ class SearchAI(ScoringAI):
                         self.config.root_broad_quiet_attack_min_total_rank
                     ),
                     limit=self.config.root_broad_quiet_attack_limit,
+                    tied_limit=1,
                     covered_moves=root_candidates.merge_unique(
                         frontier_candidates,
                         ordinary_candidates,
@@ -1497,9 +1501,9 @@ class SearchAI(ScoringAI):
                     ),
                 )
             )
-            self._root_broad_quiet_attack_frontiers = tuple(
-                broad_quiet_attack_frontiers
-            )
+            broad_quiet_attack_frontiers = broad_quiet_attack_options[
+                : self.config.root_broad_quiet_attack_limit
+            ]
             self._root_pressure_prevention = tuple(
                 pressure_prevention_evidence_moves
             )
@@ -1514,6 +1518,32 @@ class SearchAI(ScoringAI):
                 offensive_continuation_moves=offensive_continuations,
                 dual_frontier_moves=dual_frontier_bridges,
                 broad_quiet_attack_moves=broad_quiet_attack_frontiers,
+            )
+            broad_spare_slots = max(
+                0,
+                self.config.root_candidate_limit - len(search_candidates),
+            )
+            if broad_spare_slots:
+                broad_quiet_attack_frontiers = broad_quiet_attack_options[
+                    : (
+                        self.config.root_broad_quiet_attack_limit
+                        + broad_spare_slots
+                    )
+                ]
+                search_candidates = root_candidates.frontier_defense_moves(
+                    frontier_moves=frontier_candidates,
+                    ordinary_moves=ordinary_candidates,
+                    counterattack_moves=counterattacks,
+                    limit=self.config.root_candidate_limit,
+                    forcing_counterattack_moves=forcing_counterattacks,
+                    pressure_prevention_moves=pressure_prevention_moves,
+                    prevention_moves=prevention_moves,
+                    offensive_continuation_moves=offensive_continuations,
+                    dual_frontier_moves=dual_frontier_bridges,
+                    broad_quiet_attack_moves=broad_quiet_attack_frontiers,
+                )
+            self._root_broad_quiet_attack_frontiers = tuple(
+                broad_quiet_attack_frontiers
             )
             spare_slots = max(
                 0,
@@ -3062,17 +3092,11 @@ class SearchAI(ScoringAI):
         if len(pool) < 2:
             return None
 
+        # Pair review recomputes the two candidates' structural evidence under
+        # its own deadline.  Scoring the whole pool here can consume the only
+        # review slice before any finalist is compared, so finalist selection
+        # deliberately uses searched rank and source order.
         structure_scores: dict[Move, int] = {}
-        for move in pool:
-            if time.perf_counter() >= deadline - 0.5:
-                break
-            try:
-                structure_scores[move] = self._frontier_balance_after_move(
-                    board,
-                    move,
-                )
-            except SearchTimeout:
-                break
 
         preferred_groups = [
             active_moves,
@@ -3121,15 +3145,23 @@ class SearchAI(ScoringAI):
             remaining = deadline - time.perf_counter()
             checks_left = max(1, len(pending) - index)
             fair_budget = remaining / checks_left
+            minimum_pair_budget = 0.5
             pair_budget = (
                 min(
                     remaining,
-                    max(fair_budget, remaining * 0.65),
+                    max(
+                        minimum_pair_budget,
+                        fair_budget,
+                        remaining * 0.65,
+                    ),
                 )
                 if index == 0 and checks_left > 1
                 else fair_budget
             )
-            if pair_budget < 0.5:
+            if (
+                remaining < minimum_pair_budget
+                or pair_budget < minimum_pair_budget
+            ):
                 unpaired_reason = "insufficient_pair_budget"
                 unpaired_remaining_budget = max(0.0, remaining)
                 break
