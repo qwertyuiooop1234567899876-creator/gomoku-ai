@@ -524,6 +524,16 @@ def apply_probe(
     probe: RootSafetyProbeResult,
 ) -> RootResult:
     """Use only a repeated probe leader; preserve original PVS scores."""
+    revised, _reason = apply_probe_with_reason(config, result, probe)
+    return revised
+
+
+def apply_probe_with_reason(
+    config: SearchConfig,
+    result: RootResult,
+    probe: RootSafetyProbeResult,
+) -> tuple[RootResult, str]:
+    """Apply one probe and expose why it did or did not change the leader."""
     structurally_approved = (
         probe.trigger == "dynamic_remaining_review"
         and probe.selection_basis in {
@@ -541,13 +551,20 @@ def apply_probe(
             < config.root_safety_min_completed_depth
         )
     ):
-        return result
-    if probe.best_move is None or probe.best_move == result.move:
-        return result
+        reason = (
+            "unstable_rank"
+            if not probe.rank_stable
+            else "insufficient_depth"
+        )
+        return result, reason
+    if probe.best_move is None:
+        return result, "no_best_move"
+    if probe.best_move == result.move:
+        return result, "confirmed_current"
 
     root_scores = dict(result.ranked_moves)
     if probe.best_move not in root_scores:
-        return result
+        return result, "missing_root_score"
 
     chosen = probe.best_move
     probe_variations = {
@@ -578,10 +595,13 @@ def apply_probe(
             if item[0] != chosen
         ),
     )
-    return RootResult(
-        move=chosen,
-        score=root_scores[chosen],
-        principal_variation=chosen_pv,
-        ranked_moves=reordered,
-        ranked_variations=reordered_variations,
+    return (
+        RootResult(
+            move=chosen,
+            score=root_scores[chosen],
+            principal_variation=chosen_pv,
+            ranked_moves=reordered,
+            ranked_variations=reordered_variations,
+        ),
+        "applied",
     )

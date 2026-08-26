@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.12 搜索 AI。
+    V0.16.13 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -141,6 +141,10 @@ class SearchAI(ScoringAI):
     V0.16.12 将 frontier_shape 限制为同向同值的选择性边界平局；
     相反饱和分数不再被结构形状当作平局覆盖，复核证据不足时保留
     进入仲裁前的 PVS 选择。
+    V0.16.13 撤销同边界夹值的浅层形状改选，并修复多组动态复核中
+    后续超时抹掉较早完成证据的问题。稳定、非边界且达到最低深度的
+    等窗复核可在 Final Proof 全为 UNKNOWN 时保护当前首选；严格
+    Proof/VCF 仍可覆盖。记录明确区分建议、采用、确认与最终推翻。
     """
 
     def __init__(
@@ -197,6 +201,11 @@ class SearchAI(ScoringAI):
         self._proof_candidates: tuple[ProofCandidateAnalysis, ...] = ()
         self._root_safety_probe: RootSafetyProbeResult | None = None
         self._root_safety_applied = False
+        self._root_review_incoming_move: Move | None = None
+        self._root_review_approved_move: Move | None = None
+        self._root_review_result_changed = False
+        self._root_review_apply_reason: str | None = None
+        self._root_review_confirmed_move: Move | None = None
         self._root_expansion_hold_applied = False
         self._root_vcf_scan: RootVCFScanResult | None = None
         self._root_mate_scores_quarantined = False
@@ -238,6 +247,7 @@ class SearchAI(ScoringAI):
         self._final_proof_rejected: tuple[Move, ...] = ()
         self._final_proof_selected: Move | None = None
         self._final_proof_selection_basis = "not_checked"
+        self._final_proof_overrode_review = False
         self._final_proof_emergency_vcf: (
             FinalProofEmergencyVCFProvenance | None
         ) = None
@@ -429,6 +439,11 @@ class SearchAI(ScoringAI):
         self._proof_candidates = ()
         self._root_safety_probe = None
         self._root_safety_applied = False
+        self._root_review_incoming_move = None
+        self._root_review_approved_move = None
+        self._root_review_result_changed = False
+        self._root_review_apply_reason = None
+        self._root_review_confirmed_move = None
         self._root_expansion_hold_applied = False
         self._root_vcf_scan = None
         self._root_mate_scores_quarantined = False
@@ -461,6 +476,7 @@ class SearchAI(ScoringAI):
         self._final_proof_rejected = ()
         self._final_proof_selected = None
         self._final_proof_selection_basis = "not_checked"
+        self._final_proof_overrode_review = False
         self._final_proof_emergency_vcf = None
         self._final_proof_expected_candidates = 0
         self._phase_timings.clear()
@@ -922,12 +938,9 @@ class SearchAI(ScoringAI):
             )
             if safety_probe is not None:
                 self._root_safety_probe = safety_probe
-                revised = self._apply_root_safety_probe(
+                revised = self._apply_and_record_root_safety(
                     best_result,
                     safety_probe,
-                )
-                self._root_safety_applied = (
-                    revised.move != best_result.move
                 )
                 best_result = revised
 
@@ -952,12 +965,9 @@ class SearchAI(ScoringAI):
         )
         if dynamic_probe is not None:
             self._root_safety_probe = dynamic_probe
-            revised = self._apply_root_safety_probe(
+            revised = self._apply_and_record_root_safety(
                 best_result,
                 dynamic_probe,
-            )
-            self._root_safety_applied = (
-                revised.move != best_result.move
             )
             best_result = revised
             if self._is_unverified_expansion_move(best_result.move):
@@ -978,12 +988,9 @@ class SearchAI(ScoringAI):
             )
             if safety_probe is not None:
                 self._root_safety_probe = safety_probe
-                revised = self._apply_root_safety_probe(
+                revised = self._apply_and_record_root_safety(
                     best_result,
                     safety_probe,
-                )
-                self._root_safety_applied = (
-                    revised.move != best_result.move
                 )
                 best_result = revised
 
@@ -2126,6 +2133,7 @@ class SearchAI(ScoringAI):
         ] = []
         emergency_vcf_selected_before: Move | None = None
         self._final_proof_checked = True
+        review_confirmed = self._root_review_confirmed_move == result.move
         proof_by_move = {
             candidate.move: candidate
             for candidate in self._proof_candidates
@@ -2305,18 +2313,24 @@ class SearchAI(ScoringAI):
             default_unknown = (
                 available_unknown[0] if available_unknown else None
             )
-            selected = root_review.preferred_unknown_move(
-                available_unknown,
-                self._root_pressure_prevention,
-                dict(result.ranked_moves),
-                score_margin=self.config.root_safety_micro_margin,
-            )
-            if selected is not None:
-                selection_basis = (
-                    "checked_unknown_pressure_tiebreak"
-                    if selected != default_unknown
-                    else "checked_unknown"
+            if review_confirmed and result.move in available_unknown:
+                selected = result.move
+            else:
+                selected = root_review.preferred_unknown_move(
+                    available_unknown,
+                    self._root_pressure_prevention,
+                    dict(result.ranked_moves),
+                    score_margin=self.config.root_safety_micro_margin,
                 )
+            if selected is not None:
+                if review_confirmed and selected == result.move:
+                    selection_basis = "checked_unknown_review_confirmed"
+                else:
+                    selection_basis = (
+                        "checked_unknown_pressure_tiebreak"
+                        if selected != default_unknown
+                        else "checked_unknown"
+                    )
             if selected is None:
                 emergencies = [
                     move
@@ -2426,6 +2440,9 @@ class SearchAI(ScoringAI):
         self._final_proof_rejected = tuple(dict.fromkeys(rejected))
         self._final_proof_selected = selected
         self._final_proof_selection_basis = selection_basis
+        self._final_proof_overrode_review = (
+            review_confirmed and selected != result.move
+        )
         emergency_vcf_selected_before = (
             selected
             if emergency_vcf_selected_before is None
@@ -2879,12 +2896,9 @@ class SearchAI(ScoringAI):
             return pvs_result
 
         self._root_safety_probe = safety_probe
-        revised = self._apply_root_safety_probe(
+        revised = self._apply_and_record_root_safety(
             pvs_result,
             safety_probe,
-        )
-        self._root_safety_applied = (
-            revised.move != pvs_result.move
         )
         return revised
 
@@ -3187,15 +3201,16 @@ class SearchAI(ScoringAI):
                 score=root_scores[current],
             )
             entered_moves.update((current, challenger))
-            latest = self._run_dynamic_pair_review(
+            pair_probe = self._run_dynamic_pair_review(
                 board,
                 pair_result,
                 challenger,
                 completed_depth=completed_depth,
                 budget_seconds=pair_budget,
             )
-            if latest is None:
+            if pair_probe is None:
                 continue
+            latest = pair_probe
             self._root_review_trace.append(("primary", latest))
             boundary_reviewed = False
             if self._needs_boundary_tie_escalation(latest):
@@ -3918,6 +3933,41 @@ class SearchAI(ScoringAI):
         probe: RootSafetyProbeResult,
     ) -> RootResult:
         return root_safety.apply_probe(self.config, result, probe)
+
+    def _apply_and_record_root_safety(
+        self,
+        result: RootResult,
+        probe: RootSafetyProbeResult,
+    ) -> RootResult:
+        revised, reason = root_safety.apply_probe_with_reason(
+            self.config,
+            result,
+            probe,
+        )
+        self._root_review_incoming_move = result.move
+        self._root_review_approved_move = probe.best_move
+        self._root_review_result_changed = revised.move != result.move
+        self._root_review_apply_reason = reason
+        self._root_safety_applied = self._root_review_result_changed
+        self._register_root_review_confirmation(revised, probe)
+        return revised
+
+    def _register_root_review_confirmation(
+        self,
+        result: RootResult,
+        probe: RootSafetyProbeResult,
+    ) -> None:
+        """Remember only stable, ordinary-score confirmation of the leader."""
+        if (
+            probe.best_move != result.move
+            or probe.selection_basis != "equal_window"
+            or not probe.rank_stable
+            or probe.completed_depth
+            < self.config.root_safety_min_completed_depth
+            or root_review.has_horizon_boundary(probe.candidates)
+        ):
+            return
+        self._root_review_confirmed_move = result.move
 
     def _run_defense_vct_probe(
         self,

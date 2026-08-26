@@ -66,9 +66,15 @@ class SearchDiagnosticsSource(Protocol):
     _final_proof_selected: Move | None
     _final_proof_rejected: tuple[Move, ...]
     _final_proof_selection_basis: str
+    _final_proof_overrode_review: bool
     _final_proof_emergency_vcf: FinalProofEmergencyVCFProvenance | None
     _root_safety_probe: RootSafetyProbeResult | None
     _root_safety_applied: bool
+    _root_review_incoming_move: Move | None
+    _root_review_approved_move: Move | None
+    _root_review_result_changed: bool
+    _root_review_apply_reason: str | None
+    _root_review_confirmed_move: Move | None
     _root_vcf_scan: RootVCFScanResult | None
     _root_mate_scores_quarantined: bool
     _root_review_finalists: tuple[Move, ...]
@@ -420,6 +426,7 @@ def build_search_analysis(
         final_proof_selected_move=source._final_proof_selected,
         final_proof_rejected_moves=source._final_proof_rejected,
         final_proof_selection_basis=source._final_proof_selection_basis,
+        final_proof_overrode_review=source._final_proof_overrode_review,
         final_proof_emergency_vcf=source._final_proof_emergency_vcf,
         threat_candidate_batches=threat_stats.candidate_batches,
         threat_exact_descriptions=threat_stats.exact_descriptions,
@@ -453,6 +460,11 @@ def build_search_analysis(
         root_safety_candidates=(
             () if safety_probe is None else safety_probe.candidates
         ),
+        root_review_incoming_move=source._root_review_incoming_move,
+        root_review_approved_move=source._root_review_approved_move,
+        root_review_result_changed=source._root_review_result_changed,
+        root_review_apply_reason=source._root_review_apply_reason,
+        root_review_confirmed_move=source._root_review_confirmed_move,
         root_vcf_checked=root_vcf is not None,
         root_vcf_complete=False if root_vcf is None else root_vcf.complete,
         root_vcf_nodes=counters.root_vcf_nodes,

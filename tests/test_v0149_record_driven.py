@@ -145,7 +145,7 @@ class TestV0149RecordDriven(unittest.TestCase):
             config.root_dynamic_review_finalist_limit,
         )
 
-    def test_saturated_unknown_pair_uses_frontier_shape_not_false_stability(self) -> None:
+    def test_mixed_boundary_unknown_pair_can_use_frontier_shape(self) -> None:
         leader = parse_move("J8")
         preferred = parse_move("F12")
         result = RootResult(
@@ -161,10 +161,7 @@ class TestV0149RecordDriven(unittest.TestCase):
             completed_depth=5,
             nodes=100,
             candidates=(
-                RootSafetyCandidateAnalysis(
-                    leader,
-                    -HEURISTIC_SCORE_LIMIT,
-                ),
+                RootSafetyCandidateAnalysis(leader, 90_200),
                 RootSafetyCandidateAnalysis(
                     preferred,
                     -HEURISTIC_SCORE_LIMIT,
@@ -187,6 +184,49 @@ class TestV0149RecordDriven(unittest.TestCase):
 
         self.assertEqual(preferred, move)
         self.assertEqual("frontier_shape", basis)
+
+    def test_same_saturated_boundary_keeps_pvs_fallback(self) -> None:
+        leader = parse_move("K8")
+        structural = parse_move("H9")
+        result = RootResult(
+            leader,
+            -20_900,
+            (leader,),
+            ((leader, -20_900), (structural, -19_900)),
+        )
+        probe = RootSafetyProbeResult(
+            trigger="dynamic_remaining_review",
+            pvs_gap=1_000,
+            main_rank_stable=True,
+            completed_depth=3,
+            nodes=60,
+            candidates=(
+                RootSafetyCandidateAnalysis(
+                    leader,
+                    -HEURISTIC_SCORE_LIMIT,
+                ),
+                RootSafetyCandidateAnalysis(
+                    structural,
+                    -HEURISTIC_SCORE_LIMIT,
+                ),
+            ),
+            leader_history=(leader, leader),
+        )
+
+        move, basis = root_review.approve_move(
+            SearchConfig(),
+            result,
+            probe,
+            {leader: -3_087, structural: -1_641},
+            structure_keys={
+                leader: (1, 0, 1, 0),
+                structural: (2, 0, 1, 0),
+            },
+            unknown_moves={leader, structural},
+        )
+
+        self.assertEqual(leader, move)
+        self.assertEqual("pvs_fallback", basis)
 
     def test_opposite_saturated_bounds_do_not_use_frontier_shape(self) -> None:
         leader = parse_move("F10")
@@ -225,6 +265,40 @@ class TestV0149RecordDriven(unittest.TestCase):
                 leader: (1, 0, 1, 0),
                 structural: (2, 0, 1, 0),
             },
+            unknown_moves={leader, structural},
+        )
+
+        self.assertEqual(leader, move)
+        self.assertEqual("pvs_fallback", basis)
+
+    def test_proof_like_scores_are_not_frontier_shape_boundaries(self) -> None:
+        leader = parse_move("E7")
+        structural = parse_move("F8")
+        result = RootResult(
+            leader,
+            100,
+            (leader,),
+            ((leader, 100), (structural, 100)),
+        )
+        probe = RootSafetyProbeResult(
+            trigger="dynamic_remaining_review",
+            pvs_gap=0,
+            main_rank_stable=True,
+            completed_depth=2,
+            nodes=20,
+            candidates=(
+                RootSafetyCandidateAnalysis(leader, -999_999_996),
+                RootSafetyCandidateAnalysis(structural, -999_999_997),
+            ),
+            leader_history=(leader,),
+        )
+
+        move, basis = root_review.approve_move(
+            SearchConfig(),
+            result,
+            probe,
+            {leader: 0, structural: 100},
+            structure_keys={leader: (0,), structural: (1,)},
             unknown_moves={leader, structural},
         )
 

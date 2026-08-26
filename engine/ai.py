@@ -364,6 +364,7 @@ class DecisionAnalysis:
     final_proof_selected_move: Move | None = None
     final_proof_rejected_moves: tuple[Move, ...] = ()
     final_proof_selection_basis: str = "not_checked"
+    final_proof_overrode_review: bool = False
     final_proof_emergency_vcf: FinalProofEmergencyVCFProvenance | None = None
     threat_candidate_batches: int = 0
     threat_exact_descriptions: int = 0
@@ -385,6 +386,11 @@ class DecisionAnalysis:
     root_safety_candidates: tuple[
         RootSafetyCandidateAnalysis, ...
     ] = ()
+    root_review_incoming_move: Move | None = None
+    root_review_approved_move: Move | None = None
+    root_review_result_changed: bool = False
+    root_review_apply_reason: str | None = None
+    root_review_confirmed_move: Move | None = None
     root_vcf_checked: bool = False
     root_vcf_complete: bool = False
     root_vcf_nodes: int = 0
@@ -542,6 +548,9 @@ class DecisionAnalysis:
             "final_proof_selection_basis": (
                 self.final_proof_selection_basis
             ),
+            "final_proof_overrode_review": (
+                self.final_proof_overrode_review
+            ),
             "final_proof_emergency_vcf": (
                 None
                 if self.final_proof_emergency_vcf is None
@@ -589,6 +598,38 @@ class DecisionAnalysis:
                 candidate.to_dict()
                 for candidate in self.root_safety_candidates
             ],
+            "root_review_incoming_move": (
+                None
+                if self.root_review_incoming_move is None
+                else list(self.root_review_incoming_move)
+            ),
+            "root_review_incoming_coordinate": (
+                None
+                if self.root_review_incoming_move is None
+                else format_move(*self.root_review_incoming_move)
+            ),
+            "root_review_approved_move": (
+                None
+                if self.root_review_approved_move is None
+                else list(self.root_review_approved_move)
+            ),
+            "root_review_approved_coordinate": (
+                None
+                if self.root_review_approved_move is None
+                else format_move(*self.root_review_approved_move)
+            ),
+            "root_review_result_changed": self.root_review_result_changed,
+            "root_review_apply_reason": self.root_review_apply_reason,
+            "root_review_confirmed_move": (
+                None
+                if self.root_review_confirmed_move is None
+                else list(self.root_review_confirmed_move)
+            ),
+            "root_review_confirmed_coordinate": (
+                None
+                if self.root_review_confirmed_move is None
+                else format_move(*self.root_review_confirmed_move)
+            ),
             "root_vcf_checked": self.root_vcf_checked,
             "root_vcf_complete": self.root_vcf_complete,
             "root_vcf_nodes": self.root_vcf_nodes,

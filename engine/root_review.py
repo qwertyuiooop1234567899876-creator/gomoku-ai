@@ -77,17 +77,28 @@ def has_horizon_boundary(
     )
 
 
-def has_shared_horizon_boundary(
+def has_selective_clamp_boundary(
     candidates: Sequence[object],
 ) -> bool:
-    """Return whether every candidate shares one saturated clamp score."""
-    if len(candidates) < 2:
-        return False
+    """Return whether any score is exactly the selective-search clamp."""
+    return any(
+        abs(int(getattr(candidate, "score"))) == HEURISTIC_SCORE_LIMIT
+        for candidate in candidates
+    )
+
+
+def has_opposite_horizon_boundaries(
+    candidates: Sequence[object],
+) -> bool:
+    """Return whether both exact clamp directions occur in one probe."""
     scores = {
         int(getattr(candidate, "score"))
         for candidate in candidates
     }
-    return len(scores) == 1 and abs(next(iter(scores))) >= HEURISTIC_SCORE_LIMIT
+    return {
+        -HEURISTIC_SCORE_LIMIT,
+        HEURISTIC_SCORE_LIMIT,
+    }.issubset(scores)
 
 
 def credible_layer_leader(
@@ -443,8 +454,7 @@ def approve_move(
                 )
             ):
                 return tied_structural, "frontier_balance"
-            if not has_shared_horizon_boundary(probe.candidates):
-                return result.move, "pvs_fallback"
+            return result.move, "pvs_fallback"
     if (
         probe.rank_stable
         and probe.completed_depth >= 4
@@ -474,7 +484,8 @@ def approve_move(
     ):
         return structural, "frontier_balance"
     if (
-        has_shared_horizon_boundary(probe.candidates)
+        has_selective_clamp_boundary(probe.candidates)
+        and not has_opposite_horizon_boundaries(probe.candidates)
         and structure_keys
         and unknown_moves
         and all(move in unknown_moves for move in searched)

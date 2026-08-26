@@ -340,6 +340,8 @@ class GameRecorder:
                             f"{move.analysis.get('final_proof_selected_coordinate', '?')} "
                             f"basis:"
                             f"{move.analysis.get('final_proof_selection_basis', 'not_checked')} "
+                            f"overrode_review:"
+                            f"{move.analysis.get('final_proof_overrode_review', False)} "
                             f"rejected:{rejected_text or '?'}"
                         )
 
@@ -409,6 +411,15 @@ class GameRecorder:
                         f"best:"
                         f"{move.analysis.get('root_safety_best_coordinate', '?')} "
                         f"leaders:{leader_text or '?'}"
+                    )
+                    lines.append(
+                        "     "
+                        "root_review_effect="
+                        f"incoming:{move.analysis.get('root_review_incoming_coordinate', '?')} "
+                        f"approved:{move.analysis.get('root_review_approved_coordinate', '?')} "
+                        f"changed:{move.analysis.get('root_review_result_changed', False)} "
+                        f"reason:{move.analysis.get('root_review_apply_reason', None)} "
+                        f"confirmed:{move.analysis.get('root_review_confirmed_coordinate', '?')}"
                     )
                     for rank, candidate in enumerate(
                         move.analysis.get(
