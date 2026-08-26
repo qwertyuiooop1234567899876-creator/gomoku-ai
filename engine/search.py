@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.11 搜索 AI。
+    V0.16.12 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -138,6 +138,9 @@ class SearchAI(ScoringAI):
     V0.16.11 限制 Final Proof 的 UNKNOWN 压力来源裁决：压力预防着
     只有位于已审计首选的微小 PVS 分数带内才能改选，来源标签不再
     覆盖显著更强的主搜索或根复核结论。
+    V0.16.12 将 frontier_shape 限制为同向同值的选择性边界平局；
+    相反饱和分数不再被结构形状当作平局覆盖，复核证据不足时保留
+    进入仲裁前的 PVS 选择。
     """
 
     def __init__(

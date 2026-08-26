@@ -161,7 +161,10 @@ class TestV0149RecordDriven(unittest.TestCase):
             completed_depth=5,
             nodes=100,
             candidates=(
-                RootSafetyCandidateAnalysis(leader, 90_200),
+                RootSafetyCandidateAnalysis(
+                    leader,
+                    -HEURISTIC_SCORE_LIMIT,
+                ),
                 RootSafetyCandidateAnalysis(
                     preferred,
                     -HEURISTIC_SCORE_LIMIT,
@@ -184,6 +187,49 @@ class TestV0149RecordDriven(unittest.TestCase):
 
         self.assertEqual(preferred, move)
         self.assertEqual("frontier_shape", basis)
+
+    def test_opposite_saturated_bounds_do_not_use_frontier_shape(self) -> None:
+        leader = parse_move("F10")
+        structural = parse_move("H3")
+        result = RootResult(
+            leader,
+            8_600,
+            (leader,),
+            ((leader, 8_600), (structural, 7_800)),
+        )
+        probe = RootSafetyProbeResult(
+            trigger="dynamic_remaining_review",
+            pvs_gap=800,
+            main_rank_stable=True,
+            completed_depth=3,
+            nodes=142,
+            candidates=(
+                RootSafetyCandidateAnalysis(
+                    leader,
+                    HEURISTIC_SCORE_LIMIT,
+                ),
+                RootSafetyCandidateAnalysis(
+                    structural,
+                    -HEURISTIC_SCORE_LIMIT,
+                ),
+            ),
+            leader_history=(leader, leader),
+        )
+
+        move, basis = root_review.approve_move(
+            SearchConfig(),
+            result,
+            probe,
+            {leader: 100, structural: 200},
+            structure_keys={
+                leader: (1, 0, 1, 0),
+                structural: (2, 0, 1, 0),
+            },
+            unknown_moves={leader, structural},
+        )
+
+        self.assertEqual(leader, move)
+        self.assertEqual("pvs_fallback", basis)
 
     def test_stable_positive_boundary_can_select_without_becoming_proof(self) -> None:
         original = parse_move("G7")
