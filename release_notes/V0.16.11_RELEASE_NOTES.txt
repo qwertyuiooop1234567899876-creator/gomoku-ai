@@ -1,0 +1,33 @@
+Gomoku AI V0.16.11 UNKNOWN Arbitration
+======================================
+
+问题来源
+--------
+- Final Proof 会依次审计 PVS 与关键复核候选；当所有已检查候选都只
+  得到 UNKNOWN 时，旧策略无条件优先 pressure_prevention 来源。
+- 来源标签因此能够覆盖显著更强的 PVS/根复核首选。V0.16.10 实战中，
+  自对弈第 41、68、69 手及对 YiXin 第 25 手均经过这条路径改选。
+- UNKNOWN 只表示有界证明没有结论，不能让候选来源升级为安全证据。
+
+仲裁修复
+--------
+- Final Proof 继续优先审计压力预防候选，严格 PROVEN_WIN/PROVEN_LOSS
+  结论及证书拦截、紧急 VCF 门禁保持不变。
+- 当审计结果全为 UNKNOWN 时，以审计队列首选为基准；压力预防着仅在
+  PVS 分差不超过 root_safety_micro_margin 的近分带内允许启发式改选。
+- 明显落后的压力候选不再仅凭来源标签覆盖主搜索或根复核结论。
+- 记录用 checked_unknown_pressure_tiebreak 区分实际发生的近分压力
+  裁决；普通 UNKNOWN 保留继续记录为 checked_unknown。
+
+结构回归
+--------
+- 近分压力候选仍可在全 UNKNOWN 时作为保守裁决，保持旧防守能力。
+- 超出微小分差带的压力候选必须保留审计前首选。
+- 两条路径均保持最终状态为 UNKNOWN，不伪造严格安全结论。
+
+非目标
+------
+- 不断言历史局面的外部引擎推荐着是唯一正确着。
+- 不修改候选成员、PVS/Negamax、评分、Proof/VCF 搜索预算或动态复核
+  finalist 调度；多 finalist 预算公平性留待新记录单独验证。
+- 不恢复、生成或提交 records 中的历史或本机对局文件。

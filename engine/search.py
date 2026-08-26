@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.10 搜索 AI。
+    V0.16.11 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -135,6 +135,9 @@ class SearchAI(ScoringAI):
     V0.16.10 在根集合有空位时保留一个与首选完全同级的宽安静进攻
     枢纽，并让动态复核先执行 leader 与关键 finalist 的实际配对，
     不再由全池结构预评分耗尽唯一复核切片。
+    V0.16.11 限制 Final Proof 的 UNKNOWN 压力来源裁决：压力预防着
+    只有位于已审计首选的微小 PVS 分数带内才能改选，来源标签不再
+    覆盖显著更强的主搜索或根复核结论。
     """
 
     def __init__(
@@ -2293,14 +2296,24 @@ class SearchAI(ScoringAI):
 
         self._final_proof_rejected = tuple(dict.fromkeys(rejected))
         if selected is None:
+            available_unknown = tuple(
+                move for move in unknown if board.is_empty(*move)
+            )
+            default_unknown = (
+                available_unknown[0] if available_unknown else None
+            )
             selected = root_review.preferred_unknown_move(
-                tuple(
-                    move for move in unknown if board.is_empty(*move)
-                ),
+                available_unknown,
                 self._root_pressure_prevention,
+                dict(result.ranked_moves),
+                score_margin=self.config.root_safety_micro_margin,
             )
             if selected is not None:
-                selection_basis = "checked_unknown"
+                selection_basis = (
+                    "checked_unknown_pressure_tiebreak"
+                    if selected != default_unknown
+                    else "checked_unknown"
+                )
             if selected is None:
                 emergencies = [
                     move

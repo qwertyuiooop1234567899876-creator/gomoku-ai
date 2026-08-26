@@ -145,12 +145,31 @@ def lowest_unknown_risk_move(
 def preferred_unknown_move(
     unknown_moves: Sequence[Move],
     pressure_moves: Sequence[Move],
+    root_scores: Mapping[Move, int],
+    *,
+    score_margin: int,
 ) -> Move | None:
-    """Prefer an audited broad-pressure defense without claiming safety."""
+    """Use pressure evidence only inside the audited leader's score band."""
+    if not unknown_moves:
+        return None
+
+    leader = unknown_moves[0]
+    leader_score = root_scores.get(leader)
+    if leader_score is None:
+        return leader
+
     available = set(unknown_moves)
     return next(
-        (move for move in pressure_moves if move in available),
-        unknown_moves[0] if unknown_moves else None,
+        (
+            move
+            for move in pressure_moves
+            if (
+                move in available
+                and root_scores.get(move, -10**18)
+                >= leader_score - score_margin
+            )
+        ),
+        leader,
     )
 
 

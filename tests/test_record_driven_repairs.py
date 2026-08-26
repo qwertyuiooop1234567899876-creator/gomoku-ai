@@ -33,6 +33,35 @@ def build_board(coordinates: list[str]) -> Board:
     return board
 
 
+class UnknownProofSearch:
+    def __init__(self, **_kwargs: object) -> None:
+        pass
+
+    def search_after_move(
+        self,
+        _board: Board,
+        *,
+        move: tuple[int, int],
+        mover: int,
+        attacker: int,
+        side_to_move: int,
+    ) -> ProofResult:
+        return ProofResult(
+            state=ProofState.UNKNOWN,
+            attacker=attacker,
+            side_to_move=side_to_move,
+            best_move=None,
+            principal_variation=(move,),
+            required_defenses=(),
+            nodes=1,
+            transposition_hits=0,
+            searched_attacker_moves=1,
+            completed=False,
+            cutoff_reason="deadline",
+            elapsed_seconds=0.0,
+        )
+
+
 class TestRecordDrivenCandidateCompleteness(unittest.TestCase):
     def test_active_open_three_outside_quick_profile_prefix_is_sourced(
         self,
@@ -87,7 +116,7 @@ class TestRecordDrivenCandidateCompleteness(unittest.TestCase):
             )
         self.assertLessEqual(len(plan.moves), ai.config.root_candidate_limit)
 
-    def test_audited_pressure_unknown_is_conservative_fallback(self) -> None:
+    def test_near_tied_pressure_unknown_is_conservative_fallback(self) -> None:
         leader = parse_move("J9")
         pressure = parse_move("F11")
 
@@ -96,11 +125,32 @@ class TestRecordDrivenCandidateCompleteness(unittest.TestCase):
             root_review.preferred_unknown_move(
                 (leader, pressure),
                 (pressure,),
+                {leader: 1_000, pressure: 900},
+                score_margin=2_000,
             ),
         )
         self.assertEqual(
             leader,
-            root_review.preferred_unknown_move((leader,), (pressure,)),
+            root_review.preferred_unknown_move(
+                (leader,),
+                (pressure,),
+                {leader: 1_000, pressure: 900},
+                score_margin=2_000,
+            ),
+        )
+
+    def test_pressure_unknown_cannot_override_clear_search_gap(self) -> None:
+        leader = parse_move("J9")
+        pressure = parse_move("F11")
+
+        self.assertEqual(
+            leader,
+            root_review.preferred_unknown_move(
+                (leader, pressure),
+                (pressure,),
+                {leader: 12_000, pressure: 9_000},
+                score_margin=2_000,
+            ),
         )
 
     def test_final_audit_keeps_pressure_fallback_unknown(self) -> None:
@@ -127,40 +177,43 @@ class TestRecordDrivenCandidateCompleteness(unittest.TestCase):
             ((leader, 1_000), (pressure, 900)),
         )
 
-        class UnknownProofSearch:
-            def __init__(self, **_kwargs: object) -> None:
-                pass
-
-            def search_after_move(
-                self,
-                _board: Board,
-                *,
-                move: tuple[int, int],
-                mover: int,
-                attacker: int,
-                side_to_move: int,
-            ) -> ProofResult:
-                return ProofResult(
-                    state=ProofState.UNKNOWN,
-                    attacker=attacker,
-                    side_to_move=side_to_move,
-                    best_move=None,
-                    principal_variation=(move,),
-                    required_defenses=(),
-                    nodes=1,
-                    transposition_hits=0,
-                    searched_attacker_moves=1,
-                    completed=False,
-                    cutoff_reason="deadline",
-                    elapsed_seconds=0.0,
-                )
-
         with patch("engine.search.ProofSearch", UnknownProofSearch):
             revised = ai._run_final_proof_audit(board, result)
 
         self.assertEqual(pressure, revised.move)
         self.assertEqual(ProofState.UNKNOWN.value, ai._final_proof_state)
         self.assertFalse(ai._final_proof_completed)
+        self.assertEqual(
+            "checked_unknown_pressure_tiebreak",
+            ai._final_proof_selection_basis,
+        )
+
+    def test_final_audit_keeps_clear_unknown_leader(self) -> None:
+        board = Board()
+        board.place(*parse_move("H8"), BLACK)
+        leader = parse_move("J9")
+        pressure = parse_move("F11")
+        ai = SearchAI(BLACK, time_limit_seconds=60.0)
+        ai.config = replace(ai.config, proof_final_candidate_limit=2)
+        ai._begin_move_search()
+        ai._root_pressure_prevention = (pressure,)
+        result = RootResult(
+            leader,
+            12_000,
+            (leader,),
+            ((leader, 12_000), (pressure, 9_000)),
+        )
+
+        with patch("engine.search.ProofSearch", UnknownProofSearch):
+            revised = ai._run_final_proof_audit(board, result)
+
+        self.assertEqual(leader, revised.move)
+        self.assertEqual(ProofState.UNKNOWN.value, ai._final_proof_state)
+        self.assertFalse(ai._final_proof_completed)
+        self.assertEqual(
+            "checked_unknown",
+            ai._final_proof_selection_basis,
+        )
 
     def test_critical_frontier_challenger_precedes_score_only_challenger(
         self,
