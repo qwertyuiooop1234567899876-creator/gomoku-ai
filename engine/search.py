@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.15 搜索 AI。
+    V0.16.16 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -152,6 +152,9 @@ class SearchAI(ScoringAI):
     V0.16.15 在恰好两个直接必防点时，使用防守探针剩余的一个槽位
     保留冲四反击；候选优先选择同时破坏高优先级对手压力前沿的点。
     三必防、安静活三和多威胁证书拦截保持原有边界。
+    V0.16.16 让边界第二通道把浅层 Mate-like 视为未成熟量纲并继续
+    加深；只有最终恢复普通量纲且 leader 连续稳定时才允许改选。
+    记录保留命中深度、通道尝试和最终量纲恢复状态。
     """
 
     def __init__(
@@ -268,6 +271,11 @@ class SearchAI(ScoringAI):
         self._root_review_trace: list[
             tuple[str, RootSafetyProbeResult]
         ] = []
+        self._root_boundary_secondary_attempted = False
+        self._root_boundary_secondary_mate_like_hit_depths: tuple[
+            int, ...
+        ] = ()
+        self._root_boundary_secondary_final_dimension_recovered = False
         self._root_review_unpaired_finalists: tuple[
             RootReviewUnpairedFinalistAnalysis, ...
         ] = ()
@@ -497,6 +505,9 @@ class SearchAI(ScoringAI):
         self._phase_timings.clear()
         self._root_review_finalists = ()
         self._root_review_trace.clear()
+        self._root_boundary_secondary_attempted = False
+        self._root_boundary_secondary_mate_like_hit_depths = ()
+        self._root_boundary_secondary_final_dimension_recovered = False
         self._root_review_unpaired_finalists = ()
         self._proof_table_start_stats = self._proof_table.stats()
         self._proof_analyzer = self._new_threat_analyzer()
@@ -3578,6 +3589,7 @@ class SearchAI(ScoringAI):
             >= self.config.root_boundary_secondary_min_seconds
             and self._same_saturated_boundary(unresolved)
         ):
+            self._root_boundary_secondary_attempted = True
             secondary = self._run_dynamic_pair_review(
                 board,
                 result,
@@ -3594,6 +3606,12 @@ class SearchAI(ScoringAI):
                 reject_mate_like=True,
             )
             if secondary is not None:
+                self._root_boundary_secondary_mate_like_hit_depths = (
+                    secondary.mate_like_hit_depths
+                )
+                self._root_boundary_secondary_final_dimension_recovered = (
+                    secondary.final_dimension_recovered
+                )
                 self._root_review_trace.append(
                     ("boundary_secondary", secondary)
                 )
@@ -3844,6 +3862,8 @@ class SearchAI(ScoringAI):
         )
         latest: tuple[RootSafetyCandidateAnalysis, ...] = ()
         leader_history: list[Move] = []
+        mate_like_hit_depths: list[int] = []
+        final_contains_mate_like = False
         probe_completed_depth = 0
         original_priority = {
             move: len(candidates) - index
@@ -3890,7 +3910,11 @@ class SearchAI(ScoringAI):
                 for candidate in ranked
             )
             if reject_mate_like and contains_mate_like:
-                break
+                # A strict secondary channel cannot approve this layer, but
+                # its ordering and warmed search state still inform deeper
+                # iterations.  Final approval independently rejects a probe
+                # whose latest layer remains on the horizon boundary.
+                mate_like_hit_depths.append(depth)
             if recalibrate_mate_like and contains_mate_like:
                 if quiet_frontier_extension:
                     ranked = [
@@ -3931,6 +3955,7 @@ class SearchAI(ScoringAI):
                 reverse=True,
             )
             latest = tuple(ranked)
+            final_contains_mate_like = contains_mate_like
             probe_completed_depth = depth
             if credible_score_margin is None:
                 leader_history.append(ranked[0].move)
@@ -3965,6 +3990,11 @@ class SearchAI(ScoringAI):
             candidates=latest,
             leader_history=tuple(leader_history),
             requested_budget_seconds=budget_seconds,
+            mate_like_hit_depths=tuple(mate_like_hit_depths),
+            final_dimension_recovered=(
+                bool(mate_like_hit_depths)
+                and not final_contains_mate_like
+            ),
         )
 
     def _apply_root_safety_probe(

@@ -302,6 +302,10 @@ def build_search_analysis(
                     probe.requested_budget_seconds
                 ),
                 boundary_tie_detected=probe.boundary_tie_detected,
+                mate_like_hit_depths=probe.mate_like_hit_depths,
+                final_dimension_recovered=(
+                    probe.final_dimension_recovered
+                ),
             )
             for channel, probe in source._root_review_trace
         )
@@ -522,6 +526,15 @@ def build_search_analysis(
             0.0
             if safety_probe is None
             else safety_probe.escalation_budget_seconds
+        ),
+        boundary_secondary_attempted=(
+            source._root_boundary_secondary_attempted
+        ),
+        boundary_secondary_mate_like_hit_depths=(
+            source._root_boundary_secondary_mate_like_hit_depths
+        ),
+        boundary_secondary_final_dimension_recovered=(
+            source._root_boundary_secondary_final_dimension_recovered
         ),
         root_review_finalists=review_finalists,
         root_review_pairs=review_pairs,

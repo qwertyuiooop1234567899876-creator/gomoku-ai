@@ -621,6 +621,8 @@ class RootSafetyProbeResult:
     requested_budget_seconds: float = 0.0
     escalation_budget_seconds: float = 0.0
     boundary_tie_detected: bool = False
+    mate_like_hit_depths: tuple[int, ...] = ()
+    final_dimension_recovered: bool = False
 
     @property
     def best_move(self) -> Move | None:

@@ -128,6 +128,8 @@ class RootReviewPairAnalysis:
     selection_basis: str | None = None
     requested_budget_seconds: float = 0.0
     boundary_tie_detected: bool = False
+    mate_like_hit_depths: tuple[int, ...] = ()
+    final_dimension_recovered: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -158,6 +160,8 @@ class RootReviewPairAnalysis:
             "selection_basis": self.selection_basis,
             "requested_budget_seconds": self.requested_budget_seconds,
             "boundary_tie_detected": self.boundary_tie_detected,
+            "mate_like_hit_depths": list(self.mate_like_hit_depths),
+            "final_dimension_recovered": self.final_dimension_recovered,
         }
 
 
@@ -413,6 +417,9 @@ class DecisionAnalysis:
     review_boundary_tie_detected: bool = False
     review_budget_seconds: float = 0.0
     review_escalation_budget_seconds: float = 0.0
+    boundary_secondary_attempted: bool = False
+    boundary_secondary_mate_like_hit_depths: tuple[int, ...] = ()
+    boundary_secondary_final_dimension_recovered: bool = False
     root_review_finalists: tuple[Move, ...] = ()
     root_review_pairs: tuple[RootReviewPairAnalysis, ...] = ()
     root_review_source_coverage: tuple[
@@ -682,6 +689,15 @@ class DecisionAnalysis:
             "review_budget_seconds": self.review_budget_seconds,
             "review_escalation_budget_seconds": (
                 self.review_escalation_budget_seconds
+            ),
+            "boundary_secondary_attempted": (
+                self.boundary_secondary_attempted
+            ),
+            "boundary_secondary_mate_like_hit_depths": list(
+                self.boundary_secondary_mate_like_hit_depths
+            ),
+            "boundary_secondary_final_dimension_recovered": (
+                self.boundary_secondary_final_dimension_recovered
             ),
             "root_review_finalists": [
                 {

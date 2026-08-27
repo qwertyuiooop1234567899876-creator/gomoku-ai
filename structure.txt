@@ -50,7 +50,7 @@ gomoku-ai/
 │   └── main_search.cpp
 ├── release_notes/
 │   ├── README.md
-│   └── V0.12.5–V0.16.15_RELEASE_NOTES.txt
+│   └── V0.12.5–V0.16.16_RELEASE_NOTES.txt
 ├── tests/
 │   ├── positions/
 │   │   ├── regression_v080.json
