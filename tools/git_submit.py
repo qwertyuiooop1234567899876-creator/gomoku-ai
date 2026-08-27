@@ -113,6 +113,12 @@ class GitSubmitApp(tk.Tk):
             command=self.submit,
         )
         self.submit_button.pack(side=tk.RIGHT)
+        self.push_button = ttk.Button(
+            buttons,
+            text="仅重试推送",
+            command=self.retry_push,
+        )
+        self.push_button.pack(side=tk.RIGHT, padx=6)
 
         ttk.Label(frame, text="提交说明：").pack(anchor=tk.W)
         self.message = ttk.Entry(frame)
@@ -133,6 +139,7 @@ class GitSubmitApp(tk.Tk):
         state = tk.DISABLED if busy else tk.NORMAL
         self.refresh_button.configure(state=state)
         self.submit_button.configure(state=state)
+        self.push_button.configure(state=state)
 
     def refresh(self) -> None:
         result = run_git("-c", "core.quotepath=false", "status", "--short")
@@ -214,6 +221,39 @@ class GitSubmitApp(tk.Tk):
                 self.after(0, self._submit_finished, False)
                 return
         self.after(0, self._submit_finished, True)
+
+    def retry_push(self) -> None:
+        branch = run_git("branch", "--show-current").stdout.strip()
+        if not branch:
+            messagebox.showerror("无法推送", "当前不在可推送的本地分支上。")
+            return
+        if not messagebox.askyesno(
+            "确认推送",
+            f"重试把当前分支 {branch} 的已有提交推送到 GitHub？",
+        ):
+            return
+        self._set_busy(True)
+        threading.Thread(
+            target=self._push_worker,
+            args=(branch,),
+            daemon=True,
+        ).start()
+
+    def _push_worker(self, branch: str) -> None:
+        result = run_git("push", "origin", branch)
+        text = result.stdout.strip() or result.stderr.strip() or "完成。"
+        self.after(0, self._append, f"推送到 GitHub：\n{text}")
+        self.after(0, self._push_finished, result.returncode == 0)
+
+    def _push_finished(self, success: bool) -> None:
+        self._set_busy(False)
+        if success:
+            self._append("已有提交推送成功。")
+            messagebox.showinfo("完成", "已有提交推送成功。")
+        else:
+            self._append("推送未完成；请查看上方 Git 返回信息。")
+            messagebox.showerror("未完成", "推送失败，详情见执行反馈。")
+        self.refresh()
 
     def _submit_finished(self, success: bool) -> None:
         self._set_busy(False)

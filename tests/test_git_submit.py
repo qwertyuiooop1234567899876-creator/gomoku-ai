@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import Mock, patch
 
-from tools.git_submit import exclusion_reason, parse_changes
+from tools.git_submit import GitSubmitApp, exclusion_reason, parse_changes
 
 
 class TestGitSubmitHelpers(unittest.TestCase):
@@ -21,6 +22,16 @@ class TestGitSubmitHelpers(unittest.TestCase):
         self.assertIsNotNone(exclusion_reason("engine/__pycache__/search.pyc"))
         self.assertIsNone(exclusion_reason("engine/search.py"))
         self.assertIsNone(exclusion_reason("structure.txt"))
+
+    def test_retry_push_sends_existing_branch_with_feedback(self) -> None:
+        app = Mock()
+        result = Mock(returncode=0, stdout="pushed", stderr="")
+
+        with patch("tools.git_submit.run_git", return_value=result) as run:
+            GitSubmitApp._push_worker(app, "main")
+
+        run.assert_called_once_with("push", "origin", "main")
+        self.assertEqual(2, app.after.call_count)
 
 
 if __name__ == "__main__":
