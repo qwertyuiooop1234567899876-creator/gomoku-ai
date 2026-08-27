@@ -1,0 +1,45 @@
+Gomoku AI V0.16.14 Root-Review Evidence Precedence
+==================================================
+
+问题来源
+--------
+- V0.16.13 已能记住稳定、非边界等窗复核确认的首选，并在 Final
+  Proof 全为 UNKNOWN 时保护它，但保护只发生在最终审计阶段。
+- 同一回合稍后的动态根复核仍可通过 structurally_approved 绕过
+  排名稳定性门槛。自对弈第 16 手中，G10 已被等窗复核确认，随后
+  rank_stable=False 的 frontier_balance 却将它改成 K6。
+- 结构启发式因此能够覆盖更早、更强的搜索证据，违反证据层级单调性。
+
+证据优先级修复
+--------------
+- 已确认首选仍是当前 leader 时，后续不稳定的 frontier_balance 或
+  frontier_shape 只能保留为建议，不得实际覆盖该确认；稳定但更浅的
+  结构复核同样不得降级已有证据。
+- 同深或更深且排名稳定的结构复核仍可改选，避免把该保护变成永久锁定。
+- 没有先前确认时，原有结构裁决保持不变，避免全局禁用既有机制。
+- mandatory_boundary_escape 不与纯结构依据一刀切：当其完成深度不低于
+  原确认时，唯一脱离选择性边界的候选仍可改选；更浅时明确拒绝。
+- 合法改选会清除已被覆盖的旧确认，防止过期确认继续影响 Final Proof。
+- 严格 Proof/VCF 仍保持最高优先级，UNKNOWN 语义不变。
+
+诊断补全
+--------
+- 记录当前有效确认的完成深度、selection basis、排名稳定性与是否碰到
+  选择性边界。
+- unstable_structure_after_confirmation 与 shallower_than_confirmed_review
+  分别标记因结构排名不稳定、或复核深度较浅而未采用后续建议。
+
+结构回归
+--------
+- 已确认 leader 不得被后续不稳定的 frontier_balance/frontier_shape
+  覆盖。
+- 同深且稳定的结构复核仍可覆盖确认，防止保护范围过宽。
+- 没有确认时，frontier_balance 仍可按原规则改选。
+- 深度足够的 mandatory_boundary_escape 可以覆盖确认；较浅时不可以。
+- 严格 Proof 仍可淘汰已确认但被证明不安全的候选。
+
+非目标
+------
+- 不修改边界阈值、搜索深度、候选成员或候选上限。
+- 不修改 PVS/Negamax、评价参数、VCF/VCT 或 Proof 搜索语义与预算。
+- 不恢复、生成或提交 records 中的历史或本机对局文件。

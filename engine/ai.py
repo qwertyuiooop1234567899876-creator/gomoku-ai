@@ -391,6 +391,10 @@ class DecisionAnalysis:
     root_review_result_changed: bool = False
     root_review_apply_reason: str | None = None
     root_review_confirmed_move: Move | None = None
+    root_review_confirmed_depth: int = 0
+    root_review_confirmed_basis: str | None = None
+    root_review_confirmed_rank_stable: bool = False
+    root_review_confirmed_boundary: bool = False
     root_vcf_checked: bool = False
     root_vcf_complete: bool = False
     root_vcf_nodes: int = 0
@@ -629,6 +633,18 @@ class DecisionAnalysis:
                 None
                 if self.root_review_confirmed_move is None
                 else format_move(*self.root_review_confirmed_move)
+            ),
+            "root_review_confirmed_depth": (
+                self.root_review_confirmed_depth
+            ),
+            "root_review_confirmed_basis": (
+                self.root_review_confirmed_basis
+            ),
+            "root_review_confirmed_rank_stable": (
+                self.root_review_confirmed_rank_stable
+            ),
+            "root_review_confirmed_boundary": (
+                self.root_review_confirmed_boundary
             ),
             "root_vcf_checked": self.root_vcf_checked,
             "root_vcf_complete": self.root_vcf_complete,

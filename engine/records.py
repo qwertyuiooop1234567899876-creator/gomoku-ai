@@ -419,7 +419,11 @@ class GameRecorder:
                         f"approved:{move.analysis.get('root_review_approved_coordinate', '?')} "
                         f"changed:{move.analysis.get('root_review_result_changed', False)} "
                         f"reason:{move.analysis.get('root_review_apply_reason', None)} "
-                        f"confirmed:{move.analysis.get('root_review_confirmed_coordinate', '?')}"
+                        f"confirmed:{move.analysis.get('root_review_confirmed_coordinate', '?')} "
+                        f"confirmed_depth:{move.analysis.get('root_review_confirmed_depth', 0)} "
+                        f"confirmed_basis:{move.analysis.get('root_review_confirmed_basis', None)} "
+                        f"confirmed_stable:{move.analysis.get('root_review_confirmed_rank_stable', False)} "
+                        f"confirmed_boundary:{move.analysis.get('root_review_confirmed_boundary', False)}"
                     )
                     for rank, candidate in enumerate(
                         move.analysis.get(

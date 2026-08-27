@@ -75,6 +75,10 @@ class SearchDiagnosticsSource(Protocol):
     _root_review_result_changed: bool
     _root_review_apply_reason: str | None
     _root_review_confirmed_move: Move | None
+    _root_review_confirmed_depth: int
+    _root_review_confirmed_basis: str | None
+    _root_review_confirmed_rank_stable: bool
+    _root_review_confirmed_boundary: bool
     _root_vcf_scan: RootVCFScanResult | None
     _root_mate_scores_quarantined: bool
     _root_review_finalists: tuple[Move, ...]
@@ -465,6 +469,14 @@ def build_search_analysis(
         root_review_result_changed=source._root_review_result_changed,
         root_review_apply_reason=source._root_review_apply_reason,
         root_review_confirmed_move=source._root_review_confirmed_move,
+        root_review_confirmed_depth=source._root_review_confirmed_depth,
+        root_review_confirmed_basis=source._root_review_confirmed_basis,
+        root_review_confirmed_rank_stable=(
+            source._root_review_confirmed_rank_stable
+        ),
+        root_review_confirmed_boundary=(
+            source._root_review_confirmed_boundary
+        ),
         root_vcf_checked=root_vcf is not None,
         root_vcf_complete=False if root_vcf is None else root_vcf.complete,
         root_vcf_nodes=counters.root_vcf_nodes,

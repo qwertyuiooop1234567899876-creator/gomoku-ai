@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.13 搜索 AI。
+    V0.16.14 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -145,6 +145,10 @@ class SearchAI(ScoringAI):
     后续超时抹掉较早完成证据的问题。稳定、非边界且达到最低深度的
     等窗复核可在 Final Proof 全为 UNKNOWN 时保护当前首选；严格
     Proof/VCF 仍可覆盖。记录明确区分建议、采用、确认与最终推翻。
+    V0.16.14 将等窗确认的保护提前到同一回合的后续根复核阶段：
+    frontier_balance/frontier_shape 不再以结构启发式覆盖已确认首选。
+    唯一边界逃生在深度不低于原确认时仍可改选，严格 Proof/VCF 的
+    优先级不变；确认深度、依据、稳定性和边界状态进入诊断记录。
     """
 
     def __init__(
@@ -206,6 +210,10 @@ class SearchAI(ScoringAI):
         self._root_review_result_changed = False
         self._root_review_apply_reason: str | None = None
         self._root_review_confirmed_move: Move | None = None
+        self._root_review_confirmed_depth = 0
+        self._root_review_confirmed_basis: str | None = None
+        self._root_review_confirmed_rank_stable = False
+        self._root_review_confirmed_boundary = False
         self._root_expansion_hold_applied = False
         self._root_vcf_scan: RootVCFScanResult | None = None
         self._root_mate_scores_quarantined = False
@@ -444,6 +452,10 @@ class SearchAI(ScoringAI):
         self._root_review_result_changed = False
         self._root_review_apply_reason = None
         self._root_review_confirmed_move = None
+        self._root_review_confirmed_depth = 0
+        self._root_review_confirmed_basis = None
+        self._root_review_confirmed_rank_stable = False
+        self._root_review_confirmed_boundary = False
         self._root_expansion_hold_applied = False
         self._root_vcf_scan = None
         self._root_mate_scores_quarantined = False
@@ -3939,18 +3951,71 @@ class SearchAI(ScoringAI):
         result: RootResult,
         probe: RootSafetyProbeResult,
     ) -> RootResult:
-        revised, reason = root_safety.apply_probe_with_reason(
-            self.config,
+        blocked_reason = self._root_review_override_block_reason(
             result,
             probe,
         )
+        if blocked_reason is None:
+            revised, reason = root_safety.apply_probe_with_reason(
+                self.config,
+                result,
+                probe,
+            )
+        else:
+            revised, reason = result, blocked_reason
         self._root_review_incoming_move = result.move
         self._root_review_approved_move = probe.best_move
         self._root_review_result_changed = revised.move != result.move
         self._root_review_apply_reason = reason
         self._root_safety_applied = self._root_review_result_changed
+        if (
+            self._root_review_result_changed
+            and self._root_review_confirmed_move == result.move
+        ):
+            self._clear_root_review_confirmation()
         self._register_root_review_confirmation(revised, probe)
         return revised
+
+    def _root_review_override_block_reason(
+        self,
+        result: RootResult,
+        probe: RootSafetyProbeResult,
+    ) -> str | None:
+        if (
+            self._root_review_confirmed_move != result.move
+            or probe.best_move is None
+            or probe.best_move == result.move
+        ):
+            return None
+        if (
+            probe.selection_basis in {
+                "frontier_balance",
+                "frontier_shape",
+            }
+            and not probe.rank_stable
+        ):
+            return "unstable_structure_after_confirmation"
+        if (
+            probe.selection_basis in {
+            "frontier_balance",
+            "frontier_shape",
+            }
+            and probe.completed_depth < self._root_review_confirmed_depth
+        ):
+            return "shallower_than_confirmed_review"
+        if (
+            probe.selection_basis == "mandatory_boundary_escape"
+            and probe.completed_depth < self._root_review_confirmed_depth
+        ):
+            return "shallower_than_confirmed_review"
+        return None
+
+    def _clear_root_review_confirmation(self) -> None:
+        self._root_review_confirmed_move = None
+        self._root_review_confirmed_depth = 0
+        self._root_review_confirmed_basis = None
+        self._root_review_confirmed_rank_stable = False
+        self._root_review_confirmed_boundary = False
 
     def _register_root_review_confirmation(
         self,
@@ -3968,6 +4033,12 @@ class SearchAI(ScoringAI):
         ):
             return
         self._root_review_confirmed_move = result.move
+        self._root_review_confirmed_depth = probe.completed_depth
+        self._root_review_confirmed_basis = probe.selection_basis
+        self._root_review_confirmed_rank_stable = probe.rank_stable
+        self._root_review_confirmed_boundary = (
+            root_review.has_horizon_boundary(probe.candidates)
+        )
 
     def _run_defense_vct_probe(
         self,
