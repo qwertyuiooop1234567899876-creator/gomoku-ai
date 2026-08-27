@@ -1,0 +1,97 @@
+项目结构（核心文件）
+====================
+
+gomoku-ai/
+├── .agents/
+│   └── skills/
+│       ├── gomoku-ai-debug/
+│       │   ├── SKILL.md
+│       │   └── agents/openai.yaml
+│       └── karpathy-guidelines/SKILL.md
+├── app/
+│   ├── __init__.py
+│   ├── arena.py
+│   ├── cli.py
+│   ├── desktop_ui.py
+│   ├── ui_common.py
+│   └── web_ui.py
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── NATIVE_MAIN_SEARCH_ABI.md
+│   └── NATIVE_SEARCH_BASELINE.md
+├── engine/
+│   ├── __init__.py
+│   ├── ai.py
+│   ├── arena_settings.py
+│   ├── board.py
+│   ├── evaluator.py
+│   ├── game.py
+│   ├── native_core.py
+│   ├── proof_search.py
+│   ├── records.py
+│   ├── root_candidates.py
+│   ├── root_policy.py
+│   ├── root_review.py
+│   ├── root_safety.py
+│   ├── search.py
+│   ├── search_diagnostics.py
+│   ├── search_types.py
+│   ├── settings.py
+│   ├── threats.py
+│   ├── time_manager.py
+│   ├── vcf.py
+│   ├── version.py
+│   ├── yixin.py
+│   └── zobrist.py
+├── native/
+│   ├── CMakeLists.txt
+│   ├── gomoku_native.cpp
+│   ├── gomoku_native.h
+│   └── main_search.cpp
+├── release_notes/
+│   ├── README.md
+│   └── V0.12.5–V0.16.15_RELEASE_NOTES.txt
+├── tests/
+│   ├── positions/
+│   │   ├── regression_v080.json
+│   │   ├── v0149_record_20260803.json
+│   │   ├── v0150_record_20260808.json
+│   │   ├── v0151_record_20260809.json
+│   │   └── v0168_yixin_move13.json
+│   └── test_*.py
+├── tools/
+│   ├── __init__.py
+│   ├── build_native.py
+│   ├── cvc_analysis.py
+│   ├── cvc_workflow.py
+│   ├── git_submit.py
+│   ├── manual_scenarios.py
+│   ├── native_benchmark.py
+│   ├── native_search_baseline.py
+│   ├── search_benchmark.py
+│   ├── telegram_notify.py
+│   └── yixin_smoke_test.py
+├── ui/
+│   └── gomoku.html
+├── yixin/
+│   └── engine.exe
+├── .gitignore
+├── README.md
+├── introduction.md
+├── arena_settings.json
+├── yixin_settings.json
+├── build_native.bat
+├── run_arena.bat
+├── run_cvc_analysis.bat
+├── run_cvc_workflow.bat
+├── run_game.bat
+├── run_game_web.bat
+├── run_git_submit.bat
+├── run_search_benchmark.bat
+├── run_yixin_smoke_test.bat
+└── structure.txt
+
+说明：
+- 已隐去 .git、.venv、__pycache__、native/bin 、tools/_local 和其他缓存/编译产物。
+- records/ 仅作为对局数据目录省略，未展开其中的历史记录。
+- test_*.py 代表 tests/ 中的完整测试集，未在树中重复罗列。

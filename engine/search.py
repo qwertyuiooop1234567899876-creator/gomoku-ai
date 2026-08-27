@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.14 搜索 AI。
+    V0.16.15 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -149,6 +149,9 @@ class SearchAI(ScoringAI):
     frontier_balance/frontier_shape 不再以结构启发式覆盖已确认首选。
     唯一边界逃生在深度不低于原确认时仍可改选，严格 Proof/VCF 的
     优先级不变；确认深度、依据、稳定性和边界状态进入诊断记录。
+    V0.16.15 在恰好两个直接必防点时，使用防守探针剩余的一个槽位
+    保留冲四反击；候选优先选择同时破坏高优先级对手压力前沿的点。
+    三必防、安静活三和多威胁证书拦截保持原有边界。
     """
 
     def __init__(
@@ -1102,6 +1105,7 @@ class SearchAI(ScoringAI):
         )
         frontier_truth_moves = list(opponent_frontier_moves)
         opponent_pressure_frontiers = ()
+        pressure_priority: dict[Move, int] = {}
         if (
             opponent_frontier_moves
             and self.config.max_depth
@@ -1211,20 +1215,33 @@ class SearchAI(ScoringAI):
             is root_candidates.RootCandidateMode.MANDATORY_DEFENSE
         ):
             allow_near_loss_expansion = False
-            # A root collapsed to one direct block is especially vulnerable
-            # to hiding a tempo defense.  Multiple direct defenses already
-            # receive their dedicated bounded VCT comparison; widening those
-            # roots as well would dilute that budget with unrelated fours.
+            # A singleton direct block keeps all bounded counterplay.  With
+            # exactly two blocks, reserve the remaining probe slot for one
+            # four-making reply that also disrupts the strongest known
+            # opponent pressure frontier.  Wider roots remain unchanged.
+            direct_defense_count = len(opponent_forcing_moves)
+            multi_forcing_counterattack_limit = (
+                1
+                if direct_defense_count == 2
+                and self.config.defense_vct_max_candidates >= 3
+                else 0
+            )
             mandatory_own_profiles = (
                 full_own_profiles
-                if len(opponent_forcing_moves) == 1
+                if direct_defense_count == 1
+                else {}
+            )
+            forcing_counterattack_profiles = (
+                full_own_profiles
+                if direct_defense_count == 1
+                or multi_forcing_counterattack_limit > 0
                 else {}
             )
             forcing_counterattacks = (
                 self._order_specific_moves(
                     board,
                     root_candidates.forcing_counterattack_moves(
-                        mandatory_own_profiles
+                        forcing_counterattack_profiles
                     ),
                     self.player,
                     ply=0,
@@ -1235,6 +1252,17 @@ class SearchAI(ScoringAI):
                 >= self.config.root_forcing_counterattack_min_depth
                 else []
             )
+            if direct_defense_count != 1:
+                pressure_fallback = len(pressure_priority)
+                forcing_counterattacks.sort(
+                    key=lambda move: pressure_priority.get(
+                        move,
+                        pressure_fallback,
+                    )
+                )
+                forcing_counterattacks = forcing_counterattacks[
+                    :multi_forcing_counterattack_limit
+                ]
             counterattack_truth_moves = self._order_specific_moves(
                 board,
                 root_candidates.active_counterattack_moves(
