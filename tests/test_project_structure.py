@@ -28,6 +28,7 @@ class TestPackageEntrypoints(unittest.TestCase):
             "tools.manual_scenarios",
             "tools.native_benchmark",
             "tools.native_search_baseline",
+            "tools.git_submit",
             "tools.search_benchmark",
             "tools.yixin_smoke_test",
         )
@@ -48,6 +49,7 @@ class TestPackageEntrypoints(unittest.TestCase):
             "run_search_benchmark.bat": (
                 "-m tools.search_benchmark",
             ),
+            "run_git_submit.bat": ("-m tools.git_submit",),
             "build_native.bat": ("-m tools.build_native",),
             "run_yixin_smoke_test.bat": (
                 "-m tools.yixin_smoke_test",
