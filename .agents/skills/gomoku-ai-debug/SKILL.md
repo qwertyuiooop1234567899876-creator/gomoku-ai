@@ -199,3 +199,20 @@ Report:
 
 Never declare the engine issue resolved solely because one historical coordinate now
 wins or because unit tests pass.
+
+## Cite Program Lines in Technical Responses
+
+- Whenever a response explains concrete implementation behavior, control flow,
+  conditions, configuration defaults, diagnostics, serialization, or a suspected
+  bug path, cite the supporting program file and current line number in the same
+  paragraph, preferably as a clickable `path/to/file.py:line` link.
+- Re-check line numbers against the current working tree immediately before
+  responding. Never reuse a stale line number from an earlier version or guess a
+  location from memory.
+- If one conclusion depends on multiple stages, cite each decisive function or
+  condition rather than attaching one broad file reference to the whole claim.
+- Record-only observations should cite the record and move number; any conclusion
+  about the engine mechanism behind that observation must also cite the relevant
+  program line.
+- For a proposed change that does not exist yet, label it as a proposal and cite
+  the current function or decision point where the change would be made.
