@@ -536,6 +536,8 @@ class GameRecorder:
                         f"ordering=killer:{move.analysis.get('killer_hits', 0):,} "
                         f"history:{move.analysis.get('history_hits', 0):,} "
                         f"extensions:{move.analysis.get('extensions', 0):,} "
+                        f"non_vcf_ext:"
+                        f"{move.analysis.get('selective_non_vcf_extensions', 0):,} "
                         f"pvs_research:{move.analysis.get('pvs_researches', 0):,} "
                         f"aspiration_research:"
                         f"{move.analysis.get('aspiration_researches', 0):,}"

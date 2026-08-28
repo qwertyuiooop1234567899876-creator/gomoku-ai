@@ -66,7 +66,7 @@ from engine.search_types import (
 
 class SearchAI(ScoringAI):
     """
-    V0.16.16 搜索 AI。
+    V0.16.17 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -155,6 +155,10 @@ class SearchAI(ScoringAI):
     V0.16.16 让边界第二通道把浅层 Mate-like 视为未成熟量纲并继续
     加深；只有最终恢复普通量纲且 leader 连续稳定时才允许改选。
     记录保留命中深度、通道尝试和最终量纲恢复状态。
+    V0.16.17 在边界第二通道中把活三、双三和安静前沿视为选择性
+    而非证明性延伸：落下一步后只比较有界续攻封堵并回到静态尺度。
+    主 PVS 语义保持不变；frontier_shape 也必须达到稳定性与最低
+    完成深度门槛。
     """
 
     def __init__(
@@ -242,6 +246,7 @@ class SearchAI(ScoringAI):
         self._root_frontier_shape: dict[Move, tuple[int, int, int, int]] = {}
         self._defense_risk_override_applied = False
         self._quiet_frontier_extension_enabled = False
+        self._selective_extension_defense_enabled = False
         self._root_heuristic_score_cache: dict[
             tuple[int, Move],
             int,
@@ -486,6 +491,7 @@ class SearchAI(ScoringAI):
         self._root_frontier_shape.clear()
         self._defense_risk_override_applied = False
         self._quiet_frontier_extension_enabled = False
+        self._selective_extension_defense_enabled = False
         self._root_heuristic_score_cache.clear()
         self._quick_order_cache.clear()
         self._search_phase_deadline = None
@@ -3843,6 +3849,11 @@ class SearchAI(ScoringAI):
         probe._quiet_frontier_extension_enabled = (
             quiet_frontier_extension
         )
+        # The strict boundary-secondary channel must not let an incomplete
+        # open-three/double-three tree manufacture a Mate-like verdict.  Keep
+        # the normal PVS semantics unchanged; this bounded reply model is an
+        # arbitration safeguard, not a replacement search tree.
+        probe._selective_extension_defense_enabled = reject_mate_like
 
         target_depth = (
             min(self.config.max_depth, target_depth_override)
@@ -4743,9 +4754,9 @@ class SearchAI(ScoringAI):
             ), ()
 
         if len(opponent_wins) == 1:
-            forcing_moves = opponent_wins
+            forcing_options = [(opponent_wins[0], True)]
         else:
-            forcing_moves = self._forcing_attack_candidates(
+            forcing_options = self._forcing_attack_options(
                 board,
                 player,
                 vcf_only=False,
@@ -4753,15 +4764,18 @@ class SearchAI(ScoringAI):
             )
 
         if (
-            not forcing_moves
+            not forcing_options
             and self._quiet_frontier_extension_enabled
         ):
-            forcing_moves = self._quiet_frontier_extension_moves(
-                board,
-                player,
-            )
+            forcing_options = [
+                (move, False)
+                for move in self._quiet_frontier_extension_moves(
+                    board,
+                    player,
+                )
+            ]
 
-        if not forcing_moves:
+        if not forcing_options:
             return self._static_score(
                 board,
                 perspective=player,
@@ -4772,13 +4786,25 @@ class SearchAI(ScoringAI):
         best_score = -INFINITY
         best_pv: tuple[Move, ...] = ()
 
-        for move in forcing_moves:
+        for move, strict_vcf in forcing_options:
             self._check_timeout()
+            if not strict_vcf:
+                self._counters.selective_non_vcf_extensions += 1
             board.place(move[0], move[1], player)
             try:
-                if board.check_win(move[0], move[1]):
+                if (
+                    not strict_vcf
+                    and self._selective_extension_defense_enabled
+                ):
+                    score, reply = self._selective_extension_reply_score(
+                        board,
+                        attacker=player,
+                        defender=opponent,
+                    )
+                    child_pv = () if reply is None else (reply,)
+                elif board.check_win(move[0], move[1]):
                     score = MATE_SCORE - ply
-                    child_pv: tuple[Move, ...] = ()
+                    child_pv = ()
                 else:
                     child_score, child_pv = self._threat_extension(
                         board,
@@ -4802,6 +4828,57 @@ class SearchAI(ScoringAI):
                 break
 
         return best_score, best_pv
+
+    def _selective_extension_reply_score(
+        self,
+        board: Board,
+        *,
+        attacker: int,
+        defender: int,
+    ) -> tuple[int, Move | None]:
+        """Evaluate one selective gain after bounded continuation blocks.
+
+        A defender counter-four cannot be scored directly at this horizon:
+        its compulsory reply has not been searched yet, so the static pattern
+        score would exaggerate it by roughly a full four-threat band.  The
+        strict secondary channel therefore compares only direct occupation of
+        the attacker's immediate strict continuation points, then stops.
+        """
+        continuation_blocks = [
+            move
+            for move, _strict_vcf in self._forcing_attack_options(
+                board,
+                attacker,
+                vcf_only=True,
+                limit=4,
+            )
+        ]
+        replies = list(dict.fromkeys(continuation_blocks))
+        if not replies:
+            return self._static_score(
+                board,
+                perspective=attacker,
+                side_to_move=defender,
+            ), None
+
+        worst_score = INFINITY
+        worst_reply: Move | None = None
+        for reply in replies:
+            self._check_timeout()
+            board.place(*reply, defender)
+            try:
+                score = self._static_score(
+                    board,
+                    perspective=attacker,
+                    side_to_move=attacker,
+                )
+            finally:
+                board.undo()
+            if score < worst_score:
+                worst_score = score
+                worst_reply = reply
+
+        return worst_score, worst_reply
 
     def _quiet_frontier_extension_moves(
         self,
@@ -4861,6 +4938,26 @@ class SearchAI(ScoringAI):
         limit: int,
         vcf_mode: bool = False,
     ) -> list[Move]:
+        return [
+            move
+            for move, _strict_vcf in self._forcing_attack_options(
+                board,
+                player,
+                vcf_only=vcf_only,
+                limit=limit,
+                vcf_mode=vcf_mode,
+            )
+        ]
+
+    def _forcing_attack_options(
+        self,
+        board: Board,
+        player: int,
+        *,
+        vcf_only: bool,
+        limit: int,
+        vcf_mode: bool = False,
+    ) -> list[tuple[Move, bool]]:
         legal_moves = board.get_legal_moves()
         raw = self._raw_candidates(
             board,
@@ -4884,7 +4981,7 @@ class SearchAI(ScoringAI):
         )
         self._check_timeout()
 
-        forcing: list[tuple[Move, ThreatProfile, int]] = []
+        forcing: list[tuple[Move, ThreatProfile, int, bool]] = []
         for move in shortlist:
             if vcf_mode:
                 self._check_vcf_timeout()
@@ -4909,6 +5006,7 @@ class SearchAI(ScoringAI):
                         move,
                         profile,
                         self._quick_order_score(board, move, player),
+                        is_vcf,
                     )
                 )
 
@@ -4920,7 +5018,10 @@ class SearchAI(ScoringAI):
             ),
             reverse=True,
         )
-        return [move for move, _, _ in forcing[:limit]]
+        return [
+            (move, is_vcf)
+            for move, _profile, _score, is_vcf in forcing[:limit]
+        ]
 
     def _multi_threat_frontiers(
         self,

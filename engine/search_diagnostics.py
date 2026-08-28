@@ -373,6 +373,9 @@ def build_search_analysis(
         killer_hits=counters.killer_hits,
         history_hits=counters.history_hits,
         extensions=counters.extensions,
+        selective_non_vcf_extensions=(
+            counters.selective_non_vcf_extensions
+        ),
         pvs_researches=counters.pvs_researches,
         aspiration_researches=counters.aspiration_researches,
         vcf_found=vcf_found,

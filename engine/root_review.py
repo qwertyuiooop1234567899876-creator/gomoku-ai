@@ -484,7 +484,10 @@ def approve_move(
     ):
         return structural, "frontier_balance"
     if (
-        has_selective_clamp_boundary(probe.candidates)
+        probe.rank_stable
+        and probe.completed_depth
+        >= config.root_dynamic_review_min_completed_depth
+        and has_selective_clamp_boundary(probe.candidates)
         and not has_opposite_horizon_boundaries(probe.candidates)
         and structure_keys
         and unknown_moves

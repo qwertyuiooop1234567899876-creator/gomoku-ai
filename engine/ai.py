@@ -325,6 +325,7 @@ class DecisionAnalysis:
     killer_hits: int = 0
     history_hits: int = 0
     extensions: int = 0
+    selective_non_vcf_extensions: int = 0
     pvs_researches: int = 0
     aspiration_researches: int = 0
     vcf_found: bool = False
@@ -461,6 +462,9 @@ class DecisionAnalysis:
             "killer_hits": self.killer_hits,
             "history_hits": self.history_hits,
             "extensions": self.extensions,
+            "selective_non_vcf_extensions": (
+                self.selective_non_vcf_extensions
+            ),
             "pvs_researches": self.pvs_researches,
             "aspiration_researches": self.aspiration_researches,
             "vcf_found": self.vcf_found,
