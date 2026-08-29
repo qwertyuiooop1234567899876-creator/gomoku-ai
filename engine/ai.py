@@ -166,6 +166,34 @@ class RootReviewPairAnalysis:
 
 
 @dataclass(frozen=True, slots=True)
+class RootReviewPairAttemptAnalysis:
+    """Compact audit for every attempted root-review pair search."""
+
+    channel: str
+    leader: Move
+    challenger: Move
+    requested_budget_seconds: float
+    elapsed_seconds: float
+    status: str
+    completed_depth: int = 0
+    nodes: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "channel": self.channel,
+            "leader": list(self.leader),
+            "leader_coordinate": format_move(*self.leader),
+            "challenger": list(self.challenger),
+            "challenger_coordinate": format_move(*self.challenger),
+            "requested_budget_seconds": self.requested_budget_seconds,
+            "elapsed_seconds": self.elapsed_seconds,
+            "status": self.status,
+            "completed_depth": self.completed_depth,
+            "nodes": self.nodes,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SearchPhaseTiming:
     """Wall-clock time attributed to one top-level decision phase."""
 
@@ -423,6 +451,9 @@ class DecisionAnalysis:
     boundary_secondary_final_dimension_recovered: bool = False
     root_review_finalists: tuple[Move, ...] = ()
     root_review_pairs: tuple[RootReviewPairAnalysis, ...] = ()
+    root_review_pair_attempts: tuple[
+        RootReviewPairAttemptAnalysis, ...
+    ] = ()
     root_review_source_coverage: tuple[
         tuple[str, tuple[Move, ...]], ...
     ] = ()
@@ -712,6 +743,10 @@ class DecisionAnalysis:
             ],
             "root_review_pairs": [
                 pair.to_dict() for pair in self.root_review_pairs
+            ],
+            "root_review_pair_attempts": [
+                attempt.to_dict()
+                for attempt in self.root_review_pair_attempts
             ],
             "root_review_source_coverage": [
                 {

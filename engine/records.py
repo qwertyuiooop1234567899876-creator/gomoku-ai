@@ -469,6 +469,27 @@ class GameRecorder:
                             f"channels:{channels}"
                         )
 
+                pair_attempts = move.analysis.get(
+                    "root_review_pair_attempts",
+                    [],
+                )
+                if pair_attempts:
+                    status_counts: dict[str, int] = {}
+                    for attempt in pair_attempts:
+                        status = attempt.get("status", "?")
+                        status_counts[status] = (
+                            status_counts.get(status, 0) + 1
+                        )
+                    status_text = ",".join(
+                        f"{status}:{count}"
+                        for status, count in status_counts.items()
+                    )
+                    lines.append(
+                        "     "
+                        f"root_review_attempts={len(pair_attempts)} "
+                        f"status:{status_text}"
+                    )
+
                 if move.analysis.get("root_vcf_checked", False):
                     baseline = move.analysis.get(
                         "root_vcf_baseline_line",

@@ -17,6 +17,7 @@ from engine.ai import (
     FinalProofEmergencyVCFProvenance,
     Move,
     ProofCandidateAnalysis,
+    RootReviewPairAttemptAnalysis,
     RootReviewPairAnalysis,
     RootReviewUnpairedFinalistAnalysis,
     SearchPhaseTiming,
@@ -83,6 +84,7 @@ class SearchDiagnosticsSource(Protocol):
     _root_mate_scores_quarantined: bool
     _root_review_finalists: tuple[Move, ...]
     _root_review_trace: list[tuple[str, RootSafetyProbeResult]]
+    _root_review_pair_attempts: list[RootReviewPairAttemptAnalysis]
     _root_review_unpaired_finalists: tuple[
         RootReviewUnpairedFinalistAnalysis, ...
     ]
@@ -280,6 +282,7 @@ def build_search_analysis(
     root_vcf = source._root_vcf_scan
     counters = source._counters
     review_pairs: tuple[RootReviewPairAnalysis, ...] = ()
+    review_pair_attempts: tuple[RootReviewPairAttemptAnalysis, ...] = ()
     review_finalists: tuple[Move, ...] = ()
     review_source_coverage: tuple[
         tuple[str, tuple[Move, ...]], ...
@@ -334,6 +337,8 @@ def build_search_analysis(
                 for move in reviewed_moves
             )
         )
+    if source.diagnostics or source._root_review_pair_attempts:
+        review_pair_attempts = tuple(source._root_review_pair_attempts)
     if source.diagnostics or source._root_review_unpaired_finalists:
         review_unpaired_finalists = (
             source._root_review_unpaired_finalists
@@ -541,6 +546,7 @@ def build_search_analysis(
         ),
         root_review_finalists=review_finalists,
         root_review_pairs=review_pairs,
+        root_review_pair_attempts=review_pair_attempts,
         root_review_source_coverage=review_source_coverage,
         root_review_unpaired_finalists=review_unpaired_finalists,
     )

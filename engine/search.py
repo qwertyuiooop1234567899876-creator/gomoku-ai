@@ -9,6 +9,7 @@ from engine.ai import (
     FinalProofEmergencyVCFProvenance,
     Move,
     ProofCandidateAnalysis,
+    RootReviewPairAttemptAnalysis,
     RootReviewUnpairedFinalistAnalysis,
     RootVCFCandidateAnalysis,
     RootSafetyCandidateAnalysis,
@@ -69,7 +70,7 @@ ACTIVE_COUNTERATTACK_SCREEN_ALLOWANCE_SECONDS = 0.25
 
 class SearchAI(ScoringAI):
     """
-    V0.17.0 搜索 AI。
+    V0.17.1 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -171,6 +172,9 @@ class SearchAI(ScoringAI):
     V0.17.0 完成 Native 主搜索 Phase 1：C++ 固定深度核心通过粗粒度
     ABI 复现 Python 的根分、PV、节点和 TT 内容摘要，但仍只供基准与
     等价性探针使用，不接入 choose_move，也不改变本类的生产选着语义。
+    V0.17.1 不改变搜索与选着语义；动态 pair 的每一次实际调用都会记录
+    通道、双方着法、请求预算、真实耗时、完成深度、节点和结果状态，
+    包括未形成任何完整深度结果的尝试，不再产生审计盲区。
     """
 
     def __init__(
@@ -287,6 +291,9 @@ class SearchAI(ScoringAI):
         self._root_review_finalists: tuple[Move, ...] = ()
         self._root_review_trace: list[
             tuple[str, RootSafetyProbeResult]
+        ] = []
+        self._root_review_pair_attempts: list[
+            RootReviewPairAttemptAnalysis
         ] = []
         self._root_boundary_secondary_attempted = False
         self._root_boundary_secondary_mate_like_hit_depths: tuple[
@@ -523,6 +530,7 @@ class SearchAI(ScoringAI):
         self._phase_timings.clear()
         self._root_review_finalists = ()
         self._root_review_trace.clear()
+        self._root_review_pair_attempts.clear()
         self._root_boundary_secondary_attempted = False
         self._root_boundary_secondary_mate_like_hit_depths = ()
         self._root_boundary_secondary_final_dimension_recovered = False
@@ -3314,6 +3322,7 @@ class SearchAI(ScoringAI):
                     quiet_frontier_extension_override=False,
                     recalibrate_mate_like_override=False,
                     reject_mate_like=True,
+                    audit_channel="active_counterattack_safe",
                 )
                 if active_probe is not None:
                     approved = self._boundary_secondary_approved_move(
@@ -3583,6 +3592,7 @@ class SearchAI(ScoringAI):
         quiet_frontier_extension_override: bool | None = None,
         recalibrate_mate_like_override: bool | None = None,
         reject_mate_like: bool = False,
+        audit_channel: str = "primary",
     ) -> RootSafetyProbeResult | None:
         pair = [result.move, challenger]
         structure_scores = {
@@ -3615,6 +3625,8 @@ class SearchAI(ScoringAI):
             if quiet_frontier_extension_override is None
             else quiet_frontier_extension_override
         )
+        attempt_started = time.perf_counter()
+        nodes_before = self._counters.root_safety_nodes
         probe = self._run_root_safety_probe(
             board,
             pair,
@@ -3662,6 +3674,31 @@ class SearchAI(ScoringAI):
                 if mandatory_defense_pair
                 else None
             ),
+        )
+        self._root_review_pair_attempts.append(
+            RootReviewPairAttemptAnalysis(
+                channel=audit_channel,
+                leader=result.move,
+                challenger=challenger,
+                requested_budget_seconds=budget_seconds,
+                elapsed_seconds=time.perf_counter() - attempt_started,
+                status=(
+                    "result_available"
+                    if probe is not None
+                    else "no_completed_layer"
+                ),
+                completed_depth=(
+                    0 if probe is None else probe.completed_depth
+                ),
+                nodes=(
+                    probe.nodes
+                    if probe is not None
+                    else max(
+                        0,
+                        self._counters.root_safety_nodes - nodes_before,
+                    )
+                ),
+            )
         )
         if probe is None:
             return None
@@ -3743,6 +3780,7 @@ class SearchAI(ScoringAI):
                 branch_candidate_limit_override=(
                     self.config.root_boundary_review_branch_limit
                 ),
+                audit_channel="boundary_tactical",
             )
             if escalated is not None:
                 self._root_review_trace.append(
@@ -3783,6 +3821,7 @@ class SearchAI(ScoringAI):
                 quiet_frontier_extension_override=False,
                 recalibrate_mate_like_override=False,
                 reject_mate_like=True,
+                audit_channel="boundary_secondary",
             )
             if secondary is not None:
                 self._root_boundary_secondary_mate_like_hit_depths = (
