@@ -1,0 +1,62 @@
+Gomoku AI V0.17.0 Native Main Search Phase 1
+=============================================
+
+目标与边界
+----------
+- `gn_main_search_v1` 从只校验输入并返回 UNSUPPORTED 的 ABI 占位符，
+  升级为一次调用完成固定深度根搜索的 C++ 内核。
+- 本阶段只服务测试与基准，不接入 `SearchAI.choose_move`；生产根候选、
+  Proof、VCF、root-safety、dynamic-review 和最终选着语义均不改变。
+- Native 必须先复现 Python 当前行为，包括已知的深度奇偶振荡；不能把
+  “移植正确”与“棋力更强”混为同一条断言。
+
+Native 固定深度核心
+-------------------
+- 新增 `main_search_core.cpp/.h`，整体下沉棋盘与有序历史、局部候选生成、
+  完整/快速走法排序、tempo-v1 静态评价、威胁画像、叶面威胁延伸、
+  PVS/Negamax、killer/history、置换表和主变化生成。
+- 根候选仍由 Python 按既有顺序通过 ABI 传入；Native 不重做根策略，也
+  不读取 `records/` 或任何固定坐标。
+- PVS 和 TT 由 ABI flags 独立控制；关闭 PVS 时同一个内核可执行独立
+  全窗口比较，为后续 root-safety/dynamic-review 接入保留统一入口。
+- `node_limit=0` 表示无限；命中正数上限时返回 CUTOFF、完成深度为 0，
+  中断层不会冒充完整结果。异常路径和输出容量均在 C ABI 边界拦截。
+
+可审计结果
+----------
+- Python 包装层现在读取完成深度、停止原因、最佳着、分数、按请求顺序的
+  根分、PV、节点数、TT 条目数、输入摘要和 TT 内容摘要。
+- TT 使用包含棋盘、行棋方和最近有序历史的可移植键；测试端 Python
+  oracle 使用同一键，并对排序后的每条 TT 内容计算同一 64 位摘要。
+- 等价门禁不只比较最终着法，而是逐项比较 score、PV、nodes、TT entries
+  和完整规范化 TT digest。
+
+固定局面验收
+------------
+- V0.16.8 对 YiXin 第 13 手 F7/J11：深度 1–3 的分数、PV、节点和 TT
+  内容逐项等于 Python；PVS 开/关及 TT 开/关组合均覆盖。
+- 另用固定随机种子覆盖 12 个 9×9/11×11 有序局面、三根候选和不同
+  PVS/TT 组合，逐项差分根分、PV、节点与 TT 摘要，避免只对两盘特例
+  偶然相等。
+- 固化 V0.16.18 对 YiXin 第 21 手前 20 手有序历史，只保留 H7/K8 两个
+  对照候选。Native 与 Python 同样得到：d6 K8、d7 H7、d8 K8。
+- d8 两边都搜索 10,716 个主节点；本机 Python 为 32.47 秒，Native 为
+  5.30 秒。墙钟不是跨机器性能门禁，但确认粗粒度下沉具备真实吞吐收益。
+- 10 节点截止测试确认 Native 精确停在 10 节点、恢复棋盘并返回 CUTOFF。
+
+构建修复
+--------
+- 构建器把 Visual Studio prerelease/Insiders 纳入 `vswhere` 查询，避免
+  已安装编译器却被误报为缺失。
+- 带空格的 vcvars64 路径通过同一 shell 调用加载；MSVC 对象目录参数
+  不再因尾随反斜杠吞掉后续源文件。根目录 `build_native.bat` 仍只调用
+  `python -m tools.build_native --clean`，没有新增第二套构建入口。
+
+非目标与后续
+------------
+- V0.17.0 不宣称修复 H7/K8 地平线振荡，也不把 K8 设为正确性断言。
+- 不把 Native TT 持久化进 Python，不切换生产主树，不调整全局深度、
+  候选宽度、评价权重或验证预算。
+- Phase 2 需分别设计主 PVS 与 root-safety/dynamic-review 的生产接入、
+  超时回退和跨整盘热状态策略；两条路径都应复用同一粗粒度核心。
+- 不恢复、生成或提交 `records/` 中的历史或本机对局文件。

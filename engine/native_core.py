@@ -50,7 +50,24 @@ class NativeVCFResult:
 @dataclass(frozen=True, slots=True)
 class NativeMainSearchProbe:
     status: int
+    completed_depth: int
+    stop_reason: int
+    best_move: Move | None
+    score: int
+    nodes: int
+    tt_entries: int
     input_digest: int
+    tt_digest: int
+    root_scores: tuple[tuple[Move, int], ...]
+    principal_variation: tuple[Move, ...]
+
+    @property
+    def completed(self) -> bool:
+        return self.status == STATUS_FOUND
+
+    @property
+    def cutoff(self) -> bool:
+        return self.status == STATUS_CUTOFF
 
 
 class _MainSearchRequestV1(ctypes.Structure):
@@ -527,9 +544,38 @@ class NativeCore:
         )
         if status == -1:
             raise RuntimeError("Native主搜索ABI请求无效。")
+        if not 0 <= result.root_score_count <= len(root_candidates):
+            raise RuntimeError("Native主搜索返回了越界的根分数量。")
+        if not 0 <= result.pv_length <= board.size * board.size:
+            raise RuntimeError("Native主搜索返回了越界的主变化长度。")
         return NativeMainSearchProbe(
             status=status,
+            completed_depth=result.completed_depth,
+            stop_reason=result.stop_reason,
+            best_move=(
+                None
+                if result.best_move < 0
+                else (
+                    result.best_move // board.size,
+                    result.best_move % board.size,
+                )
+            ),
+            score=result.score,
+            nodes=result.nodes,
+            tt_entries=result.tt_entries,
             input_digest=result.input_digest,
+            tt_digest=result.tt_digest,
+            root_scores=tuple(
+                (root_candidates[index], root_scores[index])
+                for index in range(result.root_score_count)
+            ),
+            principal_variation=tuple(
+                (
+                    principal_variation[index] // board.size,
+                    principal_variation[index] % board.size,
+                )
+                for index in range(result.pv_length)
+            ),
         )
 
 

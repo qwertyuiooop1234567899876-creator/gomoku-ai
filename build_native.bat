@@ -8,7 +8,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-python -m unittest tests.test_v0140_native_core -v
+python -m unittest tests.test_v0140_native_core tests.test_native_main_search_contract -v
 if errorlevel 1 (
   pause
   exit /b 1

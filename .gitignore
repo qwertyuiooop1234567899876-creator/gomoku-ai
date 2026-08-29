@@ -8,3 +8,5 @@ tools/_local/
 # Machine-generated transient files
 *.tmp
 search-benchmark-results.json
+native/bin/*.obj
+native/bin/*.pdb

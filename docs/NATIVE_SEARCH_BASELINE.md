@@ -17,6 +17,7 @@ python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-lim
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 6000
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 9000
 python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-limit 10000
+python -B -m tools.native_search_baseline --mode native --depths 1-8
 ```
 
 用于参数语义矩阵时，固定深度和两个候选不变，只改变主 PVS 的
@@ -142,3 +143,18 @@ d6 的延伸=2、branch=12 中 J11 仅高 700 分，表明宽度敏感性，但�
 2. 截止继续表示未完成，不能把 UNKNOWN 或中断层转成安全结论。
 3. 在不收窄候选与延伸的前提下，同等时间至少多完成一层。
 4. 完成更深搜索后重新检查 F7/J11；J11 反超属于棋力验收，不是初版移植的正确性断言。
+
+## V0.17.0 Phase 1 结果
+
+`gn_main_search_v1` 已从 ABI 占位符变为隔离的 C++ 固定深度核心，但未
+接入生产 `choose_move`。第 13 手 F7/J11 在深度 1–3 的分数、PV、节点、
+TT 条目数与完整规范化 TT 摘要逐项等于 Python；关闭 PVS 的全窗口模式
+也通过同一门禁，给后续 root-safety/dynamic-review 接入保留了路径。
+
+V0.16.18 对 YiXin 第 21 手另存为不依赖 `records/` 的最小夹具。C++ 与
+Python 都复现同一个固定窗口振荡：d6 选 K8、d7 选 H7、d8 再选 K8；
+因此 Phase 1 没有借移植偷偷改变算法或把 K8 写成坐标特判。
+
+本机冷启动双候选 d8 对照：Python 32.47 秒，Native 5.30 秒（同为
+10,716 个主搜索节点；墙钟只作本机参考）。这证明整体下沉具备吞吐
+杠杆，但不能据此宣布棋力提升；生产接入和复核通道接入仍属于后续阶段。

@@ -69,7 +69,7 @@ ACTIVE_COUNTERATTACK_SCREEN_ALLOWANCE_SECONDS = 0.25
 
 class SearchAI(ScoringAI):
     """
-    V0.16.18 搜索 AI。
+    V0.17.0 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -168,6 +168,9 @@ class SearchAI(ScoringAI):
     覆盖或混入主 PVS 分数；完整预算可用时该通道先于通用根安全复核，
     预算不足则弃权且不落回普通延伸通道。稳定完成的改选进入既有确认
     链，Final Proof 全为 UNKNOWN 时不能再用压力来源启发式翻回。
+    V0.17.0 完成 Native 主搜索 Phase 1：C++ 固定深度核心通过粗粒度
+    ABI 复现 Python 的根分、PV、节点和 TT 内容摘要，但仍只供基准与
+    等价性探针使用，不接入 choose_move，也不改变本类的生产选着语义。
     """
 
     def __init__(

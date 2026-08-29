@@ -10,6 +10,11 @@ from typing import Iterable
 
 from engine.board import BLACK, WHITE, Board
 from engine.game import format_move, parse_move
+from engine.native_core import (
+    STATUS_CUTOFF,
+    STATUS_FOUND,
+    native_core,
+)
 from engine.search import SearchAI
 from engine.search_types import INFINITY, MATE_SCORE, RootResult, TTEntry
 from engine.version import ENGINE_VERSION
@@ -528,6 +533,88 @@ def run_iterative_pair(
     )
 
 
+def run_native_pair(
+    case: BaselineCase,
+    depth: int,
+    *,
+    node_limit: int | None,
+    threat_extension_depth: int,
+    branch_candidate_limit: int,
+) -> SearchRun:
+    """Run the Phase-1 C++ core without wiring it into production policy."""
+    board = build_board(case)
+    before = board_state(board)
+    candidates = tuple(
+        parse_move(coordinate, board.size)
+        for coordinate in case.candidates
+    )
+    started_at = time.perf_counter()
+    probe = native_core.probe_main_search_contract(
+        board,
+        case.player,
+        candidates,
+        depth=depth,
+        node_limit=node_limit,
+        branch_candidate_limit=branch_candidate_limit,
+        preselection_factor=3,
+        candidate_radius=2,
+        recent_move_count=4,
+        threat_extension_depth=threat_extension_depth,
+        use_pvs=True,
+        use_transposition_table=True,
+    )
+    elapsed = time.perf_counter() - started_at
+    if board_state(board) != before:
+        raise RuntimeError("Native 主搜索污染了棋盘或有序历史。")
+    if probe is None:
+        raise RuntimeError(
+            "Native 主搜索运行库不可用："
+            f"{native_core.error or '缺少 gn_main_search_v1'}"
+        )
+    if probe.status not in (STATUS_FOUND, STATUS_CUTOFF):
+        raise RuntimeError(f"Native 主搜索失败：status={probe.status}")
+
+    indexed_scores = [
+        (index, move, score)
+        for index, (move, score) in enumerate(probe.root_scores)
+    ]
+    indexed_scores.sort(key=lambda item: (item[2], -item[0]), reverse=True)
+    return SearchRun(
+        mode="native_pair",
+        requested_depth=depth,
+        node_limit=node_limit,
+        completed=probe.completed,
+        completed_depth=probe.completed_depth,
+        stop_reason=(
+            "requested_depth_completed"
+            if probe.completed
+            else "node_limit"
+        ),
+        selected_move=(
+            None
+            if probe.best_move is None
+            else format_move(*probe.best_move)
+        ),
+        score=None if probe.best_move is None else probe.score,
+        ranked_moves=tuple(
+            (format_move(*move), score)
+            for _index, move, score in indexed_scores
+        ),
+        principal_variation=tuple(
+            format_move(*move)
+            for move in probe.principal_variation
+        ),
+        nodes=probe.nodes,
+        elapsed_seconds=elapsed,
+        tt_entries=probe.tt_entries,
+        tt_digest=f"{probe.tt_digest:016x}",
+        tt_bounds={},
+        threat_extension_depth=threat_extension_depth,
+        branch_candidate_limit=branch_candidate_limit,
+        extensions=0,
+    )
+
+
 def run_dynamic_pair(
     case: BaselineCase,
     depth: int,
@@ -862,6 +949,7 @@ def main() -> int:
             "production",
             "dynamic-pair",
             "defense-vct",
+            "native",
         ),
         default="full-window",
     )
@@ -1021,7 +1109,7 @@ def main() -> int:
                     branch_candidate_limit=args.branch_candidate_limit,
                 )
             )
-        else:
+        elif args.mode == "defense-vct":
             runs.append(
                 run_defense_vct_pair(
                     case,
@@ -1031,6 +1119,16 @@ def main() -> int:
                         if args.time_limit is not None
                         else args.review_budget
                     ),
+                )
+            )
+        else:
+            runs.append(
+                run_native_pair(
+                    case,
+                    depth,
+                    node_limit=args.node_limit,
+                    threat_extension_depth=args.threat_extension_depth,
+                    branch_candidate_limit=args.branch_candidate_limit,
                 )
             )
     print(

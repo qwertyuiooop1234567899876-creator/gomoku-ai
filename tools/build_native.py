@@ -31,7 +31,7 @@ def output_path() -> Path:
     return OUTPUT_DIRECTORY / "gomoku_native.so"
 
 
-def compiler_command(*, output: Path | None = None) -> list[str]:
+def compiler_command(*, output: Path | None = None) -> list[str] | str:
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     selected_output = output or output_path()
     sources = source_paths()
@@ -62,6 +62,7 @@ def compiler_command(*, output: Path | None = None) -> list[str]:
                 [
                     str(vswhere),
                     "-latest",
+                    "-prerelease",
                     "-products", "*",
                     "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
                     "-property", "installationPath",
@@ -78,10 +79,12 @@ def compiler_command(*, output: Path | None = None) -> list[str]:
                 )
                 compile_text = (
                     f'call "{vcvars}" >nul && cl /nologo /std:c++17 /O2 /EHsc /LD '
-                    f'/Fo:"{OUTPUT_DIRECTORY}\\" {quoted_sources} /link '
+                    f'/Fo:{OUTPUT_DIRECTORY}\\ {quoted_sources} /link '
                     f'/OUT:"{selected_output}" /IMPLIB:"{OUTPUT_DIRECTORY / "gomoku_native.lib"}"'
                 )
-                return ["cmd", "/d", "/s", "/c", compile_text]
+                # ``/s`` rewrites the outer quote pair and breaks ``call``
+                # when a prerelease Visual Studio path contains spaces.
+                return compile_text
 
     compiler = shutil.which(os.environ.get("CXX", "")) if os.environ.get("CXX") else None
     compiler = compiler or shutil.which("g++") or shutil.which("clang++")
@@ -110,9 +113,17 @@ def build_native_runtime() -> Path:
     )
     staged_output.unlink(missing_ok=True)
     command = compiler_command(output=staged_output)
-    print("NativeCore build:", " ".join(command))
+    print(
+        "NativeCore build:",
+        command if isinstance(command, str) else " ".join(command),
+    )
     try:
-        subprocess.run(command, cwd=ROOT, check=True)
+        subprocess.run(
+            command,
+            cwd=ROOT,
+            check=True,
+            shell=isinstance(command, str),
+        )
         if not staged_output.is_file():
             raise RuntimeError(
                 f"编译器成功退出但没有生成原生库：{staged_output}"

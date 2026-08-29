@@ -1,4 +1,5 @@
 #include "gomoku_native.h"
+#include "main_search_core.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -93,6 +94,11 @@ GN_API int gn_main_search_v1(
     if (request == nullptr || result == nullptr
         || result->struct_size < sizeof(GNMainSearchResultV1)
         || result->schema_version != GN_MAIN_SEARCH_SCHEMA_V1
+        || result->root_scores == nullptr
+        || result->root_score_capacity < request->root_candidate_count
+        || result->pv_capacity < 0
+        || (result->pv_capacity > 0
+            && result->principal_variation == nullptr)
         || !valid_request(*request)) {
         return STATUS_INVALID;
     }
@@ -107,5 +113,13 @@ GN_API int gn_main_search_v1(
     result->tt_digest = 0;
     result->root_score_count = 0;
     result->pv_length = 0;
-    return GN_MAIN_SEARCH_UNSUPPORTED;
+    try {
+        return gomoku_native::run_main_search_v1(*request, *result);
+    } catch (...) {
+        result->status = STATUS_INVALID;
+        result->completed_depth = 0;
+        result->root_score_count = 0;
+        result->pv_length = 0;
+        return STATUS_INVALID;
+    }
 }

@@ -56,6 +56,21 @@ class TestNativeSearchBaseline(unittest.TestCase):
         self.assertEqual("node_limit", run.stop_reason)
         self.assertEqual(1, run.nodes)
 
+    def test_native_pair_runs_without_production_integration(self) -> None:
+        case = native_search_baseline.load_case()
+        run = native_search_baseline.run_native_pair(
+            case,
+            1,
+            node_limit=None,
+            threat_extension_depth=2,
+            branch_candidate_limit=8,
+        )
+
+        self.assertTrue(run.completed)
+        self.assertEqual(1, run.completed_depth)
+        self.assertIn(run.selected_move, case.candidates)
+        self.assertEqual(2, len(run.ranked_moves))
+
     def test_full_window_exposes_parameters_and_bounded_trace(self) -> None:
         case = native_search_baseline.load_case()
         run = native_search_baseline.run_full_window_candidate(
