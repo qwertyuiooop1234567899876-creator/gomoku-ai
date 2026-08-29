@@ -64,9 +64,12 @@ from engine.search_types import (
 )
 
 
+ACTIVE_COUNTERATTACK_SCREEN_ALLOWANCE_SECONDS = 0.25
+
+
 class SearchAI(ScoringAI):
     """
-    V0.16.17 搜索 AI。
+    V0.16.18 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -159,6 +162,12 @@ class SearchAI(ScoringAI):
     而非证明性延伸：落下一步后只比较有界续攻封堵并回到静态尺度。
     主 PVS 语义保持不变；frontier_shape 也必须达到稳定性与最低
     完成深度门槛。
+    V0.16.18 在动态复核入围前，对主动反击来源做一次受同一 deadline
+    约束的有界防守筛选；筛出的单一来源代表获得关键 finalist 席位，
+    并优先领取 5 秒选择性安全 pair。安全分只在来源内部选代表，不
+    覆盖或混入主 PVS 分数；完整预算可用时该通道先于通用根安全复核，
+    预算不足则弃权且不落回普通延伸通道。稳定完成的改选进入既有确认
+    链，Final Proof 全为 UNKNOWN 时不能再用压力来源启发式翻回。
     """
 
     def __init__(
@@ -945,6 +954,7 @@ class SearchAI(ScoringAI):
                 self._interrupted_depth = completed_depth + 1
                 stop_reason = "search_incomplete"
 
+        root_safety_deferred_for_active = False
         if (
             final_pvs_result is not None
             and final_risk_result is not None
@@ -962,19 +972,26 @@ class SearchAI(ScoringAI):
             and completed_depth > 0
             and not self._root_mate_scores_quarantined
         ):
-            safety_probe = self._maybe_run_root_safety_probe(
-                board,
-                best_result,
-                completed_depth=completed_depth,
-                root_history=root_history,
-            )
-            if safety_probe is not None:
-                self._root_safety_probe = safety_probe
-                revised = self._apply_and_record_root_safety(
-                    best_result,
-                    safety_probe,
+            root_safety_deferred_for_active = (
+                self._should_prioritize_active_counterattack_review(
+                    search_candidates,
+                    completed_depth=completed_depth,
                 )
-                best_result = revised
+            )
+            if not root_safety_deferred_for_active:
+                safety_probe = self._maybe_run_root_safety_probe(
+                    board,
+                    best_result,
+                    completed_depth=completed_depth,
+                    root_history=root_history,
+                )
+                if safety_probe is not None:
+                    self._root_safety_probe = safety_probe
+                    revised = self._apply_and_record_root_safety(
+                        best_result,
+                        safety_probe,
+                    )
+                    best_result = revised
 
         if (
             root_expansion_reason == "unverified_advantage"
@@ -1007,10 +1024,14 @@ class SearchAI(ScoringAI):
         elif (
             not search_completed
             and completed_depth > 0
-            and self._root_mate_scores_quarantined
+            and (
+                self._root_mate_scores_quarantined
+                or root_safety_deferred_for_active
+            )
         ):
-            # A quarantined selective root needs the source-aware equal-window
-            # review first.  Fall back to the older two-score probe only when
+            # A quarantined selective root and a fully funded active-
+            # counterattack review both need the source-aware equal-window
+            # channel first.  Fall back to the older two-score probe only when
             # that review could not start or finish inside its reserve.
             safety_probe = self._maybe_run_root_safety_probe(
                 board,
@@ -3123,10 +3144,22 @@ class SearchAI(ScoringAI):
         ):
             return None
 
-        budget = self._dynamic_review_budget_seconds()
+        has_active_counterattack = (
+            self._has_active_counterattack_review_candidate(candidates)
+        )
+        active_review_budget = (
+            self._active_counterattack_review_budget_seconds()
+            if has_active_counterattack
+            else 0.0
+        )
+        budget = max(
+            self._dynamic_review_budget_seconds(),
+            active_review_budget,
+        )
         if budget <= 0:
             return None
         deadline = time.perf_counter() + budget
+        minimum_pair_budget = 0.5
         root_scores = dict(result.ranked_moves)
         legal = {
             move
@@ -3184,6 +3217,29 @@ class SearchAI(ScoringAI):
         # review slice before any finalist is compared, so finalist selection
         # deliberately uses searched rank and source order.
         structure_scores: dict[Move, int] = {}
+        active_finalist_moves = tuple(
+            move
+            for move in active_moves
+            if move in pool
+        )
+        active_representative = (
+            self._active_counterattack_finalist_representative(
+                board,
+                active_finalist_moves,
+                deadline=deadline,
+                minimum_remaining_seconds=minimum_pair_budget,
+            )
+            if active_finalist_moves
+            else None
+        )
+        finalist_critical_groups = (
+            (
+                *critical_groups,
+                (active_representative,),
+            )
+            if active_representative is not None
+            else critical_groups
+        )
 
         preferred_groups = [
             active_moves,
@@ -3200,7 +3256,7 @@ class SearchAI(ScoringAI):
             result,
             pool,
             structure_scores,
-            critical_groups=critical_groups,
+            critical_groups=finalist_critical_groups,
             preferred_groups=preferred_groups,
         )
         self._root_review_finalists = tuple(finalists)
@@ -3226,13 +3282,82 @@ class SearchAI(ScoringAI):
             0.0,
             deadline - time.perf_counter(),
         )
+        if (
+            active_representative is not None
+            and active_representative != current
+            and active_representative in pending
+        ):
+            pending.remove(active_representative)
+            active_budget = (
+                self.config.root_active_counterattack_review_seconds
+            )
+            remaining = deadline - time.perf_counter()
+            if remaining >= active_budget:
+                pair_result = root_policy.promote_root_move(
+                    result,
+                    current,
+                    score=root_scores[current],
+                )
+                entered_moves.update((current, active_representative))
+                active_probe = self._run_dynamic_pair_review(
+                    board,
+                    pair_result,
+                    active_representative,
+                    completed_depth=completed_depth,
+                    budget_seconds=active_budget,
+                    target_depth_override=6,
+                    start_depth=1,
+                    branch_candidate_limit_override=4,
+                    quiet_frontier_extension_override=False,
+                    recalibrate_mate_like_override=False,
+                    reject_mate_like=True,
+                )
+                if active_probe is not None:
+                    approved = self._boundary_secondary_approved_move(
+                        active_probe,
+                        minimum_completed_depth=(
+                            self.config
+                            .root_dynamic_review_min_completed_depth
+                        ),
+                        stable_leader_count=2,
+                    )
+                    active_probe = replace(
+                        active_probe,
+                        approved_move=(
+                            approved
+                            if approved is not None
+                            else current
+                        ),
+                        selection_basis=(
+                            "active_counterattack_safe_equal_window"
+                            if approved is not None
+                            and approved != current
+                            else "active_counterattack_safe_abstain"
+                        ),
+                        requested_budget_seconds=active_budget,
+                    )
+                    latest = active_probe
+                    self._root_review_trace.append(
+                        ("active_counterattack_safe", active_probe)
+                    )
+                    if approved is not None and approved != current:
+                        self._record_root_review_unpaired_finalists(
+                            finalists,
+                            entered_moves=entered_moves,
+                            reason="selection_changed",
+                            remaining_budget_seconds=max(
+                                0.0,
+                                deadline - time.perf_counter(),
+                            ),
+                        )
+                        return active_probe
+
         for index, challenger in enumerate(pending):
             if challenger == current:
                 continue
             remaining = deadline - time.perf_counter()
             checks_left = max(1, len(pending) - index)
             fair_budget = remaining / checks_left
-            minimum_pair_budget = 0.5
             pair_budget = (
                 min(
                     remaining,
@@ -3373,6 +3498,51 @@ class SearchAI(ScoringAI):
             for group in (pressure, broad_quiet_attack, frontier)
             if group
         )
+
+    def _active_counterattack_finalist_representative(
+        self,
+        board: Board,
+        moves: tuple[Move, ...],
+        *,
+        deadline: float,
+        minimum_remaining_seconds: float,
+    ) -> Move | None:
+        """Return one fully screened active-counterattack representative.
+
+        The bounded reply score selects a representative only within this
+        source group.  It never replaces or numerically mixes with the main
+        PVS scores.  A partial screen is discarded so source reservation
+        cannot depend on which candidates happened to fit before the local
+        review deadline.
+        """
+        ordered = tuple(dict.fromkeys(moves))
+        scored: list[tuple[int, int, Move]] = []
+        for index, move in enumerate(ordered):
+            if (
+                time.perf_counter()
+                >= deadline - minimum_remaining_seconds
+            ):
+                return None
+            board.place(*move, self.player)
+            try:
+                score, _reply = self._selective_extension_reply_score(
+                    board,
+                    attacker=self.player,
+                    defender=self.opponent,
+                )
+            except SearchTimeout:
+                return None
+            finally:
+                board.undo()
+            scored.append((score, -index, move))
+
+        if (
+            not scored
+            or time.perf_counter()
+            >= deadline - minimum_remaining_seconds
+        ):
+            return None
+        return max(scored)[2]
 
     def _best_structural_challenger(
         self,
@@ -3665,11 +3835,18 @@ class SearchAI(ScoringAI):
     def _boundary_secondary_approved_move(
         self,
         probe: RootSafetyProbeResult,
+        *,
+        minimum_completed_depth: int | None = None,
+        stable_leader_count: int | None = None,
     ) -> Move | None:
+        required_depth = (
+            self.config.root_boundary_secondary_min_completed_depth
+            if minimum_completed_depth is None
+            else minimum_completed_depth
+        )
         if (
             len(probe.candidates) != 2
-            or probe.completed_depth
-            < self.config.root_boundary_secondary_min_completed_depth
+            or probe.completed_depth < required_depth
             or any(
                 abs(candidate.score) >= HEURISTIC_SCORE_LIMIT
                 for candidate in probe.candidates
@@ -3679,6 +3856,8 @@ class SearchAI(ScoringAI):
 
         stable_count = (
             self.config.root_boundary_secondary_stable_leader_count
+            if stable_leader_count is None
+            else stable_leader_count
         )
         if (
             len(probe.leader_history) < stable_count
@@ -3752,6 +3931,46 @@ class SearchAI(ScoringAI):
             budget
             if budget >= self.config.root_dynamic_review_min_seconds
             else 0.0
+        )
+
+    def _has_active_counterattack_review_candidate(
+        self,
+        candidates: list[Move] | tuple[Move, ...],
+    ) -> bool:
+        """Return whether the filtered root still carries active evidence."""
+        return any(
+            root_candidates.CandidateSource.ACTIVE_COUNTERATTACK
+            in self._root_candidate_sources.get(move, ())
+            for move in candidates
+        )
+
+    def _active_counterattack_review_budget_seconds(self) -> float:
+        """Reserve one complete safe pair plus its admission screening."""
+        remaining = self._time.remaining_seconds
+        if remaining is None:
+            return 0.0
+        requested = (
+            self.config.root_active_counterattack_review_seconds
+            + ACTIVE_COUNTERATTACK_SCREEN_ALLOWANCE_SECONDS
+        )
+        available = max(
+            0.0,
+            remaining - self._final_proof_reserve_seconds() - 0.5,
+        )
+        return requested if available >= requested else 0.0
+
+    def _should_prioritize_active_counterattack_review(
+        self,
+        candidates: list[Move] | tuple[Move, ...],
+        *,
+        completed_depth: int,
+    ) -> bool:
+        """Defer generic safety only when the dedicated slice is complete."""
+        return (
+            self.config.root_dynamic_review_enabled
+            and completed_depth >= 3
+            and self._has_active_counterattack_review_candidate(candidates)
+            and self._active_counterattack_review_budget_seconds() > 0
         )
 
     def _quiet_sibling_budget_seconds(self) -> float:
@@ -4094,7 +4313,13 @@ class SearchAI(ScoringAI):
         """Remember only stable, ordinary-score confirmation of the leader."""
         if (
             probe.best_move != result.move
-            or probe.selection_basis != "equal_window"
+            or (
+                probe.selection_basis
+                not in {
+                    "equal_window",
+                    "active_counterattack_safe_equal_window",
+                }
+            )
             or not probe.rank_stable
             or probe.completed_depth
             < self.config.root_safety_min_completed_depth

@@ -121,6 +121,7 @@ class SearchConfig:
     root_dynamic_review_time_fraction: float = 0.80
     root_dynamic_review_max_seconds: float = 30.0
     root_dynamic_review_min_seconds: float = 2.0
+    root_active_counterattack_review_seconds: float = 5.0
     root_dynamic_review_min_completed_depth: int = 5
     root_dynamic_review_structure_margin: int = 3_000
     root_boundary_review_shared_fraction: float = 0.5
@@ -380,6 +381,18 @@ class SearchConfig:
             > self.root_dynamic_review_max_seconds
         ):
             raise ValueError("root_dynamic_review_min_seconds 不能大于最大值。")
+        if self.root_active_counterattack_review_seconds <= 0:
+            raise ValueError(
+                "root_active_counterattack_review_seconds 必须大于 0。"
+            )
+        if (
+            self.root_active_counterattack_review_seconds
+            > self.root_dynamic_review_max_seconds
+        ):
+            raise ValueError(
+                "root_active_counterattack_review_seconds "
+                "不能大于动态复核最大时间。"
+            )
         if self.root_dynamic_review_min_completed_depth < 2:
             raise ValueError("root_dynamic_review_min_completed_depth 不能小于 2。")
         if self.root_dynamic_review_structure_margin < 0:

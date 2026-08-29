@@ -8,7 +8,44 @@
     "H8", "G7", "I7", "G9", "G8", "F8", "H6",
     "H9", "G5", "J8", "F4", "E3", "F9"
   ],
-  "candidates": ["I6", "H10"],
+  "candidates": [
+    "I6", "E7", "H4", "H5", "D6", "F6",
+    "I11", "J6", "I9", "H7", "H10", "E10"
+  ],
+  "root_result_move": "E7",
+  "root_review_ranked_score_provenance": "The record contains the first five scores. Remaining candidates are kept below that recorded band solely to reproduce finalist admission order.",
+  "root_review_ranked_moves": [
+    ["I6", -9900],
+    ["E7", -9800],
+    ["H4", -11200],
+    ["H5", -18100],
+    ["D6", -18900],
+    ["F6", -20000],
+    ["I11", -21000],
+    ["J6", -22000],
+    ["I9", -23000],
+    ["H7", -24000],
+    ["H10", -890900],
+    ["E10", -900000]
+  ],
+  "root_candidate_sources": {
+    "I6": ["ordinary", "pressure_prevention"],
+    "E7": ["active_counterattack", "ordinary"],
+    "H4": ["ordinary", "quiet_prevention"],
+    "H5": ["quiet_prevention"],
+    "D6": ["active_counterattack", "ordinary"],
+    "F6": ["ordinary", "quiet_prevention"],
+    "I11": ["active_counterattack"],
+    "J6": ["ordinary"],
+    "I9": ["dual_frontier_bridge", "offensive_continuation", "ordinary"],
+    "H7": ["ordinary", "threat_frontier"],
+    "H10": ["active_counterattack", "ordinary"],
+    "E10": ["ordinary"]
+  },
+  "root_attack_priority": ["E7", "D6", "I11", "H10"],
+  "root_pressure_prevention": ["I6"],
+  "expected_unscreened_finalists": ["E7", "I6", "H7", "H4"],
+  "expected_screened_finalists": ["E7", "I6", "H7", "H10"],
   "played": "I6",
   "external_review": "H10",
   "zobrist_hash": 6601196405471089522
