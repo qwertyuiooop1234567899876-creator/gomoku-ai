@@ -1,0 +1,38 @@
+Gomoku AI V0.17.3 Native Review Lab Phase 2A
+================================================
+
+目标与边界
+----------
+- 本版只增加 Native 动态全窗口复核的只读实验工具，不接入生产
+  choose_move/search.py 决策路径。
+- 不改候选生成、PVS 生产语义、VCF/VCT、Proof、复核调度、预算或采信
+  门槛；工具输出不能被解释为 RootSafetyProbeResult 或安全证明。
+
+独立候选全窗口
+--------------
+- native-review 对每个夹具候选分别发起一次只含一个根候选的 Native ABI
+  调用，使候选之间不共享 alpha，也能从现有单 PV ABI 取得逐候选 PV。
+- Native 调用关闭内部 PVS，与 Python 动态 root-safety 探针的独立全窗口
+  语义对齐；Python 继续负责聚合完整深度层的 leader history。
+- node-limit 按每个候选调用独立计算。任一候选中断会使当前层整体无效，
+  不产生 leader，也不继续更深层，避免把半层结果包装成稳定证据。
+
+固定局面
+--------
+- 新夹具保存 V0.17.2 对 YiXin 第 21 手前的 20 手有序历史、Zobrist 哈希，
+  以及 K7/H7/K8 三个定点复核候选，不依赖 records/。
+- 本机 Native 深度 6/7/8 的 leader 依次为 K8/H7/K8，保留了 Python 已知
+  的奇偶振荡；Phase 2A 没有把外部推荐 K8 写成选着断言。
+
+等价性门禁
+----------
+- 对每个候选逐项比较 Python 与 Native 的分数、PV、节点数、TT 条目数和
+  规范化 TT 摘要；普通 Python oracle 与 Native 可移植 TT-key oracle
+  分别承担走法语义和 TT 内容门禁。
+- 增加节点中断负向测试：不完整层不得进入 leader history。
+- 本版只证明实验工具和固定深度核心的等价性，不宣称棋力改善，也不改变
+  实战选着。
+
+记录边界
+--------
+- 不恢复、生成或提交 records/ 中的历史、本机对局或分析文件。

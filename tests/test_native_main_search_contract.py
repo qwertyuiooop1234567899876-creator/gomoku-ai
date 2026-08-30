@@ -6,7 +6,7 @@ from pathlib import Path
 import random
 
 from engine.board import BLACK, WHITE, Board
-from engine.game import parse_move
+from engine.game import format_move, parse_move
 from engine.native_core import (
     MAIN_SEARCH_FLAG_PVS,
     MAIN_SEARCH_FLAG_TT,
@@ -26,6 +26,11 @@ MOVE_21_FIXTURE = (
     Path(__file__).resolve().parent
     / "positions"
     / "v01618_yixin_move21.json"
+)
+MOVE_21_REVIEW_FIXTURE = (
+    Path(__file__).resolve().parent
+    / "positions"
+    / "v0172_yixin_move21_native_review.json"
 )
 
 
@@ -88,7 +93,13 @@ def _native_tt_digest(table, board_size: int) -> int:  # type: ignore[no-untyped
     return digest
 
 
-def _python_native_key_oracle(case, coordinate: str, depth: int):  # type: ignore[no-untyped-def]
+def _python_native_key_oracle(
+    case,
+    coordinate: str,
+    depth: int,
+    *,
+    use_pvs: bool = True,
+):  # type: ignore[no-untyped-def]
     board = native_search_baseline.build_board(case)
     move = parse_move(coordinate, board.size)
     ai = _NativeKeySearchAI(
@@ -98,6 +109,7 @@ def _python_native_key_oracle(case, coordinate: str, depth: int):  # type: ignor
         threat_extension_depth=2,
         branch_candidate_limit=8,
     )
+    ai.config = replace(ai.config, use_pvs=use_pvs)
     ai._begin_move_search()
     result = ai._search_root(
         board,
@@ -255,6 +267,73 @@ class TestNativeMainSearchContract(unittest.TestCase):
                         ),
                         probe.tt_digest,
                     )
+
+    def test_native_review_matches_independent_python_oracles(self) -> None:
+        self.assertTrue(native_core.available, native_core.error)
+        case = native_search_baseline.load_case(MOVE_21_REVIEW_FIXTURE)
+        review = native_search_baseline.run_native_full_window_review(
+            case,
+            (1, 2, 3),
+            node_limit=None,
+            threat_extension_depth=2,
+            branch_candidate_limit=8,
+        )
+
+        expected_leaders: list[str] = []
+        for layer in review.layers:
+            expected_scores: list[tuple[str, int]] = []
+            for candidate in layer.candidates:
+                with self.subTest(
+                    depth=layer.requested_depth,
+                    candidate=candidate.coordinate,
+                ):
+                    standard = (
+                        native_search_baseline.run_full_window_candidate(
+                            case,
+                            candidate.coordinate,
+                            layer.requested_depth,
+                            use_pvs=False,
+                        )
+                    )
+                    ai, portable = _python_native_key_oracle(
+                        case,
+                        candidate.coordinate,
+                        layer.requested_depth,
+                        use_pvs=False,
+                    )
+                    self.assertEqual(standard.score, candidate.score)
+                    self.assertEqual(
+                        standard.principal_variation,
+                        candidate.principal_variation,
+                    )
+                    self.assertEqual(portable.score, candidate.score)
+                    self.assertEqual(
+                        tuple(
+                            format_move(*move)
+                            for move in portable.principal_variation
+                        ),
+                        candidate.principal_variation,
+                    )
+                    self.assertEqual(ai._counters.nodes, candidate.nodes)
+                    self.assertEqual(
+                        len(ai._transposition_table),
+                        candidate.tt_entries,
+                    )
+                    self.assertEqual(
+                        f"{_native_tt_digest(ai._transposition_table, case.board_size):016x}",
+                        candidate.tt_digest,
+                    )
+                    assert candidate.score is not None
+                    expected_scores.append(
+                        (candidate.coordinate, candidate.score)
+                    )
+            expected_leaders.append(
+                max(
+                    enumerate(expected_scores),
+                    key=lambda item: (item[1][1], -item[0]),
+                )[1][0]
+            )
+        self.assertEqual(tuple(expected_leaders), review.leader_history)
 
     def test_move21_reproduces_python_horizon_oscillation(self) -> None:
         case = native_search_baseline.load_case(MOVE_21_FIXTURE)

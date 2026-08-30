@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
+from pathlib import Path
 
 from engine.game import parse_move
 from engine.search import SearchAI
 from tools import native_search_baseline
+
+
+MOVE_21_REVIEW_FIXTURE = (
+    Path(__file__).resolve().parent
+    / "positions"
+    / "v0172_yixin_move21_native_review.json"
+)
 
 
 class TestNativeSearchBaseline(unittest.TestCase):
@@ -70,6 +78,52 @@ class TestNativeSearchBaseline(unittest.TestCase):
         self.assertEqual(1, run.completed_depth)
         self.assertIn(run.selected_move, case.candidates)
         self.assertEqual(2, len(run.ranked_moves))
+
+    def test_native_review_uses_independent_candidate_calls(self) -> None:
+        case = native_search_baseline.load_case(MOVE_21_REVIEW_FIXTURE)
+        run = native_search_baseline.run_native_full_window_review(
+            case,
+            (1, 2, 3),
+            node_limit=None,
+            threat_extension_depth=2,
+            branch_candidate_limit=8,
+        )
+
+        self.assertEqual(("K7", "H7", "K8"), case.candidates)
+        self.assertEqual(("H7", "K8", "H7"), run.leader_history)
+        self.assertEqual(3, run.completed_depth)
+        self.assertEqual("requested_depths_completed", run.stop_reason)
+        self.assertTrue(all(layer.completed for layer in run.layers))
+        self.assertTrue(
+            all(
+                len(candidate.principal_variation) >= 1
+                for layer in run.layers
+                for candidate in layer.candidates
+            )
+        )
+
+    def test_native_review_rejects_an_incomplete_layer(self) -> None:
+        case = native_search_baseline.load_case(MOVE_21_REVIEW_FIXTURE)
+        run = native_search_baseline.run_native_full_window_review(
+            case,
+            (8, 9),
+            node_limit=10,
+            threat_extension_depth=2,
+            branch_candidate_limit=8,
+        )
+
+        self.assertEqual((), run.leader_history)
+        self.assertEqual(0, run.completed_depth)
+        self.assertEqual("node_limit", run.stop_reason)
+        self.assertEqual(1, len(run.layers))
+        self.assertFalse(run.layers[0].completed)
+        self.assertIsNone(run.layers[0].leader)
+        self.assertTrue(
+            any(
+                candidate.status == "node_limit"
+                for candidate in run.layers[0].candidates
+            )
+        )
 
     def test_full_window_exposes_parameters_and_bounded_trace(self) -> None:
         case = native_search_baseline.load_case()

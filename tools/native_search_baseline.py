@@ -288,6 +288,49 @@ class SearchRun:
     leaf_trace_truncated: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class NativeReviewCandidateRun:
+    """One independent Native full-window root-candidate search."""
+
+    coordinate: str
+    status: str
+    completed_depth: int
+    score: int | None
+    principal_variation: tuple[str, ...]
+    nodes: int
+    elapsed_seconds: float
+    tt_entries: int
+    tt_digest: str
+    input_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class NativeReviewLayer:
+    """One complete or interrupted fixed-depth comparison layer."""
+
+    requested_depth: int
+    completed: bool
+    leader: str | None
+    candidates: tuple[NativeReviewCandidateRun, ...]
+    nodes: int
+    elapsed_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
+class NativeReviewRun:
+    """Tool-only Native review ladder; never a production safety result."""
+
+    mode: str
+    requested_depths: tuple[int, ...]
+    completed_depth: int
+    stop_reason: str
+    leader_history: tuple[str, ...]
+    layers: tuple[NativeReviewLayer, ...]
+    threat_extension_depth: int
+    branch_candidate_limit: int
+    node_limit_per_candidate: int | None
+
+
 def load_case(path: Path = DEFAULT_FIXTURE) -> BaselineCase:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("format") != "gomoku-search-baseline-v1":
@@ -434,6 +477,7 @@ def run_full_window_candidate(
     candidate_trace_limit: int = 0,
     candidate_sample_limit: int = 8,
     leaf_trace_limit: int = 0,
+    use_pvs: bool = True,
 ) -> SearchRun:
     board = build_board(case)
     before = board_state(board)
@@ -459,6 +503,7 @@ def run_full_window_candidate(
             threat_extension_depth=threat_extension_depth,
             branch_candidate_limit=branch_candidate_limit,
         )
+    ai.config = replace(ai.config, use_pvs=use_pvs)
     ai._begin_move_search()
     started_at = time.perf_counter()
     result = ai._search_root(
@@ -612,6 +657,159 @@ def run_native_pair(
         threat_extension_depth=threat_extension_depth,
         branch_candidate_limit=branch_candidate_limit,
         extensions=0,
+    )
+
+
+def run_native_full_window_review(
+    case: BaselineCase,
+    depths: tuple[int, ...],
+    *,
+    node_limit: int | None,
+    threat_extension_depth: int,
+    branch_candidate_limit: int,
+    coordinates: tuple[str, ...] | None = None,
+) -> NativeReviewRun:
+    """Compare each candidate in an isolated one-candidate Native call.
+
+    A node limit applies independently to every candidate call.  An interrupted
+    candidate makes the whole depth incomplete, so partial scores never enter
+    the leader history.
+    """
+    if not depths or any(depth < 1 for depth in depths):
+        raise ValueError("Native复核深度必须全部大于 0。")
+    selected_coordinates = case.candidates if coordinates is None else coordinates
+    if not selected_coordinates:
+        raise ValueError("Native复核至少需要一个候选。")
+    unknown = [
+        coordinate
+        for coordinate in selected_coordinates
+        if coordinate not in case.candidates
+    ]
+    if unknown:
+        raise ValueError(
+            "Native复核候选必须来自夹具：" + ", ".join(case.candidates)
+        )
+
+    board = build_board(case)
+    before = board_state(board)
+    moves = tuple(
+        parse_move(coordinate, board.size)
+        for coordinate in selected_coordinates
+    )
+    for coordinate, move in zip(selected_coordinates, moves):
+        if not board.is_empty(*move):
+            raise ValueError(f"候选点不是空位：{coordinate}")
+
+    layers: list[NativeReviewLayer] = []
+    leader_history: list[str] = []
+    completed_depth = 0
+    stop_reason = "requested_depths_completed"
+    for depth in depths:
+        candidate_runs: list[NativeReviewCandidateRun] = []
+        layer_started_at = time.perf_counter()
+        layer_completed = True
+        for coordinate, move in zip(selected_coordinates, moves):
+            started_at = time.perf_counter()
+            probe = native_core.probe_main_search_contract(
+                board,
+                case.player,
+                (move,),
+                depth=depth,
+                node_limit=node_limit,
+                branch_candidate_limit=branch_candidate_limit,
+                preselection_factor=3,
+                candidate_radius=2,
+                recent_move_count=4,
+                threat_extension_depth=threat_extension_depth,
+                use_pvs=False,
+                use_transposition_table=True,
+            )
+            elapsed = time.perf_counter() - started_at
+            if probe is None:
+                raise RuntimeError(
+                    "Native 主搜索运行库不可用："
+                    f"{native_core.error or '缺少 gn_main_search_v1'}"
+                )
+            if probe.status not in (STATUS_FOUND, STATUS_CUTOFF):
+                raise RuntimeError(
+                    f"Native 独立复核失败：status={probe.status}"
+                )
+            if probe.status == STATUS_FOUND:
+                if (
+                    probe.completed_depth != depth
+                    or probe.best_move != move
+                    or len(probe.root_scores) != 1
+                    or probe.root_scores[0][0] != move
+                    or probe.root_scores[0][1] != probe.score
+                    or not probe.principal_variation
+                    or probe.principal_variation[0] != move
+                ):
+                    raise RuntimeError("Native 独立复核返回了不完整的固定深度结果。")
+                status = "completed"
+                score: int | None = probe.score
+                variation = tuple(
+                    format_move(*item) for item in probe.principal_variation
+                )
+            else:
+                status = "node_limit"
+                score = None
+                variation = ()
+                layer_completed = False
+            candidate_runs.append(
+                NativeReviewCandidateRun(
+                    coordinate=coordinate,
+                    status=status,
+                    completed_depth=probe.completed_depth,
+                    score=score,
+                    principal_variation=variation,
+                    nodes=probe.nodes,
+                    elapsed_seconds=elapsed,
+                    tt_entries=probe.tt_entries,
+                    tt_digest=f"{probe.tt_digest:016x}",
+                    input_digest=f"{probe.input_digest:016x}",
+                )
+            )
+            if not layer_completed:
+                break
+
+        leader: str | None = None
+        if layer_completed:
+            leader = max(
+                enumerate(candidate_runs),
+                key=lambda item: (
+                    item[1].score,
+                    -item[0],
+                ),
+            )[1].coordinate
+            leader_history.append(leader)
+            completed_depth = depth
+        else:
+            stop_reason = "node_limit"
+        layers.append(
+            NativeReviewLayer(
+                requested_depth=depth,
+                completed=layer_completed,
+                leader=leader,
+                candidates=tuple(candidate_runs),
+                nodes=sum(item.nodes for item in candidate_runs),
+                elapsed_seconds=time.perf_counter() - layer_started_at,
+            )
+        )
+        if not layer_completed:
+            break
+
+    if board_state(board) != before:
+        raise RuntimeError("Native 独立复核污染了棋盘或有序历史。")
+    return NativeReviewRun(
+        mode="native_review",
+        requested_depths=depths,
+        completed_depth=completed_depth,
+        stop_reason=stop_reason,
+        leader_history=tuple(leader_history),
+        layers=tuple(layers),
+        threat_extension_depth=threat_extension_depth,
+        branch_candidate_limit=branch_candidate_limit,
+        node_limit_per_candidate=node_limit,
     )
 
 
@@ -936,6 +1134,38 @@ def print_runs(runs: Iterable[SearchRun]) -> None:
             print("       leaf_trace=truncated")
 
 
+def print_native_review(run: NativeReviewRun) -> None:
+    print(
+        f"{'Depth':>5} {'Done':>4} {'Leader':>6} {'Move':>5} "
+        f"{'Score':>11} {'Nodes':>9} {'Seconds':>9} {'Status'}"
+    )
+    print("-" * 82)
+    for layer in run.layers:
+        for index, candidate in enumerate(layer.candidates):
+            print(
+                f"{layer.requested_depth:>5} "
+                f"{('yes' if layer.completed else 'no'):>4} "
+                f"{((layer.leader or '-') if index == 0 else ''):>6} "
+                f"{candidate.coordinate:>5} "
+                f"{(candidate.score if candidate.score is not None else '-'):>11} "
+                f"{candidate.nodes:>9} "
+                f"{candidate.elapsed_seconds:>8.3f}s "
+                f"{candidate.status}"
+            )
+            print(
+                " " * 13
+                + "pv="
+                + (" ".join(candidate.principal_variation) or "-")
+                + " | tt="
+                + f"{candidate.tt_entries}/{candidate.tt_digest}"
+            )
+    print(
+        "leader_history="
+        + (" ".join(run.leader_history) or "-")
+        + f" | stop={run.stop_reason}"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="运行 Native 下沉前的第13手固定搜索基线。"
@@ -950,6 +1180,7 @@ def main() -> int:
             "dynamic-pair",
             "defense-vct",
             "native",
+            "native-review",
         ),
         default="full-window",
     )
@@ -1041,8 +1272,11 @@ def main() -> int:
         parser.error("--quiet-frontier 只能在 --mode dynamic-pair 使用。")
     if args.leaf_trace_limit and args.mode != "full-window":
         parser.error("--leaf-trace-limit 只能在 --mode full-window 使用。")
-    if args.candidate is not None and args.mode != "full-window":
-        parser.error("--candidate 只能在 --mode full-window 使用。")
+    if args.candidate is not None and args.mode not in {
+        "full-window",
+        "native-review",
+    }:
+        parser.error("--candidate 只能在 full-window/native-review 使用。")
     case = load_case(args.fixture)
     selected_coordinates = (
         case.candidates
@@ -1060,6 +1294,32 @@ def main() -> int:
             + ", ".join(case.candidates)
         )
     depths = parse_depths(args.depths)
+    if args.mode == "native-review":
+        review = run_native_full_window_review(
+            case,
+            depths,
+            node_limit=args.node_limit,
+            threat_extension_depth=args.threat_extension_depth,
+            branch_candidate_limit=args.branch_candidate_limit,
+            coordinates=selected_coordinates,
+        )
+        print(
+            f"Native full-window review | engine={ENGINE_VERSION} | "
+            f"case={case.name} | history={len(case.history)}"
+        )
+        print_native_review(review)
+        if args.json is not None:
+            report = {
+                "engine_version": ENGINE_VERSION,
+                "case": asdict(case),
+                "review": asdict(review),
+            }
+            args.json.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            print(f"JSON: {args.json}")
+        return 0
     runs: list[SearchRun] = []
     for depth in depths:
         if args.mode == "full-window":

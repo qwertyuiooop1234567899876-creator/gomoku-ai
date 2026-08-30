@@ -1,0 +1,16 @@
+{
+  "format": "gomoku-search-baseline-v1",
+  "source_engine_version": "0.17.2",
+  "board_size": 15,
+  "name": "v0172_yixin_black_move_21_native_review",
+  "player": 1,
+  "history": [
+    "H8", "H9", "G7", "I9", "G9", "I7", "G8", "G6",
+    "I8", "F8", "F10", "E11", "G11", "G10", "H12", "E9",
+    "E8", "K9", "H6", "K10"
+  ],
+  "candidates": ["K7", "H7", "K8"],
+  "played": "K7",
+  "external_review": "K8",
+  "zobrist_hash": 17324325294513090662
+}

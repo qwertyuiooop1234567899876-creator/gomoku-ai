@@ -20,6 +20,19 @@ python -B -m tools.native_search_baseline --mode iterative --depths 8 --node-lim
 python -B -m tools.native_search_baseline --mode native --depths 1-8
 ```
 
+V0.17.3 Phase 2A 另有只读的独立候选复核模式。它对每个候选分别发起
+单候选 Native ABI 调用，候选间不共享 alpha；内部 PVS 关闭，以匹配
+Python 动态 root-safety 的全窗口语义：
+
+```powershell
+python -B -m tools.native_search_baseline --fixture tests/positions/v0172_yixin_move21_native_review.json --mode native-review --depths 6-8
+```
+
+`--node-limit` 在该模式下是**每个候选调用**的独立上限。任一候选中断时，
+当前深度整层不生成 leader，并停止后续更深层。工具只输出分数、PV、节点、
+TT 摘要与逐层 leader history，不构造 `RootSafetyProbeResult`，也不进入生产
+`choose_move`。
+
 用于参数语义矩阵时，固定深度和两个候选不变，只改变主 PVS 的
 `--threat-extension-depth` 与 `--branch-candidate-limit`：
 
@@ -158,3 +171,19 @@ Python 都复现同一个固定窗口振荡：d6 选 K8、d7 选 H7、d8 再选 
 本机冷启动双候选 d8 对照：Python 32.47 秒，Native 5.30 秒（同为
 10,716 个主搜索节点；墙钟只作本机参考）。这证明整体下沉具备吞吐
 杠杆，但不能据此宣布棋力提升；生产接入和复核通道接入仍属于后续阶段。
+
+## V0.17.3 Phase 2A 结果
+
+第 21 手复核夹具将 K7、H7、K8 各自放入独立单候选 Native 调用。深度
+6/7/8 的 leader 依次为 K8/H7/K8，继续保留已知的奇偶振荡：
+
+| 深度 | K7 | H7 | K8 | leader |
+|---:|---:|---:|---:|:---|
+| 6 | -101,100 | -874,900 | -11,100 | K8 |
+| 7 | -500 | 28,100 | 3,700 | H7 |
+| 8 | -110,300 | -91,400 | -20,200 | K8 |
+
+该结果只说明 Native 能作为独立固定深度分数供应商，并未解决收敛或采信
+问题。Phase 2A 仍是工具与等价性门禁；生产 root-safety 接线、墙钟预算下
+的内部迭代加深、跨候选共享 TT，以及 `RootSafetyProbeResult` 构造均留在
+后续阶段。
