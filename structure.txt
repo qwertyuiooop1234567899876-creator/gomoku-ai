@@ -51,7 +51,7 @@ gomoku-ai/
 │   └── main_search_core.h
 ├── release_notes/
 │   ├── README.md
-│   └── V0.12.5–V0.17.3_RELEASE_NOTES.txt
+│   └── V0.12.5–V0.17.4_RELEASE_NOTES.txt
 ├── tests/
 │   ├── positions/
 │   │   ├── regression_v080.json
@@ -61,7 +61,8 @@ gomoku-ai/
 │   │   ├── v0168_yixin_move13.json
 │   │   ├── v01617_selfplay_move14.json
 │   │   ├── v01618_yixin_move21.json
-│   │   └── v0172_yixin_move21_native_review.json
+│   │   ├── v0172_yixin_move21_native_review.json
+│   │   └── v0173_selfplay_move8_boundary_confirmation.json
 │   └── test_*.py
 ├── tools/
 │   ├── __init__.py

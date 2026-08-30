@@ -70,7 +70,7 @@ ACTIVE_COUNTERATTACK_SCREEN_ALLOWANCE_SECONDS = 0.25
 
 class SearchAI(ScoringAI):
     """
-    V0.17.3 搜索 AI。
+    V0.17.4 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -181,6 +181,9 @@ class SearchAI(ScoringAI):
     V0.17.3 增加只读 Native Phase 2A 复核实验：每个根候选分别以单候选
     ABI 调用获得独立全窗口分数和 PV，再由 Python 工具聚合逐层 leader；
     生产搜索、候选、Proof/VCF 与既有根复核采信规则均保持不变。
+    V0.17.4 补齐边界第二通道的确认登记：已经通过非边界、连续稳定、
+    Proof 与 VCF 交叉检查的等窗结论，在 Final Proof 全为 UNKNOWN 时
+    不再被较弱的压力来源分数带兜底覆盖。搜索参数和复核预算保持不变。
     """
 
     def __init__(
@@ -4410,6 +4413,7 @@ class SearchAI(ScoringAI):
                 not in {
                     "equal_window",
                     "active_counterattack_safe_equal_window",
+                    "boundary_secondary_equal_window",
                 }
             )
             or not probe.rank_stable

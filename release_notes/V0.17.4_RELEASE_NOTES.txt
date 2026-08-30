@@ -1,0 +1,28 @@
+Gomoku AI V0.17.4 Boundary Confirmation Integrity
+=================================================
+
+根因
+----
+- 边界第二通道已经用非边界分数、连续稳定 leader、Proof 状态和根 VCF
+  状态完成安全核准，却没有进入根复核确认白名单。
+- Final Proof 全为 UNKNOWN 时，这个遗漏会允许较弱的压力来源分数带兜底
+  覆盖已经完成的 secondary 等窗结论。
+
+修复
+----
+- 将 boundary_secondary_equal_window 纳入既有根复核确认登记。
+- 不新增门槛：该通道仍须满足最低完成深度、连续三层 leader 稳定、普通
+  分数量纲、Proof 无冲突和根 VCF 无已证败证据。
+- 严格 Proof 与 VCF 仍可覆盖确认结论；UNKNOWN 仍保持 UNKNOWN。
+
+回归
+----
+- 固化 V0.17.3 自对弈第 8 手前的最小有序历史，以及 H9/H7 的根分和
+  boundary-secondary 证据，不依赖 records/。
+- 快速单测验证完成的 H9 secondary 确认能阻止 UNKNOWN 压力兜底改回
+  H7；既有浅层、边界夹值和严格 Proof 覆盖测试继续保留。
+
+非目标
+------
+- 不修改 65% 首 challenger 预算分配、候选池、PVS、评价、VCF/VCT、
+  Proof、Native Phase 2A 或任何搜索深度参数。

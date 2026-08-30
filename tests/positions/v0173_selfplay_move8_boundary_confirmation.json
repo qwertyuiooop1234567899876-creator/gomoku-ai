@@ -1,0 +1,23 @@
+{
+  "format": "gomoku-search-baseline-v1",
+  "source_engine_version": "0.17.3",
+  "board_size": 15,
+  "name": "selfplay_white_move_8_boundary_confirmation",
+  "player": 2,
+  "history": ["H8", "G7", "I7", "G9", "G8", "F8", "H6"],
+  "review_leader": "H9",
+  "pressure_candidate": "H7",
+  "external_review": "E7",
+  "played": "H7",
+  "root_scores": {
+    "H9": 100,
+    "H7": 0
+  },
+  "boundary_secondary_scores": {
+    "H9": -90700,
+    "H7": -90800
+  },
+  "boundary_secondary_completed_depth": 4,
+  "boundary_secondary_leader_history": ["H9", "H9", "H9", "H9"],
+  "zobrist_hash": 4144627167855511097
+}

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 import unittest
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 from engine import root_candidates
 from engine.ai import RootSafetyCandidateAnalysis
-from engine.board import BLACK, Board
+from engine.board import BLACK, WHITE, Board
+from engine.game import parse_move
 from engine.proof_search import ProofResult, ProofState
 from engine.search import SearchAI
 from engine.search_diagnostics import build_search_analysis
@@ -180,6 +183,80 @@ class TestV01613ArbitrationPipeline(unittest.TestCase):
             )
 
         self.assertEqual(leader, revised.move)
+        self.assertEqual(
+            "checked_unknown_review_confirmed",
+            ai._final_proof_selection_basis,
+        )
+        self.assertFalse(ai._final_proof_overrode_review)
+
+    def test_boundary_secondary_confirmation_blocks_unknown_pressure_tiebreak(
+        self,
+    ) -> None:
+        fixture = json.loads(
+            (
+                Path(__file__).parent
+                / "positions"
+                / "v0173_selfplay_move8_boundary_confirmation.json"
+            ).read_text(encoding="utf-8")
+        )
+        board = Board(size=fixture["board_size"])
+        for index, coordinate in enumerate(fixture["history"]):
+            board.place(
+                *parse_move(coordinate, board.size),
+                BLACK if index % 2 == 0 else WHITE,
+            )
+        self.assertEqual(fixture["zobrist_hash"], board.zobrist_hash)
+
+        leader = parse_move(fixture["review_leader"], board.size)
+        pressure = parse_move(fixture["pressure_candidate"], board.size)
+        root_scores = fixture["root_scores"]
+        secondary_scores = fixture["boundary_secondary_scores"]
+        result = RootResult(
+            leader,
+            root_scores[fixture["review_leader"]],
+            (leader,),
+            (
+                (leader, root_scores[fixture["review_leader"]]),
+                (pressure, root_scores[fixture["pressure_candidate"]]),
+            ),
+        )
+        ai = SearchAI(fixture["player"], time_limit_seconds=60.0)
+        ai.config = replace(ai.config, proof_final_candidate_limit=2)
+        ai._begin_move_search()
+        ai._root_pressure_prevention = (pressure,)
+        secondary = replace(
+            stable_probe(
+                leader,
+                pressure,
+                depth=fixture["boundary_secondary_completed_depth"],
+            ),
+            candidates=(
+                RootSafetyCandidateAnalysis(
+                    leader,
+                    secondary_scores[fixture["review_leader"]],
+                ),
+                RootSafetyCandidateAnalysis(
+                    pressure,
+                    secondary_scores[fixture["pressure_candidate"]],
+                ),
+            ),
+            leader_history=tuple(
+                parse_move(coordinate, board.size)
+                for coordinate in fixture[
+                    "boundary_secondary_leader_history"
+                ]
+            ),
+            selection_basis="boundary_secondary_equal_window",
+        )
+
+        revised = ai._apply_and_record_root_safety(result, secondary)
+        self.assertEqual(leader, revised.move)
+        self.assertEqual(leader, ai._root_review_confirmed_move)
+
+        with patch("engine.search.ProofSearch", UnknownProofSearch):
+            audited = ai._run_final_proof_audit(board, revised)
+
+        self.assertEqual(leader, audited.move)
         self.assertEqual(
             "checked_unknown_review_confirmed",
             ai._final_proof_selection_basis,
