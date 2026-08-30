@@ -70,7 +70,7 @@ ACTIVE_COUNTERATTACK_SCREEN_ALLOWANCE_SECONDS = 0.25
 
 class SearchAI(ScoringAI):
     """
-    V0.17.1 搜索 AI。
+    V0.17.2 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -175,6 +175,9 @@ class SearchAI(ScoringAI):
     V0.17.1 不改变搜索与选着语义；动态 pair 的每一次实际调用都会记录
     通道、双方着法、请求预算、真实耗时、完成深度、节点和结果状态，
     包括未形成任何完整深度结果的尝试，不再产生审计盲区。
+    V0.17.2 在单前沿防守模式中，将已经进入普通根预选、能直接阻止
+    对手单冲四且未被最强前沿覆盖的一着升级为压力预防证据；最多保留
+    一个独立 required 代表，不扩大根候选上限，也不改变 Proof/VCF。
     """
 
     def __init__(
@@ -1096,6 +1099,8 @@ class SearchAI(ScoringAI):
         prevention_moves: list[Move] = []
         pressure_prevention_moves: list[Move] = []
         pressure_prevention_evidence_moves: list[Move] = []
+        direct_pressure_prevention_moves: list[Move] = []
+        direct_pressure_prevention_evidence_moves: list[Move] = []
         offensive_continuations: list[Move] = []
         dual_frontier_bridges: list[Move] = []
         quiet_attack_frontiers: list[Move] = []
@@ -1576,6 +1581,20 @@ class SearchAI(ScoringAI):
                     limit=1,
                 )
             )
+            direct_pressure_prevention_evidence_moves = (
+                root_candidates.direct_pressure_prevention_moves(
+                    profiles=full_opponent_profiles,
+                    ordered_moves=ordinary_candidates,
+                    covered_moves=root_candidates.merge_unique(
+                        frontier_truth_moves,
+                        *(
+                            opponent_frontiers.get(move, ())
+                            for move in frontier_truth_moves
+                        ),
+                    ),
+                    limit=1,
+                )
+            )
             broad_quiet_attack_options = (
                 root_candidates.broad_quiet_attack_frontier_moves(
                     frontiers=self._root_own_frontiers,
@@ -1606,8 +1625,25 @@ class SearchAI(ScoringAI):
             broad_quiet_attack_frontiers = broad_quiet_attack_options[
                 : self.config.root_broad_quiet_attack_limit
             ]
+            direct_pressure_prevention_moves = [
+                move
+                for move in direct_pressure_prevention_evidence_moves
+                if move
+                not in root_candidates.merge_unique(
+                    frontier_candidates,
+                    counterattacks,
+                    forcing_counterattacks,
+                    pressure_prevention_moves,
+                    prevention_moves,
+                    dual_frontier_bridges,
+                    broad_quiet_attack_frontiers,
+                )
+            ]
             self._root_pressure_prevention = tuple(
-                pressure_prevention_evidence_moves
+                root_candidates.merge_unique(
+                    pressure_prevention_evidence_moves,
+                    direct_pressure_prevention_evidence_moves,
+                )
             )
             search_candidates = root_candidates.frontier_defense_moves(
                 frontier_moves=frontier_candidates,
@@ -1616,6 +1652,9 @@ class SearchAI(ScoringAI):
                 limit=self.config.root_candidate_limit,
                 forcing_counterattack_moves=forcing_counterattacks,
                 pressure_prevention_moves=pressure_prevention_moves,
+                direct_pressure_prevention_moves=(
+                    direct_pressure_prevention_moves
+                ),
                 prevention_moves=prevention_moves,
                 offensive_continuation_moves=offensive_continuations,
                 dual_frontier_moves=dual_frontier_bridges,
@@ -1639,6 +1678,9 @@ class SearchAI(ScoringAI):
                     limit=self.config.root_candidate_limit,
                     forcing_counterattack_moves=forcing_counterattacks,
                     pressure_prevention_moves=pressure_prevention_moves,
+                    direct_pressure_prevention_moves=(
+                        direct_pressure_prevention_moves
+                    ),
                     prevention_moves=prevention_moves,
                     offensive_continuation_moves=offensive_continuations,
                     dual_frontier_moves=dual_frontier_bridges,
@@ -1682,7 +1724,10 @@ class SearchAI(ScoringAI):
                 ),
                 (
                     root_candidates.CandidateSource.PRESSURE_PREVENTION,
-                    pressure_prevention_evidence_moves,
+                    root_candidates.merge_unique(
+                        pressure_prevention_evidence_moves,
+                        direct_pressure_prevention_evidence_moves,
+                    ),
                 ),
                 (
                     root_candidates.CandidateSource.QUIET_PREVENTION,
@@ -1721,6 +1766,8 @@ class SearchAI(ScoringAI):
                 tactical_reason += "；已补入安静进攻前沿"
             if broad_quiet_attack_frontiers:
                 tactical_reason += "；已补入宽安静进攻枢纽"
+            if direct_pressure_prevention_evidence_moves:
+                tactical_reason += "；已补入直接冲四预防点"
             self._root_frontier_priority = tuple(
                 root_candidates.merge_unique(
                     (

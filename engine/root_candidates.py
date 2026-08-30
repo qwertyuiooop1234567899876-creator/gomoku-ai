@@ -302,6 +302,7 @@ def frontier_defense_moves(
     limit: int,
     forcing_counterattack_moves: Iterable[Move] = (),
     pressure_prevention_moves: Iterable[Move] = (),
+    direct_pressure_prevention_moves: Iterable[Move] = (),
     prevention_moves: Iterable[Move] = (),
     offensive_continuation_moves: Iterable[Move] = (),
     dual_frontier_moves: Iterable[Move] = (),
@@ -313,6 +314,7 @@ def frontier_defense_moves(
     counterattacks = tuple(counterattack_moves)
     forcing_counterattacks = tuple(forcing_counterattack_moves)
     pressure_prevention = tuple(pressure_prevention_moves)
+    direct_pressure_prevention = tuple(direct_pressure_prevention_moves)
     prevention = tuple(prevention_moves)
     offensive_continuations = tuple(offensive_continuation_moves)
     dual_frontiers = tuple(dual_frontier_moves)
@@ -323,6 +325,7 @@ def frontier_defense_moves(
             ordinary,
             forcing_counterattacks,
             pressure_prevention,
+            direct_pressure_prevention,
             prevention,
             dual_frontiers,
             broad_quiet_attacks,
@@ -333,6 +336,7 @@ def frontier_defense_moves(
             frontier,
             forcing_counterattacks,
             pressure_prevention,
+            direct_pressure_prevention,
             prevention,
             dual_frontiers,
             broad_quiet_attacks,
@@ -500,6 +504,38 @@ def ordinary_pressure_evidence_moves(
 
     ranked.sort(reverse=True)
     return [item[-1] for item in ranked[:limit]]
+
+
+def direct_pressure_prevention_moves(
+    *,
+    profiles: dict[Move, ThreatProfile],
+    ordered_moves: Iterable[Move],
+    covered_moves: Iterable[Move] = (),
+    limit: int,
+) -> list[Move]:
+    """Keep a bounded direct block for an opponent's non-forced four.
+
+    The caller owns ordering.  This helper only supplies structural candidate
+    evidence; a single four remains neither a forced win nor a proof result.
+    """
+    if limit <= 0:
+        return []
+
+    covered = set(covered_moves)
+    selected: list[Move] = []
+    for move in dict.fromkeys(ordered_moves):
+        profile = profiles.get(move)
+        if (
+            move in covered
+            or profile is None
+            or profile.forced_win
+            or profile.four_directions < 1
+        ):
+            continue
+        selected.append(move)
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def pressure_prevention_moves(
