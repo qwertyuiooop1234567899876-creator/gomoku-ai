@@ -329,6 +329,45 @@ class NativeReviewRun:
     threat_extension_depth: int
     branch_candidate_limit: int
     node_limit_per_candidate: int | None
+    parity_state: str
+    parity_leader: str | None
+    parity_evidence_depths: tuple[int, ...]
+
+
+def assess_native_review_parity(
+    layers: Iterable[NativeReviewLayer],
+) -> tuple[str, str | None, tuple[int, ...]]:
+    """Require recent consecutive evidence from both depth parities."""
+    completed = tuple(
+        sorted(
+            (
+                layer
+                for layer in layers
+                if layer.completed and layer.leader is not None
+            ),
+            key=lambda layer: layer.requested_depth,
+        )
+    )
+    odd = tuple(layer for layer in completed if layer.requested_depth % 2)
+    even = tuple(layer for layer in completed if not layer.requested_depth % 2)
+    if len(odd) < 2 or len(even) < 2:
+        return "insufficient_parity_history", None, ()
+
+    evidence = tuple(
+        sorted((*odd[-2:], *even[-2:]), key=lambda layer: layer.requested_depth)
+    )
+    evidence_depths = tuple(layer.requested_depth for layer in evidence)
+    if (
+        odd[-1].requested_depth - odd[-2].requested_depth != 2
+        or even[-1].requested_depth - even[-2].requested_depth != 2
+        or abs(odd[-1].requested_depth - even[-1].requested_depth) != 1
+    ):
+        return "nonconsecutive_parity_history", None, evidence_depths
+
+    leaders = {layer.leader for layer in evidence}
+    if len(leaders) != 1:
+        return "parity_disagreement", None, evidence_depths
+    return "parity_consistent", evidence[-1].leader, evidence_depths
 
 
 def load_case(path: Path = DEFAULT_FIXTURE) -> BaselineCase:
@@ -800,6 +839,9 @@ def run_native_full_window_review(
 
     if board_state(board) != before:
         raise RuntimeError("Native 独立复核污染了棋盘或有序历史。")
+    parity_state, parity_leader, parity_evidence_depths = (
+        assess_native_review_parity(layers)
+    )
     return NativeReviewRun(
         mode="native_review",
         requested_depths=depths,
@@ -810,6 +852,9 @@ def run_native_full_window_review(
         threat_extension_depth=threat_extension_depth,
         branch_candidate_limit=branch_candidate_limit,
         node_limit_per_candidate=node_limit,
+        parity_state=parity_state,
+        parity_leader=parity_leader,
+        parity_evidence_depths=parity_evidence_depths,
     )
 
 
@@ -1163,6 +1208,16 @@ def print_native_review(run: NativeReviewRun) -> None:
         "leader_history="
         + (" ".join(run.leader_history) or "-")
         + f" | stop={run.stop_reason}"
+    )
+    print(
+        f"parity_state={run.parity_state} "
+        f"leader={run.parity_leader or '-'} "
+        "depths="
+        + (
+            ",".join(map(str, run.parity_evidence_depths))
+            if run.parity_evidence_depths
+            else "-"
+        )
     )
 
 

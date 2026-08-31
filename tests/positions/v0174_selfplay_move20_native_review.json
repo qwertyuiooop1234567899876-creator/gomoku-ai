@@ -1,0 +1,15 @@
+{
+  "format": "gomoku-search-baseline-v1",
+  "source_engine_version": "0.17.4",
+  "board_size": 15,
+  "name": "v0174_selfplay_white_move_20_native_review",
+  "player": 2,
+  "history": [
+    "H8", "G7", "I7", "G9", "G8", "I6", "H6", "J8", "F7", "H9",
+    "I9", "F8", "H10", "J10", "J7", "K7", "G5", "F4", "H5"
+  ],
+  "candidates": ["G6", "H4"],
+  "played": "G6",
+  "external_review": "H4",
+  "zobrist_hash": 17892021112290711892
+}

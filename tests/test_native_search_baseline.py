@@ -14,9 +14,28 @@ MOVE_21_REVIEW_FIXTURE = (
     / "positions"
     / "v0172_yixin_move21_native_review.json"
 )
+MOVE_20_REVIEW_FIXTURE = (
+    Path(__file__).resolve().parent
+    / "positions"
+    / "v0174_selfplay_move20_native_review.json"
+)
 
 
 class TestNativeSearchBaseline(unittest.TestCase):
+    @staticmethod
+    def _review_layer(
+        depth: int,
+        leader: str,
+    ) -> native_search_baseline.NativeReviewLayer:
+        return native_search_baseline.NativeReviewLayer(
+            requested_depth=depth,
+            completed=True,
+            leader=leader,
+            candidates=(),
+            nodes=0,
+            elapsed_seconds=0.0,
+        )
+
     def test_fixture_preserves_ordered_move_13_position(self) -> None:
         case = native_search_baseline.load_case()
         board = native_search_baseline.build_board(case)
@@ -101,6 +120,78 @@ class TestNativeSearchBaseline(unittest.TestCase):
                 for candidate in layer.candidates
             )
         )
+
+    def test_move_20_fixture_preserves_ordered_review_position(self) -> None:
+        case = native_search_baseline.load_case(MOVE_20_REVIEW_FIXTURE)
+        board = native_search_baseline.build_board(case)
+
+        self.assertEqual(19, len(board.move_history))
+        self.assertEqual(case.expected_hash, board.zobrist_hash)
+        self.assertEqual(2, case.player)
+        self.assertEqual(("G6", "H4"), case.candidates)
+        self.assertTrue(board.is_empty(*parse_move("G6", board.size)))
+        self.assertTrue(board.is_empty(*parse_move("H4", board.size)))
+
+    def test_parity_gate_rejects_cross_parity_disagreement(self) -> None:
+        layers = tuple(
+            self._review_layer(depth, leader)
+            for depth, leader in (
+                (5, "G6"),
+                (6, "H4"),
+                (7, "G6"),
+                (8, "H4"),
+            )
+        )
+
+        state, leader, depths = (
+            native_search_baseline.assess_native_review_parity(layers)
+        )
+
+        self.assertEqual("parity_disagreement", state)
+        self.assertIsNone(leader)
+        self.assertEqual((5, 6, 7, 8), depths)
+
+    def test_parity_gate_accepts_consecutive_cross_parity_consensus(self) -> None:
+        layers = tuple(
+            self._review_layer(depth, "H10")
+            for depth in (3, 4, 5, 6)
+        )
+
+        state, leader, depths = (
+            native_search_baseline.assess_native_review_parity(layers)
+        )
+
+        self.assertEqual("parity_consistent", state)
+        self.assertEqual("H10", leader)
+        self.assertEqual((3, 4, 5, 6), depths)
+
+    def test_parity_gate_requires_two_layers_from_each_parity(self) -> None:
+        layers = tuple(
+            self._review_layer(depth, "H10")
+            for depth in (3, 4, 5)
+        )
+
+        state, leader, depths = (
+            native_search_baseline.assess_native_review_parity(layers)
+        )
+
+        self.assertEqual("insufficient_parity_history", state)
+        self.assertIsNone(leader)
+        self.assertEqual((), depths)
+
+    def test_parity_gate_rejects_nonconsecutive_depth_evidence(self) -> None:
+        layers = tuple(
+            self._review_layer(depth, "H10")
+            for depth in (3, 4, 7, 8)
+        )
+
+        state, leader, depths = (
+            native_search_baseline.assess_native_review_parity(layers)
+        )
+
+        self.assertEqual("nonconsecutive_parity_history", state)
+        self.assertIsNone(leader)
+        self.assertEqual((3, 4, 7, 8), depths)
 
     def test_native_review_rejects_an_incomplete_layer(self) -> None:
         case = native_search_baseline.load_case(MOVE_21_REVIEW_FIXTURE)
