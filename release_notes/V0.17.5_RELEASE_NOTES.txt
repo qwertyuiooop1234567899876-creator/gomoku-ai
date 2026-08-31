@@ -1,0 +1,36 @@
+Gomoku AI V0.17.5 Root Review Parity Shadow
+===========================================
+
+目标
+----
+- 现有全窗口根复核只保存逐层 leader 顺序，没有保存对应深度，导致记录
+  无法区分普通收敛与跨奇偶深度持续振荡。
+- 本版只审计旧确认若套用奇偶一致性门禁是否会被否决，不赋予 Shadow
+  任何确认、否决或改选权限。
+
+实现
+----
+- 根安全 Probe 同时保存 `(depth, leader)` 精确历史，既有 leader_history
+  与 rank_stable 语义保持不变。
+- Native 离线工具与生产 Shadow 复用同一个纯 parity 函数；证据不足、
+  深度断档、跨奇偶分裂和奇偶一致分别记录。
+- Shadow 事件只在 `_register_root_review_confirmation` 现有总门禁成功后
+  追加，不复制确认 basis 白名单；同一手内被后续覆盖或清除的确认事件
+  仍保留在记录中。
+- JSON 与 TXT 记录包含确认着法、basis、完成深度、parity 状态、leader、
+  四层证据和 counterfactual `would_veto`。
+
+回归
+----
+- 覆盖 parity_consistent、parity_disagreement、证据不足和深度断档四态。
+- 验证 disagreement 只写审计事件，不改变旧确认或最终选择；确认被清除
+  后历史 Shadow 事件仍存在。
+- Native Phase 2B 既有工具入口继续调用共享规则，固定局面与独立全窗口
+  等价门禁保持不变。
+
+非目标
+------
+- 不新增 Native 生产调用，不增加搜索深度、节点、候选或任何预算。
+- 不修改 PVS、评价、VCF/VCT、Proof、确认白名单或 Final Proof 采信规则。
+- Production Shadow 与逐候选冷启动 Native 结果只作观察对照，不要求在
+  不同热状态与调度方式下强制一致。

@@ -17,6 +17,7 @@ from engine.ai import (
     FinalProofEmergencyVCFProvenance,
     Move,
     ProofCandidateAnalysis,
+    RootReviewParityShadowAnalysis,
     RootReviewPairAttemptAnalysis,
     RootReviewPairAnalysis,
     RootReviewUnpairedFinalistAnalysis,
@@ -85,6 +86,9 @@ class SearchDiagnosticsSource(Protocol):
     _root_review_finalists: tuple[Move, ...]
     _root_review_trace: list[tuple[str, RootSafetyProbeResult]]
     _root_review_pair_attempts: list[RootReviewPairAttemptAnalysis]
+    _root_review_parity_shadow_events: list[
+        RootReviewParityShadowAnalysis
+    ]
     _root_review_unpaired_finalists: tuple[
         RootReviewUnpairedFinalistAnalysis, ...
     ]
@@ -547,6 +551,9 @@ def build_search_analysis(
         root_review_finalists=review_finalists,
         root_review_pairs=review_pairs,
         root_review_pair_attempts=review_pair_attempts,
+        root_review_parity_shadow_events=tuple(
+            source._root_review_parity_shadow_events
+        ),
         root_review_source_coverage=review_source_coverage,
         root_review_unpaired_finalists=review_unpaired_finalists,
     )

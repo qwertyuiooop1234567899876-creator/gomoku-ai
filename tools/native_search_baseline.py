@@ -8,6 +8,7 @@ from pathlib import Path
 import time
 from typing import Iterable
 
+from engine import root_safety
 from engine.board import BLACK, WHITE, Board
 from engine.game import format_move, parse_move
 from engine.native_core import (
@@ -338,36 +339,12 @@ def assess_native_review_parity(
     layers: Iterable[NativeReviewLayer],
 ) -> tuple[str, str | None, tuple[int, ...]]:
     """Require recent consecutive evidence from both depth parities."""
-    completed = tuple(
-        sorted(
-            (
-                layer
-                for layer in layers
-                if layer.completed and layer.leader is not None
-            ),
-            key=lambda layer: layer.requested_depth,
-        )
+    state, leader, evidence = root_safety.assess_review_parity(
+        (layer.requested_depth, layer.leader)
+        for layer in layers
+        if layer.completed and layer.leader is not None
     )
-    odd = tuple(layer for layer in completed if layer.requested_depth % 2)
-    even = tuple(layer for layer in completed if not layer.requested_depth % 2)
-    if len(odd) < 2 or len(even) < 2:
-        return "insufficient_parity_history", None, ()
-
-    evidence = tuple(
-        sorted((*odd[-2:], *even[-2:]), key=lambda layer: layer.requested_depth)
-    )
-    evidence_depths = tuple(layer.requested_depth for layer in evidence)
-    if (
-        odd[-1].requested_depth - odd[-2].requested_depth != 2
-        or even[-1].requested_depth - even[-2].requested_depth != 2
-        or abs(odd[-1].requested_depth - even[-1].requested_depth) != 1
-    ):
-        return "nonconsecutive_parity_history", None, evidence_depths
-
-    leaders = {layer.leader for layer in evidence}
-    if len(leaders) != 1:
-        return "parity_disagreement", None, evidence_depths
-    return "parity_consistent", evidence[-1].leader, evidence_depths
+    return state, leader, tuple(depth for depth, _leader in evidence)
 
 
 def load_case(path: Path = DEFAULT_FIXTURE) -> BaselineCase:

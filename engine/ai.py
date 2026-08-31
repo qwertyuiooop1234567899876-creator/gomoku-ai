@@ -194,6 +194,47 @@ class RootReviewPairAttemptAnalysis:
 
 
 @dataclass(frozen=True, slots=True)
+class RootReviewParityShadowAnalysis:
+    """One legacy confirmation assessed without changing its authority."""
+
+    confirmed_move: Move
+    basis: str
+    completed_depth: int
+    parity_state: str
+    parity_leader: Move | None
+    evidence: tuple[tuple[int, Move], ...]
+    would_veto: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "confirmed_move": list(self.confirmed_move),
+            "confirmed_coordinate": format_move(*self.confirmed_move),
+            "basis": self.basis,
+            "completed_depth": self.completed_depth,
+            "parity_state": self.parity_state,
+            "parity_leader": (
+                None
+                if self.parity_leader is None
+                else list(self.parity_leader)
+            ),
+            "parity_leader_coordinate": (
+                None
+                if self.parity_leader is None
+                else format_move(*self.parity_leader)
+            ),
+            "evidence": [
+                {
+                    "depth": depth,
+                    "move": list(move),
+                    "coordinate": format_move(*move),
+                }
+                for depth, move in self.evidence
+            ],
+            "would_veto": self.would_veto,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SearchPhaseTiming:
     """Wall-clock time attributed to one top-level decision phase."""
 
@@ -453,6 +494,9 @@ class DecisionAnalysis:
     root_review_pairs: tuple[RootReviewPairAnalysis, ...] = ()
     root_review_pair_attempts: tuple[
         RootReviewPairAttemptAnalysis, ...
+    ] = ()
+    root_review_parity_shadow_events: tuple[
+        RootReviewParityShadowAnalysis, ...
     ] = ()
     root_review_source_coverage: tuple[
         tuple[str, tuple[Move, ...]], ...
@@ -747,6 +791,10 @@ class DecisionAnalysis:
             "root_review_pair_attempts": [
                 attempt.to_dict()
                 for attempt in self.root_review_pair_attempts
+            ],
+            "root_review_parity_shadow_events": [
+                event.to_dict()
+                for event in self.root_review_parity_shadow_events
             ],
             "root_review_source_coverage": [
                 {

@@ -630,6 +630,7 @@ class RootSafetyProbeResult:
     nodes: int
     candidates: tuple[RootSafetyCandidateAnalysis, ...]
     leader_history: tuple[Move, ...] = ()
+    leader_depth_history: tuple[tuple[int, Move], ...] = ()
     approved_move: Move | None = None
     selection_basis: str = "equal_window"
     requested_budget_seconds: float = 0.0

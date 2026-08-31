@@ -469,6 +469,42 @@ class GameRecorder:
                             f"channels:{channels}"
                         )
 
+                parity_events = move.analysis.get(
+                    "root_review_parity_shadow_events",
+                    [],
+                )
+                if parity_events:
+                    veto_count = sum(
+                        bool(event.get("would_veto", False))
+                        for event in parity_events
+                    )
+                    lines.append(
+                        "     "
+                        "root_review_parity_shadow="
+                        f"events:{len(parity_events)} "
+                        f"would_veto:{veto_count}"
+                    )
+                    for index, event in enumerate(parity_events, start=1):
+                        evidence_text = " -> ".join(
+                            f"d{item.get('depth', '?')}:"
+                            f"{item.get('coordinate', '?')}"
+                            for item in event.get("evidence", [])
+                        )
+                        lines.append(
+                            "     "
+                            f"parity#{index} "
+                            f"confirmed:"
+                            f"{event.get('confirmed_coordinate', '?')} "
+                            f"basis:{event.get('basis', None)} "
+                            f"depth:{event.get('completed_depth', 0)} "
+                            f"state:"
+                            f"{event.get('parity_state', 'not_checked')} "
+                            f"leader:"
+                            f"{event.get('parity_leader_coordinate', '?')} "
+                            f"veto:{event.get('would_veto', False)} "
+                            f"evidence:{evidence_text or '?'}"
+                        )
+
                 pair_attempts = move.analysis.get(
                     "root_review_pair_attempts",
                     [],

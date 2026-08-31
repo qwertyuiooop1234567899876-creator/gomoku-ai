@@ -9,6 +9,7 @@ from engine.ai import (
     FinalProofEmergencyVCFProvenance,
     Move,
     ProofCandidateAnalysis,
+    RootReviewParityShadowAnalysis,
     RootReviewPairAttemptAnalysis,
     RootReviewUnpairedFinalistAnalysis,
     RootVCFCandidateAnalysis,
@@ -70,7 +71,7 @@ ACTIVE_COUNTERATTACK_SCREEN_ALLOWANCE_SECONDS = 0.25
 
 class SearchAI(ScoringAI):
     """
-    V0.17.4 搜索 AI。
+    V0.17.5 搜索 AI。
 
     保留每个 SearchAI 独立的 100,000 条置换表。多重威胁前沿检测
     只负责把 G9 一类危险启动点提升到根节点候选前列，不再凭静态
@@ -184,6 +185,9 @@ class SearchAI(ScoringAI):
     V0.17.4 补齐边界第二通道的确认登记：已经通过非边界、连续稳定、
     Proof 与 VCF 交叉检查的等窗结论，在 Final Proof 全为 UNKNOWN 时
     不再被较弱的压力来源分数带兜底覆盖。搜索参数和复核预算保持不变。
+    V0.17.5 不改变确认或选着语义；全窗口复核额外保留每层深度与
+    leader，并在旧确认成功后用共享奇偶规则生成只读 Shadow 事件。
+    证据不足与跨奇偶分裂分别记录，均不进入 Final Proof 决策链。
     """
 
     def __init__(
@@ -303,6 +307,9 @@ class SearchAI(ScoringAI):
         ] = []
         self._root_review_pair_attempts: list[
             RootReviewPairAttemptAnalysis
+        ] = []
+        self._root_review_parity_shadow_events: list[
+            RootReviewParityShadowAnalysis
         ] = []
         self._root_boundary_secondary_attempted = False
         self._root_boundary_secondary_mate_like_hit_depths: tuple[
@@ -540,6 +547,7 @@ class SearchAI(ScoringAI):
         self._root_review_finalists = ()
         self._root_review_trace.clear()
         self._root_review_pair_attempts.clear()
+        self._root_review_parity_shadow_events.clear()
         self._root_boundary_secondary_attempted = False
         self._root_boundary_secondary_mate_like_hit_depths = ()
         self._root_boundary_secondary_final_dimension_recovered = False
@@ -4187,6 +4195,7 @@ class SearchAI(ScoringAI):
         )
         latest: tuple[RootSafetyCandidateAnalysis, ...] = ()
         leader_history: list[Move] = []
+        leader_depth_history: list[tuple[int, Move]] = []
         mate_like_hit_depths: list[int] = []
         final_contains_mate_like = False
         probe_completed_depth = 0
@@ -4283,14 +4292,15 @@ class SearchAI(ScoringAI):
             final_contains_mate_like = contains_mate_like
             probe_completed_depth = depth
             if credible_score_margin is None:
-                leader_history.append(ranked[0].move)
+                layer_leader = ranked[0].move
             else:
-                credible_leader = root_review.credible_layer_leader(
+                layer_leader = root_review.credible_layer_leader(
                     ranked,
                     score_margin=credible_score_margin,
                 )
-                if credible_leader is not None:
-                    leader_history.append(credible_leader)
+            if layer_leader is not None:
+                leader_history.append(layer_leader)
+                leader_depth_history.append((depth, layer_leader))
 
             if (
                 depth >= stable_depth
@@ -4314,6 +4324,7 @@ class SearchAI(ScoringAI):
             nodes=probe._counters.nodes,
             candidates=latest,
             leader_history=tuple(leader_history),
+            leader_depth_history=tuple(leader_depth_history),
             requested_budget_seconds=budget_seconds,
             mate_like_hit_depths=tuple(mate_like_hit_depths),
             final_dimension_recovered=(
@@ -4428,6 +4439,25 @@ class SearchAI(ScoringAI):
         self._root_review_confirmed_rank_stable = probe.rank_stable
         self._root_review_confirmed_boundary = (
             root_review.has_horizon_boundary(probe.candidates)
+        )
+        parity_state, parity_leader, evidence = (
+            root_safety.assess_review_parity(
+                probe.leader_depth_history
+            )
+        )
+        self._root_review_parity_shadow_events.append(
+            RootReviewParityShadowAnalysis(
+                confirmed_move=result.move,
+                basis=probe.selection_basis,
+                completed_depth=probe.completed_depth,
+                parity_state=parity_state,
+                parity_leader=parity_leader,
+                evidence=evidence,
+                would_veto=(
+                    parity_state != "parity_consistent"
+                    or parity_leader != result.move
+                ),
+            )
         )
 
     def _run_defense_vct_probe(

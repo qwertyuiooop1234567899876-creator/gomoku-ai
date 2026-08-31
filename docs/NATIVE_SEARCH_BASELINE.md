@@ -187,3 +187,15 @@ Python 都复现同一个固定窗口振荡：d6 选 K8、d7 选 H7、d8 再选 
 问题。Phase 2A 仍是工具与等价性门禁；生产 root-safety 接线、墙钟预算下
 的内部迭代加深、跨候选共享 TT，以及 `RootSafetyProbeResult` 构造均留在
 后续阶段。
+
+## V0.17.5 Phase 2B parity shadow
+
+Native 独立复核与生产 Python Probe 现在复用同一套奇偶一致性判定，但
+继续保留不同的证据生成方式：Native 工具逐候选、逐深度冷启动，生产
+Probe 则在一次有界复核中复用实例状态。两边结果只作观察对照，不要求
+在不同热状态与调度方式下强制一致。
+
+生产 Probe 会为既有逐层 leader 同时记录真实深度。旧确认通过原有总门禁
+后生成只读 Shadow 事件，区分 parity_consistent、parity_disagreement、
+insufficient_parity_history 和 nonconsecutive_parity_history。Shadow 不
+发起额外 Native 搜索，也不参与确认、Final Proof 或最终选着。

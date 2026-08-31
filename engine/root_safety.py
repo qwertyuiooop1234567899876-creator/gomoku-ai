@@ -9,9 +9,10 @@ clock, transposition-table, or PVS dependencies.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
+from typing import TypeVar
 
 from engine.ai import Move, RootVCFCandidateAnalysis
 from engine.board import Board
@@ -31,6 +32,7 @@ FindVCF = Callable[
 ]
 NodeCount = Callable[[], int]
 Clock = Callable[[], float]
+ReviewLeader = TypeVar("ReviewLeader")
 
 
 class RootCandidateSafety(str, Enum):
@@ -443,6 +445,36 @@ def rank_is_stable(root_history: list[RootResult]) -> bool:
         result.move == recent[-1].move
         for result in recent[:-1]
     )
+
+
+def assess_review_parity(
+    depth_leaders: Iterable[tuple[int, ReviewLeader]],
+) -> tuple[
+    str,
+    ReviewLeader | None,
+    tuple[tuple[int, ReviewLeader], ...],
+]:
+    """Require recent consecutive leader evidence from both depth parities."""
+    completed = tuple(sorted(depth_leaders, key=lambda item: item[0]))
+    odd = tuple(item for item in completed if item[0] % 2)
+    even = tuple(item for item in completed if not item[0] % 2)
+    if len(odd) < 2 or len(even) < 2:
+        return "insufficient_parity_history", None, ()
+
+    evidence = tuple(
+        sorted((*odd[-2:], *even[-2:]), key=lambda item: item[0])
+    )
+    if (
+        odd[-1][0] - odd[-2][0] != 2
+        or even[-1][0] - even[-2][0] != 2
+        or abs(odd[-1][0] - even[-1][0]) != 1
+    ):
+        return "nonconsecutive_parity_history", None, evidence
+
+    leaders = {leader for _depth, leader in evidence}
+    if len(leaders) != 1:
+        return "parity_disagreement", None, evidence
+    return "parity_consistent", evidence[-1][1], evidence
 
 
 def trigger(
