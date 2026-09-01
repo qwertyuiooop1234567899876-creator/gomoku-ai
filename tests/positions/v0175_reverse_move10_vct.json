@@ -1,0 +1,14 @@
+{
+  "format": "gomoku-search-baseline-v1",
+  "source_engine_version": "0.17.5",
+  "board_size": 15,
+  "name": "v0175_reverse_white_move_10_vct",
+  "player": 2,
+  "history": [
+    "H8", "G7", "I8", "G8", "G9", "I7", "H9", "H7", "J7"
+  ],
+  "candidates": ["G10", "K6"],
+  "played": "G10",
+  "external_review": "unresolved",
+  "zobrist_hash": 2816463581762284476
+}
