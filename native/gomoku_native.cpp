@@ -1,10 +1,13 @@
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "gomoku_native.h"
 
 #if defined(_WIN32)
 #define GN_EXPORT extern "C" __declspec(dllexport)
@@ -587,5 +590,246 @@ GN_EXPORT int gn_find_vcf(
     if (static_cast<int>(line.size()) > output_capacity) return STATUS_INVALID;
     for (std::size_t index = 0; index < line.size(); ++index)
         output_indices[index] = line[index].index(size);
+    return status;
+}
+
+GN_EXPORT int gn_classify_defenses_v1(
+    const GNDefenseClassificationRequestV1* request,
+    GNDefenseClassificationResultV1* result
+) {
+    if (request == nullptr || result == nullptr
+        || request->struct_size < sizeof(GNDefenseClassificationRequestV1)
+        || result->struct_size < sizeof(GNDefenseClassificationResultV1)
+        || request->schema_version != GN_DEFENSE_CLASSIFICATION_SCHEMA_V1
+        || result->schema_version != GN_DEFENSE_CLASSIFICATION_SCHEMA_V1
+        || !valid_input(request->cells, request->board_size, request->attacker)
+        || request->continuation_count < 0 || request->counter_win_count < 0
+        || (request->continuation_count > 0 && request->continuations == nullptr)
+        || (request->counter_win_count > 0 && request->counter_wins == nullptr)) {
+        return STATUS_INVALID;
+    }
+
+    const int size = request->board_size;
+    const int cell_count = size * size;
+    auto valid_index = [cell_count](int encoded) noexcept {
+        return encoded >= 0 && encoded < cell_count;
+    };
+    Board board(request->cells, size);
+    for (int index = 0; index < request->continuation_count; ++index) {
+        const auto& continuation = request->continuations[index];
+        if (!valid_index(continuation.move)
+            || !board.empty(continuation.move / size, continuation.move % size)
+            || continuation.winning_point_count < 0
+            || (continuation.winning_point_count > 0
+                && continuation.winning_points == nullptr)) {
+            return STATUS_INVALID;
+        }
+        for (int point = 0; point < continuation.winning_point_count; ++point) {
+            if (!valid_index(continuation.winning_points[point])) {
+                return STATUS_INVALID;
+            }
+        }
+    }
+    std::unordered_set<int> counter_win_set;
+    for (int index = 0; index < request->counter_win_count; ++index) {
+        const int encoded = request->counter_wins[index];
+        if (!valid_index(encoded)
+            || !board.empty(encoded / size, encoded % size)) {
+            return STATUS_INVALID;
+        }
+        counter_win_set.insert(encoded);
+    }
+
+    struct Witness {
+        Move defense;
+        Move continuation;
+        bool immediate = false;
+        std::vector<Move> winning_points;
+    };
+    std::vector<Move> required;
+    std::vector<Witness> refutations;
+    std::vector<Move> unclassified;
+    const std::vector<Move> legal_replies = board.legal_moves();
+    int processed = 0;
+    int status = GN_DEFENSE_CLASSIFICATION_COMPLETE;
+    int cutoff_reason = GN_DEFENSE_CUTOFF_NONE;
+
+    if (request->continuation_count == 0) {
+        unclassified = legal_replies;
+    } else {
+        const int defender = request->attacker == BLACK ? WHITE : BLACK;
+        const auto deadline = std::chrono::steady_clock::now()
+            + std::chrono::milliseconds(std::max(0, request->timeout_ms));
+        for (std::size_t reply_index = 0;
+             reply_index < legal_replies.size();
+             ++reply_index) {
+            if (request->timeout_ms >= 0
+                && std::chrono::steady_clock::now() >= deadline) {
+                status = GN_DEFENSE_CLASSIFICATION_CUTOFF;
+                cutoff_reason = GN_DEFENSE_CUTOFF_TIMEOUT;
+                unclassified.insert(
+                    unclassified.end(),
+                    legal_replies.begin() + static_cast<std::ptrdiff_t>(reply_index),
+                    legal_replies.end()
+                );
+                break;
+            }
+            if (request->reply_limit >= 0
+                && processed >= request->reply_limit) {
+                status = GN_DEFENSE_CLASSIFICATION_CUTOFF;
+                cutoff_reason = GN_DEFENSE_CUTOFF_REPLY_LIMIT;
+                unclassified.insert(
+                    unclassified.end(),
+                    legal_replies.begin() + static_cast<std::ptrdiff_t>(reply_index),
+                    legal_replies.end()
+                );
+                break;
+            }
+
+            const Move defense = legal_replies[reply_index];
+            ++processed;
+            if (counter_win_set.find(defense.index(size))
+                != counter_win_set.end()) {
+                continue;
+            }
+
+            bool found = false;
+            Witness witness;
+            if (counter_win_set.empty()
+                && !board.has_local_support(defense, defender, 3)) {
+                for (int index = 0; index < request->continuation_count; ++index) {
+                    const auto& continuation = request->continuations[index];
+                    bool blocked = defense.index(size) == continuation.move;
+                    for (int point = 0;
+                         !blocked && point < continuation.winning_point_count;
+                         ++point) {
+                        blocked = defense.index(size)
+                            == continuation.winning_points[point];
+                    }
+                    if (blocked) continue;
+                    witness.defense = defense;
+                    witness.continuation = {
+                        continuation.move / size,
+                        continuation.move % size,
+                    };
+                    witness.immediate = continuation.immediate_win != 0;
+                    witness.winning_points.reserve(
+                        static_cast<std::size_t>(continuation.winning_point_count)
+                    );
+                    for (int point = 0;
+                         point < continuation.winning_point_count;
+                         ++point) {
+                        const int encoded = continuation.winning_points[point];
+                        witness.winning_points.push_back(
+                            {encoded / size, encoded % size}
+                        );
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                refutations.push_back(std::move(witness));
+                continue;
+            }
+
+            board.place(defense, defender);
+            if (!board.check_win(defense)) {
+                for (int index = 0; index < request->continuation_count; ++index) {
+                    const auto& continuation = request->continuations[index];
+                    const Move continuation_move{
+                        continuation.move / size,
+                        continuation.move % size,
+                    };
+                    if (!board.empty(
+                            continuation_move.row,
+                            continuation_move.column)) {
+                        continue;
+                    }
+                    board.place(continuation_move, request->attacker);
+                    if (board.check_win(continuation_move)) {
+                        witness = {
+                            defense,
+                            continuation_move,
+                            true,
+                            {continuation_move},
+                        };
+                        found = true;
+                    } else if (board.winning_moves(defender).empty()) {
+                        std::vector<Move> winning_points =
+                            board.winning_moves(request->attacker);
+                        if (winning_points.size() >= 2) {
+                            witness = {
+                                defense,
+                                continuation_move,
+                                false,
+                                std::move(winning_points),
+                            };
+                            found = true;
+                        }
+                    }
+                    board.undo();
+                    if (found) break;
+                }
+            }
+            board.undo();
+
+            if (found) refutations.push_back(std::move(witness));
+            else required.push_back(defense);
+        }
+    }
+
+    int winning_point_count = 0;
+    for (const Witness& witness : refutations) {
+        winning_point_count += static_cast<int>(witness.winning_points.size());
+    }
+    result->status = status;
+    result->cutoff_reason = cutoff_reason;
+    result->legal_reply_count = static_cast<int>(legal_replies.size());
+    result->processed_reply_count = processed;
+    result->coverage_complete = (
+        status == GN_DEFENSE_CLASSIFICATION_COMPLETE
+        && request->continuation_count > 0
+    );
+    result->analysis_completed = status == GN_DEFENSE_CLASSIFICATION_COMPLETE;
+    result->required_count = static_cast<int>(required.size());
+    result->refutation_count = static_cast<int>(refutations.size());
+    result->unclassified_count = static_cast<int>(unclassified.size());
+    result->winning_point_count = winning_point_count;
+    if ((result->required_count > 0
+            && (result->required_defenses == nullptr
+                || result->required_capacity < result->required_count))
+        || (result->refutation_count > 0
+            && (result->refutations == nullptr
+                || result->refutation_capacity < result->refutation_count))
+        || (result->unclassified_count > 0
+            && (result->unclassified_replies == nullptr
+                || result->unclassified_capacity < result->unclassified_count))
+        || (winning_point_count > 0
+            && (result->refutation_winning_points == nullptr
+                || result->winning_point_capacity < winning_point_count))) {
+        return GN_DEFENSE_BUFFER_TOO_SMALL;
+    }
+
+    for (std::size_t index = 0; index < required.size(); ++index) {
+        result->required_defenses[index] = required[index].index(size);
+    }
+    int point_offset = 0;
+    for (std::size_t index = 0; index < refutations.size(); ++index) {
+        const Witness& witness = refutations[index];
+        result->refutations[index] = {
+            witness.defense.index(size),
+            witness.continuation.index(size),
+            witness.immediate ? 1 : 0,
+            point_offset,
+            static_cast<int>(witness.winning_points.size()),
+        };
+        for (const Move point : witness.winning_points) {
+            result->refutation_winning_points[point_offset++] = point.index(size);
+        }
+    }
+    for (std::size_t index = 0; index < unclassified.size(); ++index) {
+        result->unclassified_replies[index] = unclassified[index].index(size);
+    }
     return status;
 }

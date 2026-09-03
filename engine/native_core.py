@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Sequence
 
 if TYPE_CHECKING:
     from engine.board import Board
+    from engine.threats import ThreatContinuation
 
 Move = tuple[int, int]
 ABI_VERSION = 1
@@ -19,6 +20,12 @@ STATUS_MAIN_SEARCH_UNSUPPORTED = -2
 MAIN_SEARCH_SCHEMA_VERSION = 1
 MAIN_SEARCH_FLAG_PVS = 1 << 0
 MAIN_SEARCH_FLAG_TT = 1 << 1
+DEFENSE_CLASSIFICATION_SCHEMA_VERSION = 1
+DEFENSE_CLASSIFICATION_COMPLETE = 1
+DEFENSE_CLASSIFICATION_CUTOFF = 2
+DEFENSE_CUTOFF_NONE = 0
+DEFENSE_CUTOFF_TIMEOUT = 1
+DEFENSE_CUTOFF_REPLY_LIMIT = 2
 MIN_BOARD_SIZE = 5
 MAX_BOARD_SIZE = 25
 
@@ -45,6 +52,51 @@ class NativeVCFResult:
     @property
     def cutoff(self) -> bool:
         return self.status == STATUS_CUTOFF
+
+
+@dataclass(frozen=True, slots=True)
+class NativeDefenseRefutation:
+    defense_move: Move
+    continuation_move: Move
+    continuation_is_immediate: bool
+    winning_points: tuple[Move, ...] = ()
+
+    @property
+    def signature(self) -> tuple[object, ...]:
+        return (
+            self.defense_move,
+            self.continuation_move,
+            self.continuation_is_immediate,
+            self.winning_points,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class NativeDefenseClassification:
+    required_defenses: tuple[Move, ...]
+    counter_wins: tuple[Move, ...]
+    refutations: tuple[NativeDefenseRefutation, ...]
+    unclassified_replies: tuple[Move, ...]
+    legal_reply_count: int
+    refuted_reply_count: int
+    coverage_complete: bool
+    analysis_completed: bool
+    status: int
+    cutoff_reason: int
+    processed_reply_count: int
+
+    @property
+    def signature(self) -> tuple[object, ...]:
+        return (
+            self.required_defenses,
+            self.counter_wins,
+            tuple(item.signature for item in self.refutations),
+            self.unclassified_replies,
+            self.legal_reply_count,
+            self.refuted_reply_count,
+            self.coverage_complete,
+            self.analysis_completed,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,12 +167,73 @@ class _MainSearchResultV1(ctypes.Structure):
     ]
 
 
+class _DefenseContinuationV1(ctypes.Structure):
+    _fields_ = [
+        ("move", ctypes.c_int32),
+        ("immediate_win", ctypes.c_int32),
+        ("winning_points", ctypes.POINTER(ctypes.c_int32)),
+        ("winning_point_count", ctypes.c_int32),
+    ]
+
+
+class _DefenseRefutationV1(ctypes.Structure):
+    _fields_ = [
+        ("defense_move", ctypes.c_int32),
+        ("continuation_move", ctypes.c_int32),
+        ("continuation_is_immediate", ctypes.c_int32),
+        ("winning_point_offset", ctypes.c_int32),
+        ("winning_point_count", ctypes.c_int32),
+    ]
+
+
+class _DefenseClassificationRequestV1(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("schema_version", ctypes.c_uint32),
+        ("cells", ctypes.POINTER(ctypes.c_uint8)),
+        ("board_size", ctypes.c_int32),
+        ("attacker", ctypes.c_int32),
+        ("continuations", ctypes.POINTER(_DefenseContinuationV1)),
+        ("continuation_count", ctypes.c_int32),
+        ("counter_wins", ctypes.POINTER(ctypes.c_int32)),
+        ("counter_win_count", ctypes.c_int32),
+        ("reply_limit", ctypes.c_int32),
+        ("timeout_ms", ctypes.c_int32),
+    ]
+
+
+class _DefenseClassificationResultV1(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("schema_version", ctypes.c_uint32),
+        ("status", ctypes.c_int32),
+        ("cutoff_reason", ctypes.c_int32),
+        ("legal_reply_count", ctypes.c_int32),
+        ("processed_reply_count", ctypes.c_int32),
+        ("coverage_complete", ctypes.c_int32),
+        ("analysis_completed", ctypes.c_int32),
+        ("required_defenses", ctypes.POINTER(ctypes.c_int32)),
+        ("required_capacity", ctypes.c_int32),
+        ("required_count", ctypes.c_int32),
+        ("refutations", ctypes.POINTER(_DefenseRefutationV1)),
+        ("refutation_capacity", ctypes.c_int32),
+        ("refutation_count", ctypes.c_int32),
+        ("unclassified_replies", ctypes.POINTER(ctypes.c_int32)),
+        ("unclassified_capacity", ctypes.c_int32),
+        ("unclassified_count", ctypes.c_int32),
+        ("refutation_winning_points", ctypes.POINTER(ctypes.c_int32)),
+        ("winning_point_capacity", ctypes.c_int32),
+        ("winning_point_count", ctypes.c_int32),
+    ]
+
+
 class NativeCore:
     """Version-independent C ABI wrapper with a safe Python fallback path."""
 
     def __init__(self) -> None:
         self._library: ctypes.CDLL | None = None
         self._main_search_available = False
+        self._defense_classification_available = False
         self._path: Path | None = None
         self._error: str | None = None
         self._load()
@@ -144,6 +257,9 @@ class NativeCore:
             "path": None if self._path is None else str(self._path),
             "error": self._error,
             "main_search_available": self._main_search_available,
+            "defense_classification_available": (
+                self._defense_classification_available
+            ),
         }
 
     def _load(self) -> None:
@@ -210,6 +326,15 @@ class NativeCore:
                 # production kernels stay available while the new coarse
                 # search capability is compiled and verified independently.
                 self._main_search_available = False
+            try:
+                library.gn_classify_defenses_v1.argtypes = [
+                    ctypes.POINTER(_DefenseClassificationRequestV1),
+                    ctypes.POINTER(_DefenseClassificationResultV1),
+                ]
+                library.gn_classify_defenses_v1.restype = ctypes.c_int
+                self._defense_classification_available = True
+            except AttributeError:
+                self._defense_classification_available = False
         except (AttributeError, OSError) as exc:
             self._error = f"原生库加载失败：{exc}"
             return
@@ -386,6 +511,179 @@ class NativeCore:
         if count != len(encoded):
             raise RuntimeError("NativeCore批量反击支撑计算失败")
         return tuple(bool(output[index]) for index in range(count))
+
+    def classify_defenses(
+        self,
+        board: Board,
+        attacker: int,
+        continuations: Sequence[ThreatContinuation],
+        counter_wins: Sequence[Move],
+        *,
+        reply_limit: int | None = None,
+        timeout_seconds: float | None = None,
+    ) -> NativeDefenseClassification | None:
+        """Classify replies without changing the board or production policy."""
+        library = self._library
+        if (
+            library is None
+            or not self._defense_classification_available
+            or not self._supports_board(board)
+        ):
+            return None
+        if reply_limit is not None and reply_limit < 0:
+            raise ValueError("reply_limit 不能小于 0")
+        if timeout_seconds is not None and timeout_seconds < 0:
+            raise ValueError("timeout_seconds 不能小于 0")
+
+        grid = self._grid(board)
+        winning_point_arrays: list[ctypes.Array[ctypes.c_int32]] = []
+        native_continuations: list[_DefenseContinuationV1] = []
+        for continuation in continuations:
+            encoded_points = tuple(
+                row * board.size + column
+                for row, column in continuation.winning_points
+            )
+            if encoded_points:
+                point_array = (ctypes.c_int32 * len(encoded_points))(
+                    *encoded_points
+                )
+                winning_point_arrays.append(point_array)
+                point_pointer = ctypes.cast(
+                    point_array,
+                    ctypes.POINTER(ctypes.c_int32),
+                )
+            else:
+                point_pointer = ctypes.POINTER(ctypes.c_int32)()
+            native_continuations.append(
+                _DefenseContinuationV1(
+                    move=(
+                        continuation.move[0] * board.size
+                        + continuation.move[1]
+                    ),
+                    immediate_win=int(continuation.immediate_win),
+                    winning_points=point_pointer,
+                    winning_point_count=len(encoded_points),
+                )
+            )
+        if native_continuations:
+            continuation_array = (
+                _DefenseContinuationV1 * len(native_continuations)
+            )(*native_continuations)
+            continuation_pointer = ctypes.cast(
+                continuation_array,
+                ctypes.POINTER(_DefenseContinuationV1),
+            )
+        else:
+            continuation_array = None
+            continuation_pointer = ctypes.POINTER(_DefenseContinuationV1)()
+
+        encoded_counters = tuple(
+            row * board.size + column for row, column in counter_wins
+        )
+        if encoded_counters:
+            counter_array = (ctypes.c_int32 * len(encoded_counters))(
+                *encoded_counters
+            )
+            counter_pointer = ctypes.cast(
+                counter_array,
+                ctypes.POINTER(ctypes.c_int32),
+            )
+        else:
+            counter_array = None
+            counter_pointer = ctypes.POINTER(ctypes.c_int32)()
+
+        capacity = max(1, board.empty_count)
+        required_output = (ctypes.c_int32 * capacity)()
+        refutation_output = (_DefenseRefutationV1 * capacity)()
+        unclassified_output = (ctypes.c_int32 * capacity)()
+        point_capacity = max(1, board.empty_count * board.empty_count)
+        refutation_points = (ctypes.c_int32 * point_capacity)()
+        request = _DefenseClassificationRequestV1(
+            struct_size=ctypes.sizeof(_DefenseClassificationRequestV1),
+            schema_version=DEFENSE_CLASSIFICATION_SCHEMA_VERSION,
+            cells=grid,
+            board_size=board.size,
+            attacker=attacker,
+            continuations=continuation_pointer,
+            continuation_count=len(native_continuations),
+            counter_wins=counter_pointer,
+            counter_win_count=len(encoded_counters),
+            reply_limit=-1 if reply_limit is None else reply_limit,
+            timeout_ms=(
+                -1
+                if timeout_seconds is None
+                else int(timeout_seconds * 1000)
+            ),
+        )
+        result = _DefenseClassificationResultV1(
+            struct_size=ctypes.sizeof(_DefenseClassificationResultV1),
+            schema_version=DEFENSE_CLASSIFICATION_SCHEMA_VERSION,
+            required_defenses=required_output,
+            required_capacity=capacity,
+            refutations=refutation_output,
+            refutation_capacity=capacity,
+            unclassified_replies=unclassified_output,
+            unclassified_capacity=capacity,
+            refutation_winning_points=refutation_points,
+            winning_point_capacity=point_capacity,
+        )
+        status = library.gn_classify_defenses_v1(
+            ctypes.byref(request),
+            ctypes.byref(result),
+        )
+        if status not in {
+            DEFENSE_CLASSIFICATION_COMPLETE,
+            DEFENSE_CLASSIFICATION_CUTOFF,
+        }:
+            raise RuntimeError(
+                f"NativeCore防守分类失败：status={status}"
+            )
+
+        def decode(encoded: int) -> Move:
+            return encoded // board.size, encoded % board.size
+
+        refutations = tuple(
+            NativeDefenseRefutation(
+                defense_move=decode(refutation_output[index].defense_move),
+                continuation_move=decode(
+                    refutation_output[index].continuation_move
+                ),
+                continuation_is_immediate=bool(
+                    refutation_output[index].continuation_is_immediate
+                ),
+                winning_points=tuple(
+                    decode(
+                        refutation_points[
+                            refutation_output[index].winning_point_offset
+                            + point
+                        ]
+                    )
+                    for point in range(
+                        refutation_output[index].winning_point_count
+                    )
+                ),
+            )
+            for index in range(result.refutation_count)
+        )
+        return NativeDefenseClassification(
+            required_defenses=tuple(
+                decode(required_output[index])
+                for index in range(result.required_count)
+            ),
+            counter_wins=tuple(counter_wins),
+            refutations=refutations,
+            unclassified_replies=tuple(
+                decode(unclassified_output[index])
+                for index in range(result.unclassified_count)
+            ),
+            legal_reply_count=result.legal_reply_count,
+            refuted_reply_count=result.refutation_count,
+            coverage_complete=bool(result.coverage_complete),
+            analysis_completed=bool(result.analysis_completed),
+            status=result.status,
+            cutoff_reason=result.cutoff_reason,
+            processed_reply_count=result.processed_reply_count,
+        )
 
     def find_vcf(
         self,
