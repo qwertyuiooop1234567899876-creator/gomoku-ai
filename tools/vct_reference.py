@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURE = (
     ROOT / "tests" / "positions" / "v0175_reverse_move10_vct.json"
 )
-DIAGNOSTIC_SCHEMA_VERSION = "1.0"
+DIAGNOSTIC_SCHEMA_VERSION = "2.0"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,20 @@ class VCTReferenceCase:
     history: tuple[str, ...]
     candidates: tuple[str, ...]
     expected_hash: int
+
+
+@dataclass(frozen=True, slots=True)
+class VCTRunConfig:
+    seconds_per_pass: float
+    nodes_per_pass: int
+    passes: int
+    max_attacker_moves: int
+    max_quiet_frontiers: int
+    max_quiet_attacker_moves: int
+    vcf_max_attacker_moves: int
+    use_vcf_oracle: bool
+    candidate_limit: int
+    frontier_scan_limit: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +66,7 @@ class VCTCandidateResult:
     nodes: int
     transposition_hits: int
     proof_table_stats: ProofTableStats
+    cumulative_proof_table_stats: ProofTableStats
     distinct_query_keys: int
     repeated_queries: int
     query_hotspots: VCTQueryHotspotAnalysis
@@ -71,6 +86,7 @@ class VCTReferenceRun:
     case_name: str
     player: int
     attacker: int
+    config: VCTRunConfig
     candidates: tuple[VCTCandidateResult, ...]
 
 
@@ -129,6 +145,7 @@ class VCTReentryPass:
 class VCTReentryComparison:
     case_name: str
     coordinate: str
+    config: VCTRunConfig
     total_node_budget: int
     nodes_per_warm_pass: int
     cold_result: VCTCandidateResult
@@ -258,7 +275,11 @@ class _AuditedProofSearch(ProofSearch):
             if frame.first_proven_loss_move is None:
                 frame.first_proven_loss_move = result.best_move
 
-        cutoff_reason = self._budget_cutoff_reason()
+        cutoff_reason = (
+            result.cutoff_reason
+            if result.cutoff_reason in {"node_limit", "deadline"}
+            else None
+        )
         loop_observed = bool(frame.examined_moves) or (
             cutoff_reason is not None and bool(defenses)
         )
@@ -291,17 +312,16 @@ class _AuditedProofSearch(ProofSearch):
             )
             if direct is not None:
                 self._mark_examined(*direct)
-            cutoff_reason = self._budget_cutoff_reason()
-            if cutoff_reason is not None:
-                failure_reason = cutoff_reason
-            elif kwargs["remaining_attacker_moves"] <= 0:
+            if kwargs["remaining_attacker_moves"] <= 0:
                 failure_reason = "attacker_depth_limit"
             elif not kwargs["plan"]:
                 failure_reason = "empty_plan"
+            elif self._nodes >= self.budget.max_nodes:
+                failure_reason = "node_limit"
             else:
-                failure_reason = "strict_revalidation_failed"
+                failure_reason = "strict_revalidation_failed_or_deadline"
         else:
-            failure_reason = "strict_revalidation_failed"
+            failure_reason = "strict_revalidation_failed_or_deadline"
 
         self._replay_depth += 1
         try:
@@ -535,7 +555,8 @@ def _run_candidate(
             ),
             nodes=proof.nodes,
             transposition_hits=proof.transposition_hits,
-            proof_table_stats=table_stats,
+            proof_table_stats=table_delta,
+            cumulative_proof_table_stats=table_stats,
             distinct_query_keys=len(query_keys),
             repeated_queries=repeated_queries,
             query_hotspots=query_hotspots,
@@ -599,6 +620,18 @@ def run_reference(
         case_name=case.name,
         player=case.player,
         attacker=attacker,
+        config=VCTRunConfig(
+            seconds_per_pass=seconds_per_candidate,
+            nodes_per_pass=max_nodes,
+            passes=1,
+            max_attacker_moves=max_attacker_moves,
+            max_quiet_frontiers=max_quiet_frontiers,
+            max_quiet_attacker_moves=max_quiet_attacker_moves,
+            vcf_max_attacker_moves=vcf_max_attacker_moves,
+            use_vcf_oracle=True,
+            candidate_limit=candidate_limit,
+            frontier_scan_limit=frontier_scan_limit,
+        ),
         candidates=tuple(results),
     )
 
@@ -697,6 +730,18 @@ def run_reentry_comparison(
     return VCTReentryComparison(
         case_name=case.name,
         coordinate=coordinate,
+        config=VCTRunConfig(
+            seconds_per_pass=seconds_per_warm_pass,
+            nodes_per_pass=nodes_per_pass,
+            passes=warm_passes,
+            max_attacker_moves=max_attacker_moves,
+            max_quiet_frontiers=max_quiet_frontiers,
+            max_quiet_attacker_moves=max_quiet_attacker_moves,
+            vcf_max_attacker_moves=vcf_max_attacker_moves,
+            use_vcf_oracle=True,
+            candidate_limit=candidate_limit,
+            frontier_scan_limit=frontier_scan_limit,
+        ),
         total_node_budget=total_nodes,
         nodes_per_warm_pass=nodes_per_pass,
         cold_result=cold_result,

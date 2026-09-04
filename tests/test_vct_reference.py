@@ -13,6 +13,8 @@ from engine.threats import ThreatAnalyzer
 from tools.vct_reference import (
     DIAGNOSTIC_SCHEMA_VERSION,
     VCTReferenceCase,
+    _AuditedProofSearch,
+    _AuditedThreatAnalyzer,
     analyze_query_hotspots,
     build_board,
     diagnostic_payload,
@@ -213,6 +215,104 @@ class TestVCTReference(unittest.TestCase):
         )
         self.assertEqual("reference", payload["run_type"])
         self.assertIn("proof_search_audit", payload["run"]["candidates"][0])
+        self.assertEqual(0, payload["run"]["config"]["nodes_per_pass"])
+
+    def test_diagnostic_json_records_reference_and_reentry_parameters(
+        self,
+    ) -> None:
+        case = load_case(FIXTURES[0])
+        reference = run_reference(
+            case,
+            coordinates=("G10",),
+            seconds_per_candidate=0.25,
+            max_nodes=0,
+            max_attacker_moves=3,
+            max_quiet_frontiers=7,
+            max_quiet_attacker_moves=1,
+            vcf_max_attacker_moves=4,
+            candidate_limit=9,
+            frontier_scan_limit=None,
+        )
+        comparison = run_reentry_comparison(
+            case,
+            coordinate="G10",
+            total_nodes=40,
+            warm_passes=2,
+            seconds_per_warm_pass=0.5,
+            max_attacker_moves=4,
+            max_quiet_frontiers=8,
+            max_quiet_attacker_moves=0,
+            vcf_max_attacker_moves=5,
+            candidate_limit=10,
+            frontier_scan_limit=12,
+        )
+
+        reference_config = diagnostic_payload(reference)["run"]["config"]
+        comparison_config = diagnostic_payload(comparison)["run"]["config"]
+        self.assertEqual(0.25, reference_config["seconds_per_pass"])
+        self.assertEqual(3, reference_config["max_attacker_moves"])
+        self.assertEqual(9, reference_config["candidate_limit"])
+        self.assertIsNone(reference_config["frontier_scan_limit"])
+        self.assertEqual(2, comparison_config["passes"])
+        self.assertEqual(20, comparison_config["nodes_per_pass"])
+        self.assertEqual(4, comparison_config["max_attacker_moves"])
+        self.assertEqual(10, comparison_config["candidate_limit"])
+
+    def test_deadline_audit_matches_plain_proof_search(self) -> None:
+        class StepClock:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def __call__(self) -> float:
+                self.calls += 1
+                return 0.0 if self.calls <= 3 else 2.0
+
+        def run(search_type, analyzer):  # type: ignore[no-untyped-def]
+            board = Board(size=9)
+            for column in (2, 3, 4):
+                board.place(4, column, BLACK)
+            before = (
+                tuple(tuple(row) for row in board.grid),
+                tuple(board.move_history),
+                board.zobrist_hash,
+                board.empty_count,
+            )
+            result = search_type(
+                budget=ProofBudget(
+                    max_nodes=100,
+                    max_attacker_moves=2,
+                    deadline=1.0,
+                ),
+                analyzer=analyzer,
+                table=ProofTable(),
+                clock=StepClock(),
+            ).search(
+                board,
+                attacker=BLACK,
+                side_to_move=BLACK,
+            )
+            after = (
+                tuple(tuple(row) for row in board.grid),
+                tuple(board.move_history),
+                board.zobrist_hash,
+                board.empty_count,
+            )
+            self.assertEqual(before, after)
+            return result
+
+        plain = run(ProofSearch, ThreatAnalyzer())
+        audited = run(_AuditedProofSearch, _AuditedThreatAnalyzer())
+
+        self.assertIs(ProofState.UNKNOWN, plain.state)
+        self.assertEqual("deadline", plain.cutoff_reason)
+        self.assertEqual(plain.state, audited.state)
+        self.assertEqual(plain.completed, audited.completed)
+        self.assertEqual(plain.cutoff_reason, audited.cutoff_reason)
+        self.assertEqual(plain.nodes, audited.nodes)
+        self.assertEqual(
+            plain.principal_variation,
+            audited.principal_variation,
+        )
 
     def test_hotspot_summary_measures_repeated_query_concentration(self) -> None:
         analysis = analyze_query_hotspots(
@@ -258,6 +358,14 @@ class TestVCTReference(unittest.TestCase):
         self.assertEqual(
             second.result.transposition_hits,
             second.proof_table_delta.hits,
+        )
+        self.assertEqual(
+            second.proof_table_delta,
+            second.result.proof_table_stats,
+        )
+        self.assertGreater(
+            second.result.cumulative_proof_table_stats.queries,
+            second.result.proof_table_stats.queries,
         )
         payload = asdict(comparison)
         self.assertEqual(
